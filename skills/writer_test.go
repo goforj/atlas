@@ -33,6 +33,18 @@ func TestWriteCopilotInstructionsAndPrompts(t *testing.T) {
 	assertFile(t, filepath.Join(root, ".github", "prompts", "goforj-add-route.prompt.md"))
 }
 
+func TestWriteGeminiContextFiles(t *testing.T) {
+	root := t.TempDir()
+	paths, err := Write(WriteOptions{Root: root, Agent: agents.Gemini{}})
+	if err != nil {
+		t.Fatalf("write skills: %v", err)
+	}
+	if len(paths) != len(Catalog()) {
+		t.Fatalf("expected %d paths, got %d", len(Catalog()), len(paths))
+	}
+	assertFile(t, filepath.Join(root, ".gemini", "skills", "goforj-app-architecture", "GEMINI.md"))
+}
+
 func TestWriteCopiesUserSkills(t *testing.T) {
 	root := t.TempDir()
 	userSkill := filepath.Join(root, ".ai", "skills", "local-skill")
@@ -65,6 +77,23 @@ func TestWriteCopilotMapsUserSkillsToInstructions(t *testing.T) {
 	}
 
 	assertFile(t, filepath.Join(root, ".github", "instructions", "local-skill.instructions.md"))
+}
+
+func TestWriteGeminiMapsUserSkillsToContextFiles(t *testing.T) {
+	root := t.TempDir()
+	userSkill := filepath.Join(root, ".ai", "skills", "local-skill")
+	if err := os.MkdirAll(userSkill, 0o755); err != nil {
+		t.Fatalf("mkdir user skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(userSkill, "SKILL.md"), []byte("# Local Skill\n"), 0o644); err != nil {
+		t.Fatalf("write user skill: %v", err)
+	}
+
+	if _, err := Write(WriteOptions{Root: root, Agent: agents.Gemini{}}); err != nil {
+		t.Fatalf("write skills: %v", err)
+	}
+
+	assertFile(t, filepath.Join(root, ".gemini", "skills", "local-skill", "GEMINI.md"))
 }
 
 func TestProjectSkillsListsDirectoriesAndMarkdownFiles(t *testing.T) {

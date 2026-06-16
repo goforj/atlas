@@ -66,5 +66,6 @@ func Builtins() []Agent {
 		Codex{},
 		Claude{},
 		Copilot{},
+		Gemini{},
 	}
 }

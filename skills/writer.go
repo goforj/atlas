@@ -22,6 +22,8 @@ func Write(opts WriteOptions) ([]string, error) {
 	switch opts.Agent.Name() {
 	case "copilot":
 		return writeCopilot(opts)
+	case "gemini":
+		return writeGemini(opts)
 	default:
 		return writeSkillMD(opts)
 	}
@@ -102,6 +104,33 @@ func writeCopilot(opts WriteOptions) ([]string, error) {
 	return paths, nil
 }
 
+// writeGemini maps Atlas skills into GEMINI.md context files.
+func writeGemini(opts WriteOptions) ([]string, error) {
+	root := opts.Agent.SkillsPath(opts.Root)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return nil, err
+	}
+	if err := cleanGeminiGenerated(root); err != nil {
+		return nil, err
+	}
+
+	paths := []string{}
+	for _, skill := range Catalog() {
+		dir := filepath.Join(root, skill.Name)
+		path := filepath.Join(dir, "GEMINI.md")
+		if err := files.WriteFile(path, []byte(skillMarkdown(skill))); err != nil {
+			return nil, err
+		}
+		paths = append(paths, path)
+	}
+	userPaths, err := writeGeminiUserSkills(opts.Root, root)
+	if err != nil {
+		return nil, err
+	}
+	paths = append(paths, userPaths...)
+	return paths, nil
+}
+
 // copyUserSkills preserves project-owned skills alongside generated Atlas skills.
 func copyUserSkills(projectRoot string, targetRoot string) ([]string, error) {
 	projectSkills, err := ProjectSkills(projectRoot)
@@ -148,6 +177,24 @@ func writeCopilotUserSkills(projectRoot string, targetRoot string) ([]string, er
 	return paths, nil
 }
 
+// writeGeminiUserSkills adapts project-owned SKILL.md files to Gemini context files.
+func writeGeminiUserSkills(projectRoot string, targetRoot string) ([]string, error) {
+	projectSkills, err := ProjectSkills(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	paths := []string{}
+	for _, skill := range projectSkills {
+		target := filepath.Join(targetRoot, skill.Name, "GEMINI.md")
+		if err := copyFile(skill.Path, target); err != nil {
+			return nil, err
+		}
+		paths = append(paths, target)
+	}
+	return paths, nil
+}
+
 // cleanGenerated removes stale generated files before writing the current catalog.
 func cleanGenerated(root string, suffix string) error {
 	entries, err := os.ReadDir(root)
@@ -166,6 +213,23 @@ func cleanGenerated(root string, suffix string) error {
 		}
 		if strings.HasSuffix(entry.Name(), suffix) {
 			if err := os.Remove(path); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// cleanGeminiGenerated removes generated Gemini context directories before syncing current skills.
+func cleanGeminiGenerated(root string) error {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		path := filepath.Join(root, entry.Name())
+		if entry.IsDir() && fileExists(filepath.Join(path, "GEMINI.md")) {
+			if err := os.RemoveAll(path); err != nil {
 				return err
 			}
 		}

@@ -27,16 +27,18 @@ func TestInstallerWritesAgentFilesAndConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("install failed: %v", err)
 	}
-	if len(result.Agents) != 3 {
-		t.Fatalf("expected 3 agents, got %d", len(result.Agents))
+	if len(result.Agents) != 4 {
+		t.Fatalf("expected 4 agents, got %d", len(result.Agents))
 	}
 
 	assertContains(t, filepath.Join(root, "AGENTS.md"), "cmd/app/main.go")
 	assertContains(t, filepath.Join(root, "CLAUDE.md"), "forj make:*")
+	assertContains(t, filepath.Join(root, "GEMINI.md"), "GoForj Atlas")
 	assertContains(t, filepath.Join(root, ".github", "copilot-instructions.md"), "internal/")
 	assertContains(t, filepath.Join(root, ".codex", "config.toml"), "atlas:mcp")
 	assertContains(t, filepath.Join(root, ".mcp.json"), "goforj-atlas")
 	assertContains(t, filepath.Join(root, ".vscode", "mcp.json"), "goforj-atlas")
+	assertContains(t, filepath.Join(root, ".gemini", "settings.json"), "goforj-atlas")
 	assertContains(t, filepath.Join(root, ".goforj", "atlas.json"), `"agents"`)
 }
 
