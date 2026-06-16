@@ -1,7 +1,7 @@
 # GoForj Atlas
 
 <p align="center">
-  <img src="./docs/assets/banner.png" width="500" alt="Atlas Banner">
+  <img src="./docs/assets/banner.png" alt="Atlas Banner">
 </p>
 
 Agent-native project navigation and MCP tooling for GoForj.
