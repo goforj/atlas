@@ -48,5 +48,25 @@ forj marketplace make:job sync-catalog
 ## Development
 
 ```bash
+make build
+make release-check
+make test
+make vet
+```
+
+At runtime, Atlas reads docs from `GOFORJ_DOCS_PATH` when set. Otherwise it
+clones or refreshes `github.com/goforj/docs` in the user's cache directory,
+loads the Markdown tree into memory, and serves MCP docs tools from memory.
+Atlas uses the `git` executable when it is available and silently falls back to
+native Go git support when it is not.
+
+Atlas is consumed by GoForj as a Go module, not as a prebuilt binary. A release
+should run `make release-check`, tag the module, and then bump GoForj to that
+tag. The normal docs path is a local git cache loaded into memory by the MCP
+server, so Atlas does not need to commit a copied docs tree.
+
+Equivalent direct validation:
+
+```bash
 GOCACHE=/tmp/gocache GOMODCACHE=/tmp/gomodcache go test ./...
 ```

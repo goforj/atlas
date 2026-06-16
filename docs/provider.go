@@ -25,7 +25,7 @@ type Document struct {
 	Meta    map[string]string `json:"meta,omitempty"`
 }
 
-// StaticProvider is an in-memory docs provider for embedded or test docs.
+// StaticProvider is an in-memory docs provider for fixed or test docs.
 type StaticProvider struct {
 	Docs     []Document
 	DocsMeta Manifest

@@ -28,13 +28,10 @@ type Server struct {
 
 // New creates a mark3labs MCP server with Atlas tools registered.
 func New(cfg Server) *server.MCPServer {
-	version := cfg.Version
-	if version == "" {
-		version = "dev"
-	}
+	cfg = cfg.withDefaults()
 	s := server.NewMCPServer(
 		"goforj-atlas",
-		version,
+		cfg.Version,
 		server.WithToolCapabilities(false),
 		server.WithRecovery(),
 		server.WithStrictInputSchemaDefault(),
@@ -46,7 +43,28 @@ func New(cfg Server) *server.MCPServer {
 
 // ServeStdio starts the Atlas MCP server over stdio.
 func ServeStdio(cfg Server) error {
+	cfg = cfg.withDefaults()
+	if err := cfg.warmDocs(context.Background()); err != nil {
+		return err
+	}
 	return server.ServeStdio(New(cfg))
+}
+
+// withDefaults keeps constructor and stdio startup behavior aligned.
+func (s Server) withDefaults() Server {
+	if s.Version == "" {
+		s.Version = "dev"
+	}
+	if s.Docs == nil {
+		s.Docs = atlasdocs.DefaultProvider(s.Version)
+	}
+	return s
+}
+
+// warmDocs pays docs loading cost before MCP begins serving requests.
+func (s Server) warmDocs(ctx context.Context) error {
+	_, err := s.docsProvider().Documents(ctx)
+	return err
 }
 
 // register keeps tool registration explicit so MCP capabilities remain auditable.
@@ -95,7 +113,7 @@ func appName(request mcpgo.CallToolRequest) string {
 	return request.GetString("app", "")
 }
 
-// docsProvider returns an empty provider so tools remain safe before docs are wired.
+// docsProvider returns the configured docs provider or Atlas' local cached docs.
 func (s Server) docsProvider() atlasdocs.Provider {
 	if s.Docs != nil {
 		return s.Docs

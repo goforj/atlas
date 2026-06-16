@@ -52,7 +52,7 @@ func (p FSProvider) Manifest(ctx context.Context) (Manifest, error) {
 
 // Documents loads Markdown documents from the provider root.
 func (p FSProvider) Documents(ctx context.Context) ([]Document, error) {
-	root, err := filepath.Abs(p.Root)
+	root, err := filepath.Abs(docsRoot(p.Root))
 	if err != nil {
 		return nil, err
 	}
@@ -112,4 +112,16 @@ func firstHeading(content string, fallback string) string {
 		}
 	}
 	return fallback
+}
+
+func docsRoot(root string) string {
+	if dirExists(filepath.Join(root, "docs")) {
+		return filepath.Join(root, "docs")
+	}
+	return root
+}
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
