@@ -26,7 +26,7 @@ binary.
 
 Atlas gives local agents a framework-aware view of a GoForj project:
 
-- concise project guidance for Codex, Claude Code, and GitHub Copilot
+- concise project guidance for Codex, Claude Code, GitHub Copilot, and Gemini CLI
 - synchronized skills and agent-native instruction files
 - one project-level MCP server
 - app-aware project layout, route, schedule, and command inspection
