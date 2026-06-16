@@ -18,29 +18,32 @@ forj atlas:install
 forj atlas:mcp
 ```
 
-This repository owns the reusable implementation. The `goforj/goforj` CLI owns
-the user-facing `forj atlas:*` commands and adapts GoForj project config into
-Atlas project facts.
+This repository contains the reusable Atlas library. The GoForj CLI exposes it
+through `forj atlas:*` commands so projects do not need to install a separate
+binary.
 
-## Boundaries
+## What Atlas Provides
 
-Atlas owns:
+Atlas gives local agents a framework-aware view of a GoForj project:
 
-- agent adapters
-- guideline and skill writers
-- docs indexing and section-aware retrieval
-- MCP server tooling
-- read-only project inspection
+- concise project guidance for Codex, Claude Code, and GitHub Copilot
+- synchronized skills and agent-native instruction files
+- one project-level MCP server
+- app-aware project layout, route, schedule, and command inspection
+- version-aware docs search and section reads
+- safe database, log, browser, URL, and metrics inspection hooks
 
-Atlas does not own:
+## Safety Model
 
-- GoForj rendering
-- source scaffolding mutations
-- arbitrary shell execution
-- write-capable MCP tools in the MVP
+Atlas starts read-only. It does not expose arbitrary shell execution or
+write-capable MCP tools in the MVP.
 
-When source scaffolding is needed, agents should use normal GoForj commands such
-as `forj make:*` and `forj <app> make:*`.
+When source scaffolding is needed, agents should use normal GoForj commands:
+
+```bash
+forj make:controller users
+forj marketplace make:job sync-catalog
+```
 
 ## Development
 
