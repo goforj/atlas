@@ -34,8 +34,6 @@ func New(cfg Server) *server.MCPServer {
 		cfg.Version,
 		server.WithToolCapabilities(false),
 		server.WithRecovery(),
-		server.WithStrictInputSchemaDefault(),
-		server.WithInputSchemaValidation(),
 	)
 	cfg.register(s)
 	return s

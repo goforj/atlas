@@ -104,69 +104,46 @@ func writeCopilot(opts WriteOptions) ([]string, error) {
 
 // copyUserSkills preserves project-owned skills alongside generated Atlas skills.
 func copyUserSkills(projectRoot string, targetRoot string) ([]string, error) {
-	sourceRoot := filepath.Join(projectRoot, ".ai", "skills")
-	entries, err := os.ReadDir(sourceRoot)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
+	projectSkills, err := ProjectSkills(projectRoot)
 	if err != nil {
 		return nil, err
 	}
 
 	paths := []string{}
-	for _, entry := range entries {
-		source := filepath.Join(sourceRoot, entry.Name())
-		target := filepath.Join(targetRoot, entry.Name())
-		if entry.IsDir() {
-			copied, err := copyDir(source, target)
-			if err != nil {
-				return nil, err
-			}
-			paths = append(paths, copied...)
-			continue
-		}
-		if strings.HasSuffix(entry.Name(), ".md") {
-			if err := copyFile(source, target); err != nil {
+	for _, skill := range projectSkills {
+		if skill.File {
+			target := filepath.Join(targetRoot, filepath.Base(skill.Path))
+			if err := copyFile(skill.Path, target); err != nil {
 				return nil, err
 			}
 			paths = append(paths, target)
+			continue
 		}
+		source := filepath.Dir(skill.Path)
+		target := filepath.Join(targetRoot, skill.Name)
+		copied, err := copyDir(source, target)
+		if err != nil {
+			return nil, err
+		}
+		paths = append(paths, copied...)
 	}
 	return paths, nil
 }
 
 // writeCopilotUserSkills adapts project-owned SKILL.md files to Copilot instructions.
 func writeCopilotUserSkills(projectRoot string, targetRoot string) ([]string, error) {
-	sourceRoot := filepath.Join(projectRoot, ".ai", "skills")
-	entries, err := os.ReadDir(sourceRoot)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
+	projectSkills, err := ProjectSkills(projectRoot)
 	if err != nil {
 		return nil, err
 	}
 
 	paths := []string{}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			source := filepath.Join(sourceRoot, entry.Name(), "SKILL.md")
-			if !fileExists(source) {
-				continue
-			}
-			target := filepath.Join(targetRoot, entry.Name()+".instructions.md")
-			if err := copyFile(source, target); err != nil {
-				return nil, err
-			}
-			paths = append(paths, target)
-			continue
+	for _, skill := range projectSkills {
+		target := filepath.Join(targetRoot, skill.Name+".instructions.md")
+		if err := copyFile(skill.Path, target); err != nil {
+			return nil, err
 		}
-		if strings.HasSuffix(entry.Name(), ".md") {
-			target := filepath.Join(targetRoot, strings.TrimSuffix(entry.Name(), ".md")+".instructions.md")
-			if err := copyFile(filepath.Join(sourceRoot, entry.Name()), target); err != nil {
-				return nil, err
-			}
-			paths = append(paths, target)
-		}
+		paths = append(paths, target)
 	}
 	return paths, nil
 }

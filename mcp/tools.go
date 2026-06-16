@@ -34,8 +34,8 @@ func toolProjectLayout() mcpgo.Tool {
 func toolSearchDocs() mcpgo.Tool {
 	return baseTool("search-docs", "Searches version-aware GoForj documentation.",
 		mcpgo.WithString("query", mcpgo.Description("Search query."), mcpgo.Required()),
-		mcpgo.WithInteger("limit", mcpgo.Description("Maximum number of results.")),
-		mcpgo.WithInteger("token_limit", mcpgo.Description("Maximum words per snippet.")),
+		mcpgo.WithNumber("limit", mcpgo.Description("Maximum number of results.")),
+		mcpgo.WithNumber("token_limit", mcpgo.Description("Maximum words per snippet.")),
 	)
 }
 
@@ -44,7 +44,7 @@ func toolReadDocSection() mcpgo.Tool {
 	return baseTool("read-doc-section", "Reads one bounded Markdown section.",
 		mcpgo.WithString("path", mcpgo.Description("Document path."), mcpgo.Required()),
 		mcpgo.WithString("heading", mcpgo.Description("Heading to read.")),
-		mcpgo.WithInteger("token_limit", mcpgo.Description("Maximum words to return.")),
+		mcpgo.WithNumber("token_limit", mcpgo.Description("Maximum words to return.")),
 	)
 }
 
@@ -53,9 +53,9 @@ func toolReadDocNeighborhood() mcpgo.Tool {
 	return baseTool("read-doc-neighborhood", "Reads one Markdown section plus nearby sections.",
 		mcpgo.WithString("path", mcpgo.Description("Document path."), mcpgo.Required()),
 		mcpgo.WithString("heading", mcpgo.Description("Heading to read."), mcpgo.Required()),
-		mcpgo.WithInteger("before", mcpgo.Description("Sections before.")),
-		mcpgo.WithInteger("after", mcpgo.Description("Sections after.")),
-		mcpgo.WithInteger("token_limit", mcpgo.Description("Maximum words per section.")),
+		mcpgo.WithNumber("before", mcpgo.Description("Sections before.")),
+		mcpgo.WithNumber("after", mcpgo.Description("Sections after.")),
+		mcpgo.WithNumber("token_limit", mcpgo.Description("Maximum words per section.")),
 	)
 }
 
@@ -105,7 +105,7 @@ func toolDatabaseQuery() mcpgo.Tool {
 	return baseTool("database-query", "Runs a bounded read-only database query.",
 		mcpgo.WithString("connection", mcpgo.Description("Database connection name."), mcpgo.Required()),
 		mcpgo.WithString("sql", mcpgo.Description("Read-only SQL query."), mcpgo.Required()),
-		mcpgo.WithInteger("limit", mcpgo.Description("Maximum rows to return.")),
+		mcpgo.WithNumber("limit", mcpgo.Description("Maximum rows to return.")),
 	)
 }
 
@@ -113,7 +113,7 @@ func toolDatabaseQuery() mcpgo.Tool {
 func toolReadLogEntries() mcpgo.Tool {
 	return baseTool("read-log-entries", "Returns recent framework log entries.",
 		appArg(),
-		mcpgo.WithInteger("limit", mcpgo.Description("Maximum entries to return.")),
+		mcpgo.WithNumber("limit", mcpgo.Description("Maximum entries to return.")),
 	)
 }
 
@@ -134,7 +134,7 @@ func toolGetAbsoluteURL() mcpgo.Tool {
 func toolBrowserLogs() mcpgo.Tool {
 	return baseTool("browser-logs", "Returns recent browser console logs captured during local development.",
 		appArg(),
-		mcpgo.WithInteger("limit", mcpgo.Description("Maximum entries to return.")),
+		mcpgo.WithNumber("limit", mcpgo.Description("Maximum entries to return.")),
 	)
 }
 

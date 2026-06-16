@@ -29,6 +29,10 @@ func Compose(p project.Project) string {
 	out.WriteString("- Update app registration and Wire files through the selected app's composition points.\n")
 	out.WriteString("- Keep MCP and Atlas operations read-only unless an explicit write feature is added later.\n")
 	out.WriteString("- For GoForj framework validation renders, use `/tmp`, never the GoForj repo directory.\n\n")
+	out.WriteString("## Capturing Project Knowledge\n\n")
+	out.WriteString("- When the user teaches a durable repo-specific convention, workflow, command, or review expectation, briefly ask whether it should become a project-owned Atlas skill in `.ai/skills/<name>/SKILL.md`.\n")
+	out.WriteString("- Suggest this only for patterns likely to matter again; do not suggest skills for one-off preferences or temporary debugging steps.\n")
+	out.WriteString("- Keep project-owned skills short, specific, and focused on what agents should do differently in this codebase.\n\n")
 
 	out.WriteString("## Apps\n\n")
 	for _, app := range p.Apps {

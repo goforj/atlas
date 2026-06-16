@@ -67,9 +67,52 @@ func TestWriteCopilotMapsUserSkillsToInstructions(t *testing.T) {
 	assertFile(t, filepath.Join(root, ".github", "instructions", "local-skill.instructions.md"))
 }
 
+func TestProjectSkillsListsDirectoriesAndMarkdownFiles(t *testing.T) {
+	root := t.TempDir()
+	writeSkillTestFile(t, filepath.Join(root, ".ai", "skills", "local-skill", "SKILL.md"), "# Local Skill\n")
+	writeSkillTestFile(t, filepath.Join(root, ".ai", "skills", "runbook.md"), "# Runbook\n")
+	writeSkillTestFile(t, filepath.Join(root, ".ai", "skills", "draft", "notes.md"), "# Ignored\n")
+
+	projectSkills, err := ProjectSkills(root)
+	if err != nil {
+		t.Fatalf("project skills: %v", err)
+	}
+	if len(projectSkills) != 2 {
+		t.Fatalf("expected 2 project skills, got %#v", projectSkills)
+	}
+	if projectSkills[0].Name != "local-skill" || projectSkills[1].Name != "runbook" {
+		t.Fatalf("unexpected project skills %#v", projectSkills)
+	}
+}
+
+func TestScaffoldProjectSkill(t *testing.T) {
+	root := t.TempDir()
+	path, err := ScaffoldProjectSkill(root, "checkout-rules")
+	if err != nil {
+		t.Fatalf("scaffold project skill: %v", err)
+	}
+	assertFile(t, path)
+	if _, err := ScaffoldProjectSkill(root, "checkout-rules"); err == nil {
+		t.Fatal("expected duplicate skill error")
+	}
+	if _, err := ScaffoldProjectSkill(root, "CheckoutRules"); err == nil {
+		t.Fatal("expected invalid skill name error")
+	}
+}
+
 func assertFile(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected file %s: %v", path, err)
+	}
+}
+
+func writeSkillTestFile(t *testing.T, path string, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
 	}
 }
