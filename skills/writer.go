@@ -284,7 +284,7 @@ func copyFile(source string, target string) error {
 
 // skillMarkdown renders a built-in skill in the common SKILL.md shape.
 func skillMarkdown(skill Skill) string {
-	return "# " + title(skill.Name) + "\n\n" + skill.Description + "\n\n" + skill.Content
+	return "---\nname: " + skill.Name + "\ndescription: " + skill.Description + "\n---\n\n# " + title(skill.Name) + "\n\n" + skill.Content
 }
 
 // copilotInstruction renders a built-in skill as a Copilot instruction file.

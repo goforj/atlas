@@ -2,7 +2,6 @@ package agents
 
 import (
 	"context"
-	"path/filepath"
 )
 
 // MCPServerConfig describes the project-level Atlas MCP server for an agent.
@@ -19,14 +18,10 @@ func (c MCPServerConfig) Args() []string {
 
 // DefaultMCPServerConfig returns the conventional GoForj Atlas MCP server config.
 func DefaultMCPServerConfig(root string) MCPServerConfig {
-	abs, err := filepath.Abs(root)
-	if err != nil {
-		abs = root
-	}
 	return MCPServerConfig{
 		Name:    "goforj-atlas",
 		Command: "forj",
-		CWD:     abs,
+		CWD:     ".",
 	}
 }
 

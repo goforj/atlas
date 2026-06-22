@@ -3,6 +3,7 @@ package skills
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/goforj/atlas/agents"
@@ -18,6 +19,13 @@ func TestWriteSkillMDFiles(t *testing.T) {
 		t.Fatalf("expected %d paths, got %d", len(Catalog()), len(paths))
 	}
 	assertFile(t, filepath.Join(root, ".agents", "skills", "goforj-make-commands", "SKILL.md"))
+	content, err := os.ReadFile(filepath.Join(root, ".agents", "skills", "goforj-make-commands", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read generated skill: %v", err)
+	}
+	assertHasPrefix(t, string(content), "---")
+	assertContainsInText(t, string(content), "name: goforj-make-commands")
+	assertContainsInText(t, string(content), "description: Prefer GoForj make commands for framework scaffolding.")
 }
 
 func TestWriteCopilotInstructionsAndPrompts(t *testing.T) {
@@ -126,6 +134,20 @@ func TestScaffoldProjectSkill(t *testing.T) {
 	}
 	if _, err := ScaffoldProjectSkill(root, "CheckoutRules"); err == nil {
 		t.Fatal("expected invalid skill name error")
+	}
+}
+
+func assertContainsInText(t *testing.T, got string, want string) {
+	t.Helper()
+	if !strings.Contains(got, want) {
+		t.Fatalf("missing text %q in %q", want, got)
+	}
+}
+
+func assertHasPrefix(t *testing.T, got string, want string) {
+	t.Helper()
+	if !strings.HasPrefix(got, want) {
+		t.Fatalf("expected prefix %q in %q", want, got)
 	}
 }
 
