@@ -8,13 +8,51 @@ import (
 
 	"github.com/goforj/atlas/agents"
 	"github.com/goforj/atlas/files"
+	"github.com/goforj/atlas/project"
 )
 
 // WriteOptions controls how skills are synchronized for an agent.
 type WriteOptions struct {
 	Root           string
 	Agent          agents.Agent
+	Project        project.Project
 	IncludePrompts bool
+}
+
+// PlannedPaths returns the files Write would manage without touching the filesystem.
+func PlannedPaths(root string, agent agents.Agent, includePrompts bool, project project.Project) []string {
+	opts := WriteOptions{Root: root, Agent: agent, Project: project, IncludePrompts: includePrompts}
+	switch agent.Name() {
+	case "copilot":
+		paths := []string{}
+		skillRoot := agent.SkillsPath(root)
+		for _, skill := range Recommended(opts.Project) {
+			paths = append(paths, filepath.Join(skillRoot, skill.Name+".instructions.md"))
+		}
+		if includePrompts {
+			if copilot, ok := agent.(agents.Copilot); ok {
+				promptRoot := copilot.PromptsPath(root)
+				for _, prompt := range Prompts() {
+					paths = append(paths, filepath.Join(promptRoot, prompt.Name+".prompt.md"))
+				}
+			}
+		}
+		return paths
+	case "gemini":
+		paths := []string{}
+		root := opts.Agent.SkillsPath(opts.Root)
+		for _, skill := range Recommended(opts.Project) {
+			paths = append(paths, filepath.Join(root, skill.Name, "GEMINI.md"))
+		}
+		return paths
+	default:
+		paths := []string{}
+		root := opts.Agent.SkillsPath(opts.Root)
+		for _, skill := range Recommended(opts.Project) {
+			paths = append(paths, filepath.Join(root, skill.Name, "SKILL.md"))
+		}
+		return paths
+	}
 }
 
 // Write writes built-in skills using the selected agent's native shape.
@@ -40,7 +78,7 @@ func writeSkillMD(opts WriteOptions) ([]string, error) {
 	}
 
 	paths := []string{}
-	for _, skill := range Catalog() {
+	for _, skill := range Recommended(opts.Project) {
 		dir := filepath.Join(root, skill.Name)
 		path := filepath.Join(dir, "SKILL.md")
 		content := skillMarkdown(skill)
@@ -68,7 +106,7 @@ func writeCopilot(opts WriteOptions) ([]string, error) {
 	}
 
 	paths := []string{}
-	for _, skill := range Catalog() {
+	for _, skill := range Recommended(opts.Project) {
 		path := filepath.Join(root, skill.Name+".instructions.md")
 		if err := files.WriteFile(path, []byte(copilotInstruction(skill))); err != nil {
 			return nil, err
@@ -115,7 +153,7 @@ func writeGemini(opts WriteOptions) ([]string, error) {
 	}
 
 	paths := []string{}
-	for _, skill := range Catalog() {
+	for _, skill := range Recommended(opts.Project) {
 		dir := filepath.Join(root, skill.Name)
 		path := filepath.Join(dir, "GEMINI.md")
 		if err := files.WriteFile(path, []byte(skillMarkdown(skill))); err != nil {

@@ -82,6 +82,16 @@ func TestGitProviderFallsBackToNativeGit(t *testing.T) {
 	}
 }
 
+func TestNewGitProviderUsesEnvSelection(t *testing.T) {
+	t.Setenv(EnvRepo, "https://example.test/docs.git")
+	t.Setenv(EnvRef, "v0.18.0")
+
+	provider := NewGitProvider("test-version")
+	if provider.Repo != "https://example.test/docs.git" || provider.Ref != "v0.18.0" {
+		t.Fatalf("provider = %#v", provider)
+	}
+}
+
 type unavailableGitClient struct{}
 
 func (unavailableGitClient) Clone(context.Context, string, string) error {

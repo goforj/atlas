@@ -17,11 +17,12 @@ func FilePath(root string) string {
 
 // Config describes project-owned Atlas installation state.
 type Config struct {
-	Version        int               `json:"version"`
-	Features       Features          `json:"features"`
-	Agents         []string          `json:"agents"`
-	Skills         []string          `json:"skills"`
-	LastDiscovered DiscoverySnapshot `json:"last_discovered"`
+	Version        int                   `json:"version"`
+	Features       Features              `json:"features"`
+	Agents         []string              `json:"agents"`
+	Skills         []string              `json:"skills"`
+	OwnershipRules []OwnershipRuleConfig `json:"ownership_rules,omitempty"`
+	LastDiscovered DiscoverySnapshot     `json:"last_discovered"`
 }
 
 // Features records which Atlas surfaces should be kept synchronized.
@@ -35,6 +36,16 @@ type Features struct {
 type DiscoverySnapshot struct {
 	Apps       []string `json:"apps,omitempty"`
 	Components []string `json:"components,omitempty"`
+}
+
+// OwnershipRuleConfig describes a project-owned file ownership override.
+type OwnershipRuleConfig struct {
+	Pattern         string `json:"pattern"`
+	Classification  string `json:"classification"`
+	Editable        bool   `json:"editable"`
+	PreferredAction string `json:"preferred_action,omitempty"`
+	ChangeThrough   string `json:"change_through,omitempty"`
+	Reason          string `json:"reason,omitempty"`
 }
 
 // Default returns the default Atlas configuration.

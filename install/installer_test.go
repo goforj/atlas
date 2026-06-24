@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/goforj/atlas/agents"
+	"github.com/goforj/atlas/config"
+	atlasdocs "github.com/goforj/atlas/docs"
 	"github.com/goforj/atlas/project"
 )
 
@@ -66,6 +69,106 @@ func TestInstallerPreservesUserGuidelineContent(t *testing.T) {
 	}
 	if strings.Count(content, "<!-- goforj-atlas:start -->") != 1 {
 		t.Fatalf("expected one marker block:\n%s", content)
+	}
+}
+
+func TestInstallerDryRunReportsFilesWithoutWriting(t *testing.T) {
+	root := t.TempDir()
+	result, err := NewInstaller().Install(context.Background(), Options{
+		Root:   root,
+		Agents: []string{"codex"},
+		Project: project.Project{
+			Root: root,
+			Name: "demo",
+		},
+		DryRun: true,
+	})
+	if err != nil {
+		t.Fatalf("dry run install failed: %v", err)
+	}
+	if len(result.Files) == 0 {
+		t.Fatalf("expected planned files: %#v", result)
+	}
+	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("dry run wrote AGENTS.md: %v", err)
+	}
+	if _, err := os.Stat(config.FilePath(root)); !os.IsNotExist(err) {
+		t.Fatalf("dry run wrote atlas config: %v", err)
+	}
+}
+
+func TestStatusReportsInstalledAndStaleSkills(t *testing.T) {
+	root := t.TempDir()
+	_, err := NewInstaller(agents.Codex{}).Install(context.Background(), Options{
+		Root:   root,
+		Agents: []string{"codex"},
+		Project: project.Project{
+			Root:          root,
+			Name:          "demo",
+			GoForjVersion: "0.18.0",
+		},
+	})
+	if err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+	cfg, err := config.Load(root)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Skills = []string{"old-skill"}
+	if err := config.Save(root, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	status, err := Status(context.Background(), StatusOptions{
+		Root:    root,
+		Project: project.Project{Root: root, Name: "demo", GoForjVersion: "0.18.0"},
+		Docs:    atlasdocs.StaticProvider{DocsMeta: atlasdocs.Manifest{Version: "0.18.0", Revision: "rev1"}},
+		Agents:  []agents.Agent{agents.Codex{}},
+	})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	if !status.Installed || status.Project != "demo" || status.GoForjVersion != "0.18.0" || status.DocsRevision != "rev1" {
+		t.Fatalf("status = %#v", status)
+	}
+	if len(status.Agents) != 1 || !status.Agents[0].Configured || !status.Agents[0].MCPPresent || !status.Agents[0].GuidelinesPresent {
+		t.Fatalf("agents = %#v", status.Agents)
+	}
+	if !status.Skills.Stale || len(status.Warnings) == 0 {
+		t.Fatalf("expected stale skill warning: %#v", status)
+	}
+}
+
+func TestUpdaterPreservesUserGuidelineContent(t *testing.T) {
+	root := t.TempDir()
+	if _, err := NewInstaller(agents.Codex{}).Install(context.Background(), Options{
+		Root:   root,
+		Agents: []string{"codex"},
+		Project: project.Project{
+			Root: root,
+			Name: "demo",
+		},
+	}); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+	path := filepath.Join(root, "AGENTS.md")
+	content := readFile(t, path) + "\n\n# Local Rules\n\nKeep this.\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write local content: %v", err)
+	}
+	if _, err := NewUpdater().Update(context.Background(), Options{
+		Root:   root,
+		Agents: []string{"codex"},
+		Project: project.Project{
+			Root: root,
+			Name: "demo",
+		},
+	}); err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
+	if got := readFile(t, path); !strings.Contains(got, "Keep this.") {
+		t.Fatalf("user content was not preserved:\n%s", got)
 	}
 }
 

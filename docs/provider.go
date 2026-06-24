@@ -12,8 +12,12 @@ type Provider interface {
 
 // Manifest describes the docs set exposed by Atlas.
 type Manifest struct {
-	Version  string `json:"version"`
-	Revision string `json:"revision"`
+	Version       string `json:"version"`
+	Revision      string `json:"revision"`
+	Ref           string `json:"ref,omitempty"`
+	Commit        string `json:"commit,omitempty"`
+	GoForjVersion string `json:"goforj_version,omitempty"`
+	GeneratedAt   string `json:"generated_at,omitempty"`
 }
 
 // Document is one Markdown document in a docs set.

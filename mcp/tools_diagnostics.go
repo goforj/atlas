@@ -2,8 +2,10 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/goforj/atlas/diagnostics"
+	"github.com/goforj/atlas/workflows"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -108,4 +110,99 @@ func (s Server) metricsMetadata(ctx context.Context, request mcpgo.CallToolReque
 		return nil, err
 	}
 	return jsonResult(metadata)
+}
+
+// runtimeSnapshot combines local runtime evidence without requiring every source to exist.
+func (s Server) runtimeSnapshot(ctx context.Context, request mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	snapshot, err := s.runtimeSnapshotResult(ctx, request)
+	if err != nil {
+		return toolError(err)
+	}
+	return jsonResult(snapshot)
+}
+
+// debugPlan returns read-only debugging steps derived from the runtime snapshot.
+func (s Server) debugPlan(ctx context.Context, request mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	snapshot, err := s.runtimeSnapshotResult(ctx, request)
+	if err != nil {
+		return toolError(err)
+	}
+	return jsonResult(workflows.DebugPlan(snapshot))
+}
+
+func (s Server) runtimeSnapshotResult(ctx context.Context, request mcpgo.CallToolRequest) (workflows.RuntimeSnapshotResult, error) {
+	ctx = _context(ctx)
+	p := s.projectWithDefaults()
+	app, ok := p.AppByName(appName(request))
+	if !ok {
+		return workflows.RuntimeSnapshotResult{}, fmt.Errorf("app not found: %s", appName(request))
+	}
+	limit := request.GetInt("limit", 50)
+	if limit <= 0 {
+		limit = 50
+	}
+	runtime := request.GetString("runtime", "")
+	if runtime == "" && len(app.Runtimes) > 0 {
+		runtime = app.Runtimes[0]
+	}
+	snapshot := workflows.RuntimeSnapshotResult{
+		App:        app.Name,
+		Runtime:    runtime,
+		Path:       request.GetString("path", ""),
+		RouteName:  request.GetString("route_name", ""),
+		TimeWindow: request.GetString("time_window", ""),
+		Routes:     append([]string(nil), s.Inventory.Routes[app.Name]...),
+		Resources:  workflows.FilterResourcesForRuntime(s.Inventory.Resources, app.Name, runtime),
+	}
+	provider := s.diagnosticsProvider()
+	if snapshot.Path != "" {
+		url, err := provider.AbsoluteURL(ctx, diagnostics.URLRequest{App: app.Name, Path: snapshot.Path})
+		if err != nil {
+			snapshot.MissingEvidence = append(snapshot.MissingEvidence, "absolute-url")
+		} else {
+			snapshot.AbsoluteURL = url
+		}
+	}
+	logs, err := provider.LogEntries(ctx, diagnostics.LogRequest{App: app.Name, Limit: limit})
+	if err != nil {
+		snapshot.MissingEvidence = append(snapshot.MissingEvidence, "logs")
+	} else {
+		snapshot.Logs = logs
+	}
+	last, found, err := provider.LastError(ctx)
+	if err != nil {
+		snapshot.MissingEvidence = append(snapshot.MissingEvidence, "last-error")
+	} else {
+		snapshot.LastError = last
+		snapshot.LastErrorFound = found
+		if !found {
+			snapshot.MissingEvidence = append(snapshot.MissingEvidence, "last-error")
+		}
+	}
+	browser, err := provider.BrowserLogs(ctx, diagnostics.BrowserLogRequest{App: app.Name, Limit: limit})
+	if err != nil {
+		snapshot.MissingEvidence = append(snapshot.MissingEvidence, "browser-logs")
+	} else {
+		snapshot.BrowserLogs = browser
+		if len(browser) == 0 {
+			snapshot.MissingEvidence = append(snapshot.MissingEvidence, "browser-logs")
+		}
+	}
+	metrics, err := provider.MetricsMetadata(ctx, diagnostics.MetricsMetadataRequest{App: app.Name, Runtime: runtime})
+	if err != nil {
+		snapshot.MissingEvidence = append(snapshot.MissingEvidence, "metrics")
+	} else {
+		snapshot.Metrics = metrics
+		if len(metrics.Targets) == 0 {
+			snapshot.MissingEvidence = append(snapshot.MissingEvidence, "metrics-targets")
+		}
+	}
+	if len(snapshot.Routes) == 0 {
+		snapshot.MissingEvidence = append(snapshot.MissingEvidence, "routes")
+	}
+	if len(snapshot.Resources) == 0 {
+		snapshot.MissingEvidence = append(snapshot.MissingEvidence, "resources")
+	}
+	snapshot.Confidence = workflows.ConfidenceForRuntimeEvidence(snapshot)
+	return snapshot, nil
 }

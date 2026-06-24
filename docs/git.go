@@ -24,6 +24,12 @@ const DefaultRef = "main"
 // EnvCacheDir overrides the local cache used for cloned docs.
 const EnvCacheDir = "GOFORJ_ATLAS_DOCS_CACHE"
 
+// EnvRepo overrides the hosted docs repository used for cached docs.
+const EnvRepo = "GOFORJ_ATLAS_DOCS_REPO"
+
+// EnvRef selects the branch, tag, or revision used for cached docs.
+const EnvRef = "GOFORJ_ATLAS_DOCS_REF"
+
 // GitProvider loads GoForj docs from a local git cache.
 type GitProvider struct {
 	CacheDir string
@@ -53,8 +59,8 @@ type gitClient interface {
 // NewGitProvider returns a git-backed docs provider with normal GoForj defaults.
 func NewGitProvider(version string) *GitProvider {
 	return &GitProvider{
-		Repo:    DefaultRepo,
-		Ref:     DefaultRef,
+		Repo:    firstNonEmpty(os.Getenv(EnvRepo), DefaultRepo),
+		Ref:     firstNonEmpty(os.Getenv(EnvRef), DefaultRef),
 		Version: version,
 		Refresh: true,
 	}
@@ -66,7 +72,11 @@ func (p *GitProvider) Manifest(ctx context.Context) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
-	return FSProvider{Root: root, Version: p.Version, Revision: revision}.Manifest(ctx)
+	manifest, err := FSProvider{Root: root, Version: p.Version, Revision: revision}.Manifest(ctx)
+	manifest.Ref = p.Ref
+	manifest.Commit = revision
+	manifest.GoForjVersion = p.Version
+	return manifest, err
 }
 
 // Documents returns Markdown documents from the cached checkout.

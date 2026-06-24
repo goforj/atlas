@@ -6,15 +6,22 @@ import (
 	"github.com/goforj/atlas/diagnostics"
 	atlasdocs "github.com/goforj/atlas/docs"
 	"github.com/goforj/atlas/project"
+	"github.com/goforj/atlas/skills"
+	"github.com/goforj/atlas/workflows"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
 // Inventory contains app-aware read-only project facts exposed by Atlas.
 type Inventory struct {
-	Routes    map[string][]string
-	Schedules map[string][]string
-	Commands  map[string][]string
+	Routes     map[string][]string
+	Schedules  map[string][]string
+	Commands   map[string][]string
+	Queues     []string
+	Caches     []string
+	Disks      []string
+	EventBuses []string
+	Resources  []workflows.ResourceLink
 }
 
 // Server exposes Atlas MCP tools for one GoForj project.
@@ -89,6 +96,19 @@ func (s Server) register(mcpServer *server.MCPServer) {
 		{toolGetAbsoluteURL(), s.getAbsoluteURL},
 		{toolBrowserLogs(), s.browserLogs},
 		{toolMetricsMetadata(), s.metricsMetadata},
+		{toolRuntimeSnapshot(), s.runtimeSnapshot},
+		{toolDebugPlan(), s.debugPlan},
+		{toolWorkflowPlan(), s.workflowPlan},
+		{toolRegistrationPoints(), s.registrationPoints},
+		{toolValidationPlan(), s.validationPlan},
+		{toolWireDiagnostics(), s.wireDiagnostics},
+		{toolScenarioGuide(), s.scenarioGuide},
+		{toolResourceInventory(), s.resourceInventory},
+		{toolGeneratedFilePolicy(), s.generatedFilePolicy},
+		{toolCommandAdvice(), s.commandAdvice},
+		{toolDocsSectionPack(), s.docsSectionPack},
+		{toolVersionAlignment(), s.versionAlignment},
+		{toolWorkflowScorecard(), s.workflowScorecard},
 	}
 
 	for _, tool := range tools {
@@ -130,6 +150,33 @@ func (s Server) diagnosticsProvider() diagnostics.Provider {
 // projectWithDefaults keeps tool handlers from repeating default app synthesis.
 func (s Server) projectWithDefaults() project.Project {
 	return s.Project.WithDiscoveredDefaults()
+}
+
+// workflowContext adapts MCP server state into deterministic workflow helpers.
+func (s Server) workflowContext(ctx context.Context) workflows.Context {
+	connections, _ := s.diagnosticsProvider().DatabaseConnections(_context(ctx))
+	overlays := []string{}
+	if s.Project.Root != "" {
+		projectSkills, _ := skills.ProjectSkills(s.Project.Root)
+		for _, projectSkill := range projectSkills {
+			overlays = append(overlays, projectSkill.Name)
+		}
+	}
+	return workflows.Context{
+		Project: s.projectWithDefaults(),
+		Inventory: workflows.Inventory{
+			Routes:     s.Inventory.Routes,
+			Schedules:  s.Inventory.Schedules,
+			Commands:   s.Inventory.Commands,
+			Queues:     s.Inventory.Queues,
+			Caches:     s.Inventory.Caches,
+			Disks:      s.Inventory.Disks,
+			EventBuses: s.Inventory.EventBuses,
+			Resources:  s.Inventory.Resources,
+		},
+		Connections: connections,
+		Overlays:    overlays,
+	}
 }
 
 // _context normalizes nil contexts for direct handler tests and non-transport callers.

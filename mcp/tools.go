@@ -145,3 +145,104 @@ func toolMetricsMetadata() mcpgo.Tool {
 		mcpgo.WithString("runtime", mcpgo.Description("Runtime name.")),
 	)
 }
+
+// toolRuntimeSnapshot defines the composed runtime evidence tool.
+func toolRuntimeSnapshot() mcpgo.Tool {
+	return baseTool("runtime-snapshot", "Combines safe local runtime evidence for an app, runtime, path, or route.",
+		appArg(),
+		mcpgo.WithString("runtime", mcpgo.Description("Runtime name such as http, jobs, scheduler, or cli.")),
+		mcpgo.WithString("path", mcpgo.Description("App-relative path to resolve when debugging an HTTP surface.")),
+		mcpgo.WithString("route_name", mcpgo.Description("Route or route group name being investigated.")),
+		mcpgo.WithString("time_window", mcpgo.Description("Human time window hint for log interpretation.")),
+		mcpgo.WithNumber("limit", mcpgo.Description("Maximum log and browser entries to include.")),
+	)
+}
+
+// toolDebugPlan defines the runtime evidence planning tool.
+func toolDebugPlan() mcpgo.Tool {
+	return baseTool("debug-plan", "Builds read-only runtime debugging steps from the available Atlas evidence.",
+		appArg(),
+		mcpgo.WithString("runtime", mcpgo.Description("Runtime name such as http, jobs, scheduler, or cli.")),
+		mcpgo.WithString("path", mcpgo.Description("App-relative path to resolve when debugging an HTTP surface.")),
+		mcpgo.WithString("route_name", mcpgo.Description("Route or route group name being investigated.")),
+		mcpgo.WithString("time_window", mcpgo.Description("Human time window hint for log interpretation.")),
+		mcpgo.WithNumber("limit", mcpgo.Description("Maximum log and browser entries to include.")),
+	)
+}
+
+// toolWorkflowPlan defines the framework workflow planning tool.
+func toolWorkflowPlan() mcpgo.Tool {
+	return baseTool("workflow-plan", "Returns a deterministic GoForj workflow plan for a development task.",
+		appArg(),
+		mcpgo.WithString("task", mcpgo.Description("Task the agent is planning."), mcpgo.Required()),
+	)
+}
+
+// toolRegistrationPoints defines the app registration surface tool.
+func toolRegistrationPoints() mcpgo.Tool {
+	return baseTool("registration-points", "Returns app-owned registration and Wire surfaces for the selected app.", appArg())
+}
+
+// toolValidationPlan defines the task-aware validation tool.
+func toolValidationPlan() mcpgo.Tool {
+	return baseTool("validation-plan", "Returns task-aware build, test, and inspection checks.",
+		appArg(),
+		mcpgo.WithString("task", mcpgo.Description("Task or workflow to validate."), mcpgo.Required()),
+	)
+}
+
+// toolWireDiagnostics defines the Wire error classifier tool.
+func toolWireDiagnostics() mcpgo.Tool {
+	return baseTool("wire-diagnostics", "Classifies common GoForj Wire failures and suggests provider-set fixes.",
+		mcpgo.WithString("output", mcpgo.Description("Wire or build error output."), mcpgo.Required()),
+	)
+}
+
+// toolScenarioGuide defines the verified scenario reference tool.
+func toolScenarioGuide() mcpgo.Tool {
+	return baseTool("scenario-guide", "Returns verified GoForj scenario references for a task.",
+		mcpgo.WithString("query", mcpgo.Description("Scenario or workflow query."), mcpgo.Required()),
+	)
+}
+
+// toolResourceInventory defines the resource inventory tool.
+func toolResourceInventory() mcpgo.Tool {
+	return baseTool("resource-inventory", "Returns app, component, registration, and safe runtime resource inventory.")
+}
+
+// toolGeneratedFilePolicy defines the generated-file ownership classifier.
+func toolGeneratedFilePolicy() mcpgo.Tool {
+	return baseTool("generated-file-policy", "Classifies whether a path is generated, app-owned, user-owned, or should be changed through GoForj commands.",
+		mcpgo.WithString("path", mcpgo.Description("Project-relative path to classify."), mcpgo.Required()),
+	)
+}
+
+// toolCommandAdvice defines the preferred GoForj command advisor.
+func toolCommandAdvice() mcpgo.Tool {
+	return baseTool("command-advice", "Returns the preferred GoForj command for a task, app, and resource name.",
+		appArg(),
+		mcpgo.WithString("task", mcpgo.Description("Task the agent is planning."), mcpgo.Required()),
+		mcpgo.WithString("resource", mcpgo.Description("Resource name to place into the command.")),
+	)
+}
+
+// toolDocsSectionPack defines the workflow docs section reader.
+func toolDocsSectionPack() mcpgo.Tool {
+	return baseTool("docs-section-pack", "Returns bounded docs sections in workflow reading order.",
+		mcpgo.WithString("workflow_id", mcpgo.Description("Workflow id such as goforj-add-http-route.")),
+		mcpgo.WithString("task", mcpgo.Description("Task to classify when workflow_id is omitted.")),
+		mcpgo.WithNumber("token_limit", mcpgo.Description("Maximum words per docs section.")),
+	)
+}
+
+// toolVersionAlignment defines the docs and project version alignment tool.
+func toolVersionAlignment() mcpgo.Tool {
+	return baseTool("version-alignment", "Compares project GoForj version, Atlas version, and active docs bundle metadata.")
+}
+
+// toolWorkflowScorecard defines the deterministic workflow fixture scorecard tool.
+func toolWorkflowScorecard() mcpgo.Tool {
+	return baseTool("workflow-scorecard", "Runs deterministic workflow fixtures and returns scorecard output.",
+		mcpgo.WithBoolean("capture_transcript", mcpgo.Description("Include compact fixture transcript entries.")),
+	)
+}

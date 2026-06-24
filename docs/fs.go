@@ -47,7 +47,7 @@ func (p FSProvider) Manifest(ctx context.Context) (Manifest, error) {
 	if revision == "" {
 		revision = hex.EncodeToString(hash.Sum(nil))[:12]
 	}
-	return Manifest{Version: p.Version, Revision: revision}, nil
+	return Manifest{Version: p.Version, Revision: revision, Ref: "filesystem", GoForjVersion: p.Version}, nil
 }
 
 // Documents loads Markdown documents from the provider root.

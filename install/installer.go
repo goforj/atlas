@@ -23,6 +23,7 @@ type Options struct {
 	Skills        bool
 	MCP           bool
 	NoInteraction bool
+	DryRun        bool
 }
 
 // Result describes the files and agents touched during install.
@@ -61,25 +62,34 @@ func (i Installer) Install(ctx context.Context, opts Options) (Result, error) {
 		result.Agents = append(result.Agents, agent.Name())
 		if opts.Guidelines {
 			path := agent.GuidelinesPath(opts.Root)
-			if err := files.WriteMarkerFile(path, files.DefaultMarker, guidelineContent); err != nil {
-				return Result{}, err
+			if !opts.DryRun {
+				if err := files.WriteMarkerFile(path, files.DefaultMarker, guidelineContent); err != nil {
+					return Result{}, err
+				}
 			}
 			result.Files = append(result.Files, path)
 		}
 		if opts.MCP {
-			if err := agent.WriteMCPConfig(ctx, opts.Root, server); err != nil {
-				return Result{}, err
+			if !opts.DryRun {
+				if err := agent.WriteMCPConfig(ctx, opts.Root, server); err != nil {
+					return Result{}, err
+				}
 			}
 			result.Files = append(result.Files, agent.MCPConfigPath(opts.Root))
 		}
 		if opts.Skills {
-			paths, err := skills.Write(skills.WriteOptions{
-				Root:           opts.Root,
-				Agent:          agent,
-				IncludePrompts: true,
-			})
-			if err != nil {
-				return Result{}, err
+			paths := skills.PlannedPaths(opts.Root, agent, true, opts.Project)
+			if !opts.DryRun {
+				var err error
+				paths, err = skills.Write(skills.WriteOptions{
+					Root:           opts.Root,
+					Agent:          agent,
+					Project:        opts.Project,
+					IncludePrompts: true,
+				})
+				if err != nil {
+					return Result{}, err
+				}
 			}
 			result.Files = append(result.Files, paths...)
 		}
@@ -90,12 +100,14 @@ func (i Installer) Install(ctx context.Context, opts Options) (Result, error) {
 	cfg.Features.Skills = opts.Skills
 	cfg.Features.MCP = opts.MCP
 	cfg.Agents = result.Agents
-	cfg.Skills = skills.Names()
+	cfg.Skills = skills.RecommendedNames(opts.Project)
 	cfg.LastDiscovered.Apps = appNames(opts.Project)
 	cfg.LastDiscovered.Components = slices.Clone(opts.Project.Components)
 
-	if err := config.Save(opts.Root, cfg); err != nil {
-		return Result{}, err
+	if !opts.DryRun {
+		if err := config.Save(opts.Root, cfg); err != nil {
+			return Result{}, err
+		}
 	}
 	result.Files = append(result.Files, config.FilePath(opts.Root))
 
