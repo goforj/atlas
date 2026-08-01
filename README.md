@@ -1,7 +1,7 @@
 # GoForj Atlas
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="Atlas Banner">
+  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner-v2.png" alt="GoForj Atlas — a map for your coding agent">
 </p>
 
 Agent-native project navigation and MCP tooling for GoForj.
@@ -20,7 +20,8 @@ forj atlas:mcp
 
 This repository contains the reusable Atlas library. The GoForj CLI exposes it
 through `forj atlas:*` commands so projects do not need to install a separate
-binary.
+binary. For installation and daily use in a rendered GoForj Project, use the
+[Atlas framework guide](https://goforj.dev/developer-tools/atlas).
 
 ## What Atlas Provides
 
@@ -42,7 +43,7 @@ When source scaffolding is needed, agents should use normal GoForj commands:
 
 ```bash
 forj make:controller users
-forj marketplace make:job sync-catalog
+forj admin make:job reconcile-refunds
 ```
 
 ## Development
