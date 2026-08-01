@@ -9,11 +9,12 @@ help: ##@other Show this help.
 build: ##@build Build all packages.
 	go build ./...
 
-##@quality
-test: ##@quality Run the test suite.
+##@tests
+test: ##@tests Run the test suite.
 	go test ./...
 
-vet: ##@quality Run Go vet.
+##@analysis
+vet: ##@analysis Run Go vet.
 	go vet ./...
 
 ##@release
