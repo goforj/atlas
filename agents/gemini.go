@@ -2,13 +2,9 @@ package agents
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
-
-	"github.com/goforj/atlas/files"
 )
 
 // Gemini writes project-local integration files for Gemini CLI.
@@ -48,32 +44,10 @@ func (Gemini) MCPConfigPath(root string) string {
 
 // WriteMCPConfig writes the Gemini MCP server configuration.
 func (g Gemini) WriteMCPConfig(_ context.Context, root string, server MCPServerConfig) error {
-	settings := map[string]any{}
-	path := g.MCPConfigPath(root)
-	content, err := os.ReadFile(path)
-	if err == nil && len(content) > 0 {
-		if err := json.Unmarshal(content, &settings); err != nil {
-			return err
-		}
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
+	return writeJSONServer(g.MCPConfigPath(root), "mcpServers", server)
+}
 
-	servers, ok := settings["mcpServers"].(map[string]any)
-	if !ok {
-		servers = map[string]any{}
-		settings["mcpServers"] = servers
-	}
-	servers[server.Name] = map[string]any{
-		"command": server.Command,
-		"args":    server.Args(),
-		"cwd":     server.CWD,
-	}
-
-	updated, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return err
-	}
-	updated = append(updated, '\n')
-	return files.WriteFile(path, updated)
+// RemoveMCPConfig removes Atlas's Gemini MCP server while preserving unrelated settings.
+func (g Gemini) RemoveMCPConfig(_ context.Context, root string, serverName string) error {
+	return removeJSONServer(g.MCPConfigPath(root), "mcpServers", serverName)
 }

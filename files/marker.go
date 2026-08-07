@@ -61,6 +61,41 @@ func MergeMarkerBlock(existing string, marker string, generated string) string {
 	return out.String()
 }
 
+// RemoveMarkerBlock removes generated marker blocks while preserving surrounding user content.
+func RemoveMarkerBlock(existing string, marker string) string {
+	marker = normalizeMarker(marker)
+	start := "<!-- " + marker + ":start -->"
+	end := "<!-- " + marker + ":end -->"
+	remaining := existing
+	for {
+		startIndex := strings.Index(remaining, start)
+		if startIndex < 0 {
+			break
+		}
+		endOffset := strings.Index(remaining[startIndex:], end)
+		if endOffset < 0 {
+			remaining = strings.TrimRight(remaining[:startIndex], "\n")
+			break
+		}
+		endIndex := startIndex + endOffset + len(end)
+		prefix := strings.TrimRight(remaining[:startIndex], "\n")
+		suffix := strings.TrimLeft(remaining[endIndex:], "\n")
+		switch {
+		case prefix == "":
+			remaining = suffix
+		case suffix == "":
+			remaining = prefix
+		default:
+			remaining = prefix + "\n\n" + suffix
+		}
+	}
+	remaining = strings.TrimSpace(remaining)
+	if remaining == "" {
+		return ""
+	}
+	return remaining + "\n"
+}
+
 // removeDuplicateBlocks keeps repeated Atlas runs from accumulating generated blocks.
 func removeDuplicateBlocks(content string, marker string) string {
 	start := "<!-- " + marker + ":start -->"

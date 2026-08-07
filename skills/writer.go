@@ -17,6 +17,8 @@ type WriteOptions struct {
 	Agent          agents.Agent
 	Project        project.Project
 	IncludePrompts bool
+	PreviousSkills []string
+	PreviousFiles  []string
 }
 
 // PlannedPaths returns the files Write would manage without touching the filesystem.
@@ -38,13 +40,6 @@ func PlannedPaths(root string, agent agents.Agent, includePrompts bool, project 
 			}
 		}
 		return paths
-	case "gemini":
-		paths := []string{}
-		root := opts.Agent.SkillsPath(opts.Root)
-		for _, skill := range Recommended(opts.Project) {
-			paths = append(paths, filepath.Join(root, skill.Name, "GEMINI.md"))
-		}
-		return paths
 	default:
 		paths := []string{}
 		root := opts.Agent.SkillsPath(opts.Root)
@@ -57,14 +52,48 @@ func PlannedPaths(root string, agent agents.Agent, includePrompts bool, project 
 
 // Write writes built-in skills using the selected agent's native shape.
 func Write(opts WriteOptions) ([]string, error) {
+	if err := cleanRecordedFiles(opts); err != nil {
+		return nil, err
+	}
 	switch opts.Agent.Name() {
 	case "copilot":
 		return writeCopilot(opts)
-	case "gemini":
-		return writeGemini(opts)
 	default:
 		return writeSkillMD(opts)
 	}
+}
+
+// cleanRecordedFiles removes exact prior Atlas projections while preserving untracked native content.
+func cleanRecordedFiles(opts WriteOptions) error {
+	roots := []string{opts.Agent.SkillsPath(opts.Root)}
+	if copilot, ok := opts.Agent.(agents.Copilot); ok {
+		roots = append(roots, copilot.PromptsPath(opts.Root))
+	}
+	for _, recorded := range opts.PreviousFiles {
+		path := recorded
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(opts.Root, filepath.Clean(path))
+		}
+		if !withinAnyRoot(path, roots) {
+			continue
+		}
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		_ = os.Remove(filepath.Dir(path))
+	}
+	return nil
+}
+
+// withinAnyRoot rejects recorded paths that escape the native skill directories.
+func withinAnyRoot(path string, roots []string) bool {
+	for _, root := range roots {
+		relative, err := filepath.Rel(root, path)
+		if err == nil && relative != "." && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // writeSkillMD writes Codex/Claude-style SKILL.md directories.
@@ -73,7 +102,12 @@ func writeSkillMD(opts WriteOptions) ([]string, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, err
 	}
-	if err := cleanGenerated(root, ".md"); err != nil {
+	if opts.Agent.Name() == "gemini" {
+		if err := cleanLegacyGeminiGenerated(root, managedSkillNames(opts)); err != nil {
+			return nil, err
+		}
+	}
+	if err := cleanGenerated(root, ".md", managedSkillNames(opts)); err != nil {
 		return nil, err
 	}
 
@@ -101,7 +135,7 @@ func writeCopilot(opts WriteOptions) ([]string, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, err
 	}
-	if err := cleanGenerated(root, ".instructions.md"); err != nil {
+	if err := cleanGenerated(root, ".instructions.md", managedSkillNames(opts)); err != nil {
 		return nil, err
 	}
 
@@ -126,7 +160,7 @@ func writeCopilot(opts WriteOptions) ([]string, error) {
 			if err := os.MkdirAll(promptRoot, 0o755); err != nil {
 				return nil, err
 			}
-			if err := cleanGenerated(promptRoot, ".prompt.md"); err != nil {
+			if err := cleanGenerated(promptRoot, ".prompt.md", promptNames()); err != nil {
 				return nil, err
 			}
 			for _, prompt := range Prompts() {
@@ -139,33 +173,6 @@ func writeCopilot(opts WriteOptions) ([]string, error) {
 		}
 	}
 
-	return paths, nil
-}
-
-// writeGemini maps Atlas skills into GEMINI.md context files.
-func writeGemini(opts WriteOptions) ([]string, error) {
-	root := opts.Agent.SkillsPath(opts.Root)
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return nil, err
-	}
-	if err := cleanGeminiGenerated(root); err != nil {
-		return nil, err
-	}
-
-	paths := []string{}
-	for _, skill := range Recommended(opts.Project) {
-		dir := filepath.Join(root, skill.Name)
-		path := filepath.Join(dir, "GEMINI.md")
-		if err := files.WriteFile(path, []byte(skillMarkdown(skill))); err != nil {
-			return nil, err
-		}
-		paths = append(paths, path)
-	}
-	userPaths, err := writeGeminiUserSkills(opts.Root, root)
-	if err != nil {
-		return nil, err
-	}
-	paths = append(paths, userPaths...)
 	return paths, nil
 }
 
@@ -215,26 +222,9 @@ func writeCopilotUserSkills(projectRoot string, targetRoot string) ([]string, er
 	return paths, nil
 }
 
-// writeGeminiUserSkills adapts project-owned SKILL.md files to Gemini context files.
-func writeGeminiUserSkills(projectRoot string, targetRoot string) ([]string, error) {
-	projectSkills, err := ProjectSkills(projectRoot)
-	if err != nil {
-		return nil, err
-	}
-
-	paths := []string{}
-	for _, skill := range projectSkills {
-		target := filepath.Join(targetRoot, skill.Name, "GEMINI.md")
-		if err := copyFile(skill.Path, target); err != nil {
-			return nil, err
-		}
-		paths = append(paths, target)
-	}
-	return paths, nil
-}
-
-// cleanGenerated removes stale generated files before writing the current catalog.
-func cleanGenerated(root string, suffix string) error {
+// cleanGenerated removes only known Atlas projections before writing the current catalog.
+func cleanGenerated(root string, suffix string, managedNames []string) error {
+	managed := nameSet(managedNames)
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return err
@@ -242,14 +232,16 @@ func cleanGenerated(root string, suffix string) error {
 	for _, entry := range entries {
 		path := filepath.Join(root, entry.Name())
 		if entry.IsDir() {
-			if fileExists(filepath.Join(path, "SKILL.md")) {
-				if err := os.RemoveAll(path); err != nil {
+			generatedPath := filepath.Join(path, "SKILL.md")
+			if managed[entry.Name()] && fileExists(generatedPath) {
+				if err := os.Remove(generatedPath); err != nil {
 					return err
 				}
+				_ = os.Remove(path)
 			}
 			continue
 		}
-		if strings.HasSuffix(entry.Name(), suffix) {
+		if strings.HasSuffix(entry.Name(), suffix) && managed[strings.TrimSuffix(entry.Name(), suffix)] {
 			if err := os.Remove(path); err != nil {
 				return err
 			}
@@ -258,21 +250,57 @@ func cleanGenerated(root string, suffix string) error {
 	return nil
 }
 
-// cleanGeminiGenerated removes generated Gemini context directories before syncing current skills.
-func cleanGeminiGenerated(root string) error {
+// cleanLegacyGeminiGenerated removes Atlas's obsolete GEMINI.md skill projections during migration.
+func cleanLegacyGeminiGenerated(root string, managedNames []string) error {
+	managed := nameSet(managedNames)
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return err
 	}
 	for _, entry := range entries {
 		path := filepath.Join(root, entry.Name())
-		if entry.IsDir() && fileExists(filepath.Join(path, "GEMINI.md")) {
-			if err := os.RemoveAll(path); err != nil {
+		generatedPath := filepath.Join(path, "GEMINI.md")
+		if entry.IsDir() && managed[entry.Name()] && fileExists(generatedPath) {
+			if err := os.Remove(generatedPath); err != nil {
 				return err
 			}
+			_ = os.Remove(path)
 		}
 	}
 	return nil
+}
+
+// managedSkillNames combines current, previous, and project-owned names so stale Atlas output can be replaced safely.
+func managedSkillNames(opts WriteOptions) []string {
+	names := append([]string{}, opts.PreviousSkills...)
+	for _, skill := range Recommended(opts.Project) {
+		names = append(names, skill.Name)
+	}
+	projectSkills, err := ProjectSkills(opts.Root)
+	if err == nil {
+		for _, skill := range projectSkills {
+			names = append(names, skill.Name)
+		}
+	}
+	return names
+}
+
+// promptNames returns Atlas-owned Copilot prompt names.
+func promptNames() []string {
+	names := make([]string, 0, len(Prompts()))
+	for _, prompt := range Prompts() {
+		names = append(names, prompt.Name)
+	}
+	return names
+}
+
+// nameSet supports exact ownership checks without treating every native skill as generated.
+func nameSet(names []string) map[string]bool {
+	set := map[string]bool{}
+	for _, name := range names {
+		set[name] = true
+	}
+	return set
 }
 
 // copyDir copies user-owned skill directories without interpreting their contents.

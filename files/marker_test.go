@@ -27,3 +27,18 @@ func TestMergeMarkerBlockRemovesDuplicates(t *testing.T) {
 		t.Fatalf("unexpected merge:\n%s", got)
 	}
 }
+
+func TestRemoveMarkerBlockPreservesUserContent(t *testing.T) {
+	existing := "# Local Rules\n\n<!-- goforj-atlas:start -->\nold\n<!-- goforj-atlas:end -->\n\nKeep me.\n"
+	got := RemoveMarkerBlock(existing, DefaultMarker)
+	if got != "# Local Rules\n\nKeep me.\n" {
+		t.Fatalf("unexpected content after marker removal: %q", got)
+	}
+}
+
+func TestRemoveMarkerBlockReturnsEmptyForGeneratedOnlyFile(t *testing.T) {
+	existing := Block(DefaultMarker, "generated") + "\n"
+	if got := RemoveMarkerBlock(existing, DefaultMarker); got != "" {
+		t.Fatalf("expected empty content, got %q", got)
+	}
+}

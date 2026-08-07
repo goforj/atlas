@@ -2,10 +2,9 @@ package agents
 
 import (
 	"context"
-	"encoding/json"
+	"os"
 	"path/filepath"
-
-	"github.com/goforj/atlas/files"
+	"strings"
 )
 
 // Copilot writes project-local integration files for GitHub Copilot in VS Code.
@@ -19,7 +18,22 @@ func (Copilot) DisplayName() string { return "GitHub Copilot" }
 
 // DetectSystem reports whether Copilot should be offered.
 func (Copilot) DetectSystem(context.Context) bool {
-	return true
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	for _, root := range []string{filepath.Join(home, ".vscode", "extensions"), filepath.Join(home, ".vscode-insiders", "extensions")} {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if strings.HasPrefix(strings.ToLower(entry.Name()), "github.copilot-") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // DetectProject reports whether the project already has Copilot files.
@@ -47,19 +61,10 @@ func (Copilot) MCPConfigPath(root string) string { return filepath.Join(root, ".
 
 // WriteMCPConfig writes the VS Code MCP server configuration.
 func (c Copilot) WriteMCPConfig(_ context.Context, root string, server MCPServerConfig) error {
-	payload := map[string]any{
-		"servers": map[string]any{
-			server.Name: map[string]any{
-				"command": server.Command,
-				"args":    server.Args(),
-				"cwd":     server.CWD,
-			},
-		},
-	}
-	content, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return err
-	}
-	content = append(content, '\n')
-	return files.WriteFile(c.MCPConfigPath(root), content)
+	return writeJSONServer(c.MCPConfigPath(root), "servers", server)
+}
+
+// RemoveMCPConfig removes Atlas's VS Code MCP server while preserving unrelated entries.
+func (c Copilot) RemoveMCPConfig(_ context.Context, root string, serverName string) error {
+	return removeJSONServer(c.MCPConfigPath(root), "servers", serverName)
 }

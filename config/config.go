@@ -8,7 +8,7 @@ import (
 )
 
 // CurrentVersion is the current persisted Atlas config format version.
-const CurrentVersion = 1
+const CurrentVersion = 2
 
 // FilePath returns the conventional Atlas config path for a project root.
 func FilePath(root string) string {
@@ -21,6 +21,7 @@ type Config struct {
 	Features       Features              `json:"features"`
 	Agents         []string              `json:"agents"`
 	Skills         []string              `json:"skills"`
+	GeneratedFiles map[string][]string   `json:"generated_files,omitempty"`
 	OwnershipRules []OwnershipRuleConfig `json:"ownership_rules,omitempty"`
 	LastDiscovered DiscoverySnapshot     `json:"last_discovered"`
 }
@@ -51,7 +52,8 @@ type OwnershipRuleConfig struct {
 // Default returns the default Atlas configuration.
 func Default() Config {
 	return Config{
-		Version: CurrentVersion,
+		Version:        CurrentVersion,
+		GeneratedFiles: map[string][]string{},
 		Features: Features{
 			Guidelines: true,
 			Skills:     true,
@@ -76,6 +78,9 @@ func Load(root string) (Config, error) {
 	}
 	if cfg.Version == 0 {
 		cfg.Version = CurrentVersion
+	}
+	if cfg.GeneratedFiles == nil {
+		cfg.GeneratedFiles = map[string][]string{}
 	}
 	return cfg, nil
 }
