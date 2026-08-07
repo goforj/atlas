@@ -13,18 +13,33 @@ import (
 	"github.com/goforj/atlas/skills"
 )
 
+// agentRemovalOptions identifies the Atlas-owned surfaces that should be removed for one agent.
+type agentRemovalOptions struct {
+	Root       string
+	Guidelines bool
+	MCP        bool
+	Skills     bool
+	DryRun     bool
+}
+
 // removeAgent removes Atlas-owned projections for a deselected agent without deleting user content.
 func removeAgent(ctx context.Context, root string, agent agents.Agent, cfg config.Config, dryRun bool) ([]string, error) {
-	return removeAgentSurfaces(ctx, root, agent, cfg, true, true, true, dryRun)
+	return removeAgentSurfaces(ctx, agent, cfg, agentRemovalOptions{
+		Root:       root,
+		Guidelines: true,
+		MCP:        true,
+		Skills:     true,
+		DryRun:     dryRun,
+	})
 }
 
 // removeAgentSurfaces removes selected Atlas surfaces while leaving every unselected surface untouched.
-func removeAgentSurfaces(ctx context.Context, root string, agent agents.Agent, cfg config.Config, guidelines bool, mcp bool, skillFiles bool, dryRun bool) ([]string, error) {
+func removeAgentSurfaces(ctx context.Context, agent agents.Agent, cfg config.Config, opts agentRemovalOptions) ([]string, error) {
 	paths := []string{}
-	guidelinePath := agent.GuidelinesPath(root)
-	if content, err := os.ReadFile(guidelinePath); guidelines && err == nil && strings.Contains(string(content), "<!-- "+files.DefaultMarker+":start -->") {
+	guidelinePath := agent.GuidelinesPath(opts.Root)
+	if content, err := os.ReadFile(guidelinePath); opts.Guidelines && err == nil && strings.Contains(string(content), "<!-- "+files.DefaultMarker+":start -->") {
 		paths = append(paths, guidelinePath)
-		if !dryRun {
+		if !opts.DryRun {
 			remaining := files.RemoveMarkerBlock(string(content), files.DefaultMarker)
 			if remaining == "" {
 				if err := os.Remove(guidelinePath); err != nil && !os.IsNotExist(err) {
@@ -34,27 +49,27 @@ func removeAgentSurfaces(ctx context.Context, root string, agent agents.Agent, c
 				return nil, err
 			}
 		}
-	} else if guidelines && err != nil && !os.IsNotExist(err) {
+	} else if opts.Guidelines && err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 
-	mcpPath := agent.MCPConfigPath(root)
-	if _, err := os.Stat(mcpPath); mcp && err == nil {
+	mcpPath := agent.MCPConfigPath(opts.Root)
+	if _, err := os.Stat(mcpPath); opts.MCP && err == nil {
 		paths = append(paths, mcpPath)
-		if !dryRun {
+		if !opts.DryRun {
 			if remover, ok := agent.(agents.MCPConfigRemover); ok {
-				if err := remover.RemoveMCPConfig(ctx, root, "goforj-atlas"); err != nil {
+				if err := remover.RemoveMCPConfig(ctx, opts.Root, "goforj-atlas"); err != nil {
 					return nil, err
 				}
 			}
 		}
-	} else if mcp && !os.IsNotExist(err) {
+	} else if opts.MCP && !os.IsNotExist(err) {
 		return nil, err
 	}
 
-	managed := managedFiles(root, agent, cfg)
+	managed := managedFiles(opts.Root, agent, cfg)
 	for _, path := range managed {
-		if !skillFiles {
+		if !opts.Skills {
 			break
 		}
 		if path == guidelinePath || path == mcpPath {
@@ -66,15 +81,15 @@ func removeAgentSurfaces(ctx context.Context, root string, agent agents.Agent, c
 			return nil, err
 		}
 		paths = append(paths, path)
-		if !dryRun {
+		if !opts.DryRun {
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return nil, err
 			}
-			removeEmptyParents(filepath.Dir(path), root)
+			removeEmptyParents(filepath.Dir(path), opts.Root)
 		}
 	}
-	if mcp && !dryRun {
-		removeEmptyParents(filepath.Dir(mcpPath), root)
+	if opts.MCP && !opts.DryRun {
+		removeEmptyParents(filepath.Dir(mcpPath), opts.Root)
 	}
 	return paths, nil
 }
