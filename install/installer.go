@@ -82,13 +82,15 @@ func (i Installer) install(ctx context.Context, opts Options, prior *config.Conf
 		for _, agent := range selected {
 			removed, err := removeAgentSurfaces(
 				ctx,
-				opts.Root,
 				agent,
 				*prior,
-				prior.Features.Guidelines && !opts.Guidelines,
-				prior.Features.MCP && !opts.MCP,
-				prior.Features.Skills && !opts.Skills,
-				opts.DryRun,
+				agentRemovalOptions{
+					Root:       opts.Root,
+					Guidelines: prior.Features.Guidelines && !opts.Guidelines,
+					MCP:        prior.Features.MCP && !opts.MCP,
+					Skills:     prior.Features.Skills && !opts.Skills,
+					DryRun:     opts.DryRun,
+				},
 			)
 			if err != nil {
 				return Result{}, err
