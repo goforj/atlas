@@ -15,6 +15,7 @@ Users should normally reach Atlas through the GoForj CLI:
 
 ```bash
 forj atlas:install
+forj atlas:update
 forj atlas:mcp
 ```
 
@@ -32,6 +33,26 @@ Atlas gives local agents a framework-aware view of a GoForj project:
 - app-aware project layout, route, schedule, and command inspection
 - version-aware docs search and section reads
 - safe database, log, browser, URL, and metrics inspection hooks
+
+## Project Integration
+
+Atlas keeps the selected agents, enabled surfaces, and generated-file ownership
+in `.goforj/atlas.json`. Native files such as `AGENTS.md`, `.agents/skills`, and
+`.codex/config.toml` are projections written only for the selected agents so the
+tools can discover them without manual setup.
+
+A normal update follows the committed selection instead of re-detecting every
+agent installed on the machine:
+
+```bash
+forj atlas:update
+```
+
+Use `forj atlas:update --discover` when the project should deliberately switch
+to the preferred locally installed agent. Explicit `--agent` and
+`--all-agents` selections remain available for projects that intentionally use
+more than one agent. Atlas removes only its owned blocks, MCP entries, and
+generated skill files when an agent or surface is deselected.
 
 ## Safety Model
 

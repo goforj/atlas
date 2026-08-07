@@ -2,11 +2,8 @@ package agents
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
-
-	"github.com/goforj/atlas/files"
 )
 
 // Claude writes project-local integration files for Claude Code.
@@ -40,19 +37,10 @@ func (Claude) MCPConfigPath(root string) string { return filepath.Join(root, ".m
 
 // WriteMCPConfig writes the Claude MCP server configuration.
 func (c Claude) WriteMCPConfig(_ context.Context, root string, server MCPServerConfig) error {
-	payload := map[string]any{
-		"mcpServers": map[string]any{
-			server.Name: map[string]any{
-				"command": server.Command,
-				"args":    server.Args(),
-				"cwd":     server.CWD,
-			},
-		},
-	}
-	content, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return err
-	}
-	content = append(content, '\n')
-	return files.WriteFile(c.MCPConfigPath(root), content)
+	return writeJSONServer(c.MCPConfigPath(root), "mcpServers", server)
+}
+
+// RemoveMCPConfig removes Atlas's Claude MCP server while preserving unrelated entries.
+func (c Claude) RemoveMCPConfig(_ context.Context, root string, serverName string) error {
+	return removeJSONServer(c.MCPConfigPath(root), "mcpServers", serverName)
 }

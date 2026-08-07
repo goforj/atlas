@@ -45,6 +45,11 @@ type Agent interface {
 	WriteMCPConfig(ctx context.Context, root string, server MCPServerConfig) error
 }
 
+// MCPConfigRemover removes only Atlas-owned MCP configuration for an agent.
+type MCPConfigRemover interface {
+	RemoveMCPConfig(ctx context.Context, root string, serverName string) error
+}
+
 // ByName returns the supported agent adapter for name.
 func ByName(name string) (Agent, bool) {
 	for _, agent := range Builtins() {

@@ -87,7 +87,7 @@ func Status(ctx context.Context, opts StatusOptions) (StatusResult, error) {
 			Configured:        configured,
 			GuidelinesPresent: fileExists(agent.GuidelinesPath(opts.Root)),
 			MCPPresent:        fileExists(agent.MCPConfigPath(opts.Root)),
-			SkillsPresent:     dirExists(agent.SkillsPath(opts.Root)),
+			SkillsPresent:     allGeneratedSkillsExist(opts.Root, agent, skills.RecommendedNames(opts.Project)),
 		})
 	}
 	if !result.Installed {
@@ -97,25 +97,53 @@ func Status(ctx context.Context, opts StatusOptions) (StatusResult, error) {
 		result.Warnings = append(result.Warnings, "Installed skill list differs from the current Atlas catalog. Run forj atlas:update.")
 	}
 	for _, agent := range result.Agents {
-		if agent.Configured && (!agent.GuidelinesPresent || !agent.MCPPresent || !agent.SkillsPresent) {
+		missingConfiguredSurface := (cfg.Features.Guidelines && !agent.GuidelinesPresent) ||
+			(cfg.Features.MCP && !agent.MCPPresent) ||
+			(cfg.Features.Skills && !agent.SkillsPresent)
+		if agent.Configured && missingConfiguredSurface {
 			result.Warnings = append(result.Warnings, "Configured agent "+agent.Name+" is missing one or more Atlas files.")
 		}
 	}
 	return result, nil
 }
 
+// allGeneratedSkillsExist verifies the complete recommended skill set for one configured adapter.
+func allGeneratedSkillsExist(root string, agent agents.Agent, names []string) bool {
+	if len(names) == 0 {
+		return true
+	}
+	for _, name := range names {
+		if !generatedSkillExists(root, agent, name) {
+			return false
+		}
+	}
+	return true
+}
+
 func skillStatus(root string, agentList []agents.Agent, cfg config.Config, p project.Project) SkillStatus {
+	if !cfg.Features.Skills {
+		return SkillStatus{}
+	}
 	names := skills.RecommendedNames(p)
-	status := SkillStatus{Expected: len(names), Stale: !sameStrings(cfg.Skills, names)}
-	if len(agentList) == 0 {
+	configured := []agents.Agent{}
+	for _, agent := range agentList {
+		if slices.Contains(cfg.Agents, agent.Name()) {
+			configured = append(configured, agent)
+		}
+	}
+	status := SkillStatus{Expected: len(names) * len(configured), Stale: !sameStrings(cfg.Skills, names)}
+	if len(configured) == 0 {
 		return status
 	}
-	agent := agentList[0]
-	for _, name := range names {
-		if generatedSkillExists(root, agent, name) {
-			status.Present++
-		} else {
-			status.Missing = append(status.Missing, name)
+	for _, agent := range configured {
+		for _, name := range names {
+			if generatedSkillExists(root, agent, name) {
+				status.Present++
+			} else if len(configured) == 1 {
+				status.Missing = append(status.Missing, name)
+			} else {
+				status.Missing = append(status.Missing, agent.Name()+"/"+name)
+			}
 		}
 	}
 	if len(status.Missing) > 0 {
@@ -128,8 +156,6 @@ func generatedSkillExists(root string, agent agents.Agent, name string) bool {
 	switch agent.Name() {
 	case "copilot":
 		return fileExists(filepath.Join(agent.SkillsPath(root), name+".instructions.md"))
-	case "gemini":
-		return fileExists(filepath.Join(agent.SkillsPath(root), name, "GEMINI.md"))
 	default:
 		return fileExists(filepath.Join(agent.SkillsPath(root), name, "SKILL.md"))
 	}

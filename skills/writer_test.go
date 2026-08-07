@@ -50,7 +50,7 @@ func TestWriteGeminiContextFiles(t *testing.T) {
 	if len(paths) != len(Catalog()) {
 		t.Fatalf("expected %d paths, got %d", len(Catalog()), len(paths))
 	}
-	assertFile(t, filepath.Join(root, ".gemini", "skills", "goforj-app-architecture", "GEMINI.md"))
+	assertFile(t, filepath.Join(root, ".gemini", "skills", "goforj-app-architecture", "SKILL.md"))
 }
 
 func TestWriteCopiesUserSkills(t *testing.T) {
@@ -70,6 +70,76 @@ func TestWriteCopiesUserSkills(t *testing.T) {
 	assertFile(t, filepath.Join(root, ".agents", "skills", "local-skill", "SKILL.md"))
 }
 
+func TestWritePreservesNativeSkillsNotOwnedByAtlas(t *testing.T) {
+	root := t.TempDir()
+	nativeSkill := filepath.Join(root, ".agents", "skills", "manual-skill", "SKILL.md")
+	writeSkillTestFile(t, nativeSkill, "# Manual Skill\n")
+
+	if _, err := Write(WriteOptions{Root: root, Agent: agents.Codex{}}); err != nil {
+		t.Fatalf("write skills: %v", err)
+	}
+
+	content, err := os.ReadFile(nativeSkill)
+	if err != nil {
+		t.Fatalf("read manual skill: %v", err)
+	}
+	if string(content) != "# Manual Skill\n" {
+		t.Fatalf("manual skill changed: %q", content)
+	}
+}
+
+func TestWritePreservesExtraFilesInsideAtlasSkillDirectory(t *testing.T) {
+	root := t.TempDir()
+	extra := filepath.Join(root, ".agents", "skills", "goforj-app-architecture", "notes.md")
+	writeSkillTestFile(t, extra, "# Local Notes\n")
+	writeSkillTestFile(t, filepath.Join(filepath.Dir(extra), "SKILL.md"), "# Old Atlas Skill\n")
+
+	if _, err := Write(WriteOptions{Root: root, Agent: agents.Codex{}, PreviousSkills: []string{"goforj-app-architecture"}}); err != nil {
+		t.Fatalf("write skills: %v", err)
+	}
+
+	content, err := os.ReadFile(extra)
+	if err != nil {
+		t.Fatalf("read local notes: %v", err)
+	}
+	if string(content) != "# Local Notes\n" {
+		t.Fatalf("local notes changed: %q", content)
+	}
+}
+
+func TestWriteRemovesRecordedProjectSkillAfterSourceIsDeleted(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, ".ai", "skills", "local-skill", "SKILL.md")
+	writeSkillTestFile(t, source, "# Local Skill\n")
+	first, err := Write(WriteOptions{Root: root, Agent: agents.Codex{}})
+	if err != nil {
+		t.Fatalf("initial write: %v", err)
+	}
+	if err := os.Remove(source); err != nil {
+		t.Fatalf("remove source fixture: %v", err)
+	}
+	if _, err := Write(WriteOptions{Root: root, Agent: agents.Codex{}, PreviousFiles: first}); err != nil {
+		t.Fatalf("update write: %v", err)
+	}
+	projection := filepath.Join(root, ".agents", "skills", "local-skill", "SKILL.md")
+	if _, err := os.Stat(projection); !os.IsNotExist(err) {
+		t.Fatalf("stale project skill projection remains: %v", err)
+	}
+}
+
+func TestWriteRejectsRecordedPathsOutsideNativeSkillRoots(t *testing.T) {
+	root := t.TempDir()
+	victim := filepath.Join(root, "keep.txt")
+	writeSkillTestFile(t, victim, "keep\n")
+	if _, err := Write(WriteOptions{Root: root, Agent: agents.Codex{}, PreviousFiles: []string{"keep.txt", "../outside.txt"}}); err != nil {
+		t.Fatalf("write skills: %v", err)
+	}
+	content, err := os.ReadFile(victim)
+	if err != nil || string(content) != "keep\n" {
+		t.Fatalf("non-skill path changed: %q, %v", content, err)
+	}
+}
+
 func TestWriteCopilotMapsUserSkillsToInstructions(t *testing.T) {
 	root := t.TempDir()
 	userSkill := filepath.Join(root, ".ai", "skills", "local-skill")
@@ -87,7 +157,7 @@ func TestWriteCopilotMapsUserSkillsToInstructions(t *testing.T) {
 	assertFile(t, filepath.Join(root, ".github", "instructions", "local-skill.instructions.md"))
 }
 
-func TestWriteGeminiMapsUserSkillsToContextFiles(t *testing.T) {
+func TestWriteGeminiMapsUserSkillsToNativeSkills(t *testing.T) {
 	root := t.TempDir()
 	userSkill := filepath.Join(root, ".ai", "skills", "local-skill")
 	if err := os.MkdirAll(userSkill, 0o755); err != nil {
@@ -101,7 +171,20 @@ func TestWriteGeminiMapsUserSkillsToContextFiles(t *testing.T) {
 		t.Fatalf("write skills: %v", err)
 	}
 
-	assertFile(t, filepath.Join(root, ".gemini", "skills", "local-skill", "GEMINI.md"))
+	assertFile(t, filepath.Join(root, ".gemini", "skills", "local-skill", "SKILL.md"))
+}
+
+func TestWriteGeminiRemovesLegacyAtlasContextFiles(t *testing.T) {
+	root := t.TempDir()
+	legacy := filepath.Join(root, ".gemini", "skills", "goforj-app-architecture", "GEMINI.md")
+	writeSkillTestFile(t, legacy, "# Legacy Atlas Skill\n")
+	if _, err := Write(WriteOptions{Root: root, Agent: agents.Gemini{}, PreviousSkills: []string{"goforj-app-architecture"}}); err != nil {
+		t.Fatalf("write skills: %v", err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("legacy Gemini projection remains: %v", err)
+	}
+	assertFile(t, filepath.Join(root, ".gemini", "skills", "goforj-app-architecture", "SKILL.md"))
 }
 
 func TestProjectSkillsListsDirectoriesAndMarkdownFiles(t *testing.T) {

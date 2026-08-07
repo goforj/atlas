@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -169,6 +170,181 @@ func TestUpdaterPreservesUserGuidelineContent(t *testing.T) {
 	}
 	if got := readFile(t, path); !strings.Contains(got, "Keep this.") {
 		t.Fatalf("user content was not preserved:\n%s", got)
+	}
+}
+
+func TestInstallerSelectsOnePreferredSystemAgent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, dir := range []string{".codex", ".claude"} {
+		if err := os.MkdirAll(filepath.Join(home, dir), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+	root := t.TempDir()
+	result, err := NewInstaller(agents.Codex{}, agents.Claude{}).Install(context.Background(), Options{
+		Root:    root,
+		Project: project.Project{Root: root, Name: "demo"},
+	})
+	if err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+	if len(result.Agents) != 1 || result.Agents[0] != "codex" {
+		t.Fatalf("selected agents = %v, want [codex]", result.Agents)
+	}
+	if _, err := os.Stat(filepath.Join(root, "CLAUDE.md")); !os.IsNotExist(err) {
+		t.Fatalf("unexpected Claude projection: %v", err)
+	}
+}
+
+func TestUpdaterUsesCommittedAgentSelection(t *testing.T) {
+	root := t.TempDir()
+	projectInfo := project.Project{Root: root, Name: "demo"}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
+		t.Fatalf("install Codex: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte("# User Claude Rules\n"), 0o644); err != nil {
+		t.Fatalf("write Claude fixture: %v", err)
+	}
+	result, err := NewUpdater().Update(context.Background(), Options{Root: root, Project: projectInfo})
+	if err != nil {
+		t.Fatalf("update failed: %v", err)
+	}
+	if len(result.Agents) != 1 || result.Agents[0] != "codex" {
+		t.Fatalf("updated agents = %v, want committed [codex]", result.Agents)
+	}
+	if got := readFile(t, filepath.Join(root, "CLAUDE.md")); got != "# User Claude Rules\n" {
+		t.Fatalf("unconfigured Claude file changed: %q", got)
+	}
+}
+
+func TestUpdaterRefreshesOneSurfaceWithoutDisablingOthers(t *testing.T) {
+	root := t.TempDir()
+	projectInfo := project.Project{Root: root, Name: "demo"}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
+		t.Fatalf("install Codex: %v", err)
+	}
+	if _, err := NewUpdater().Update(context.Background(), Options{Root: root, Guidelines: true, Project: projectInfo}); err != nil {
+		t.Fatalf("update guidelines: %v", err)
+	}
+	cfg, err := config.Load(root)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.Features.Guidelines || !cfg.Features.Skills || !cfg.Features.MCP {
+		t.Fatalf("focused update disabled configured surfaces: %#v", cfg.Features)
+	}
+	for _, path := range []string{filepath.Join(root, ".agents", "skills"), filepath.Join(root, ".codex", "config.toml")} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("configured surface disappeared at %s: %v", path, err)
+		}
+	}
+}
+
+func TestUpdaterDiscoverReplacesCommittedAgentSelection(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	root := t.TempDir()
+	projectInfo := project.Project{Root: root, Name: "demo"}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
+		t.Fatalf("install Codex: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatalf("mkdir Claude home: %v", err)
+	}
+	result, err := NewUpdater().Update(context.Background(), Options{Root: root, Discover: true, Project: projectInfo})
+	if err != nil {
+		t.Fatalf("discover update: %v", err)
+	}
+	if len(result.Agents) != 1 || result.Agents[0] != "claude" {
+		t.Fatalf("discovered agents = %v, want [claude]", result.Agents)
+	}
+	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("old Codex guideline remains: %v", err)
+	}
+	assertContains(t, filepath.Join(root, "CLAUDE.md"), "GoForj Atlas")
+}
+
+func TestInstallerPrunesDeselectedAgentProjections(t *testing.T) {
+	root := t.TempDir()
+	projectInfo := project.Project{Root: root, Name: "demo"}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, AllAgents: true, Project: projectInfo}); err != nil {
+		t.Fatalf("install all agents: %v", err)
+	}
+	claudePath := filepath.Join(root, "CLAUDE.md")
+	if err := os.WriteFile(claudePath, []byte(readFile(t, claudePath)+"\n# User Rules\n\nKeep me.\n"), 0o644); err != nil {
+		t.Fatalf("append Claude rules: %v", err)
+	}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
+		t.Fatalf("reinstall Codex: %v", err)
+	}
+	claude := readFile(t, claudePath)
+	if !strings.Contains(claude, "Keep me.") || strings.Contains(claude, "goforj-atlas") {
+		t.Fatalf("Claude user content was not preserved cleanly:\n%s", claude)
+	}
+	for _, path := range []string{filepath.Join(root, ".claude"), filepath.Join(root, ".gemini"), filepath.Join(root, ".vscode"), filepath.Join(root, "GEMINI.md"), filepath.Join(root, ".mcp.json")} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("deselected projection remains at %s: %v", path, err)
+		}
+	}
+	cfg, err := config.Load(root)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Version != config.CurrentVersion || len(cfg.Agents) != 1 || cfg.Agents[0] != "codex" {
+		t.Fatalf("unexpected config after pruning: %#v", cfg)
+	}
+}
+
+func TestInstallerPrunesDisabledSurfaces(t *testing.T) {
+	root := t.TempDir()
+	projectInfo := project.Project{Root: root, Name: "demo"}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
+		t.Fatalf("install Codex: %v", err)
+	}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Guidelines: true, Project: projectInfo}); err != nil {
+		t.Fatalf("reinstall guidelines only: %v", err)
+	}
+	for _, path := range []string{filepath.Join(root, ".agents"), filepath.Join(root, ".codex")} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("disabled surface remains at %s: %v", path, err)
+		}
+	}
+	cfg, err := config.Load(root)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.Features.Guidelines || cfg.Features.Skills || cfg.Features.MCP {
+		t.Fatalf("unexpected configured surfaces: %#v", cfg.Features)
+	}
+	if len(cfg.GeneratedFiles["codex"]) != 1 || cfg.GeneratedFiles["codex"][0] != "AGENTS.md" {
+		t.Fatalf("disabled surfaces remain in ownership manifest: %#v", cfg.GeneratedFiles)
+	}
+	status, err := Status(context.Background(), StatusOptions{Root: root, Project: projectInfo})
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if len(status.Warnings) != 0 || status.Skills.Expected != 0 || status.Skills.Stale {
+		t.Fatalf("doctor warned about intentionally disabled surfaces: %#v", status)
+	}
+}
+
+func TestStatusChecksSkillsForEveryConfiguredAgent(t *testing.T) {
+	root := t.TempDir()
+	projectInfo := project.Project{Root: root, Name: "demo"}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex", "claude"}, Project: projectInfo}); err != nil {
+		t.Fatalf("install agents: %v", err)
+	}
+	missing := filepath.Join(root, ".claude", "skills", "goforj-make-commands", "SKILL.md")
+	if err := os.Remove(missing); err != nil {
+		t.Fatalf("remove fixture skill: %v", err)
+	}
+	status, err := Status(context.Background(), StatusOptions{Root: root, Project: projectInfo})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	if !status.Skills.Stale || !slices.Contains(status.Skills.Missing, "claude/goforj-make-commands") {
+		t.Fatalf("status did not report second-agent skill gap: %#v", status.Skills)
 	}
 }
 

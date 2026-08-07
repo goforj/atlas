@@ -2,7 +2,6 @@ package agents
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -40,11 +39,27 @@ func (Codex) MCPConfigPath(root string) string { return filepath.Join(root, ".co
 
 // WriteMCPConfig writes the Codex MCP server configuration.
 func (c Codex) WriteMCPConfig(_ context.Context, root string, server MCPServerConfig) error {
-	content := fmt.Sprintf("[mcp_servers.%s]\ncommand = %q\nargs = [%q]\ncwd = %q\n",
-		server.Name,
-		server.Command,
-		server.Args()[0],
-		server.CWD,
-	)
-	return files.WriteFile(c.MCPConfigPath(root), []byte(content))
+	path := c.MCPConfigPath(root)
+	content, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return files.WriteFile(path, []byte(replaceTOMLServer(string(content), server)))
+}
+
+// RemoveMCPConfig removes Atlas's Codex MCP table while preserving other project configuration.
+func (c Codex) RemoveMCPConfig(_ context.Context, root string, serverName string) error {
+	path := c.MCPConfigPath(root)
+	content, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	remaining := removeTOMLServer(string(content), serverName)
+	if remaining == "" {
+		return os.Remove(path)
+	}
+	return files.WriteFile(path, []byte(remaining+"\n"))
 }
