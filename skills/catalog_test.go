@@ -13,6 +13,7 @@ func TestCatalogContainsRequiredSkills(t *testing.T) {
 		"goforj-app-registration",
 		"goforj-make-commands",
 		"goforj-go-package-design",
+		"goforj-library-selection",
 		"goforj-migrations",
 		"goforj-runtime-workflows",
 		"goforj-database-and-data-access",
@@ -59,6 +60,7 @@ func TestSkillEffectivenessPhrases(t *testing.T) {
 		"route-list",
 		"cmd/<app>/frontend",
 		"templ/htmx",
+		"Start with the Go standard library",
 	} {
 		if !strings.Contains(all, want) {
 			t.Fatalf("catalog missing %q", want)

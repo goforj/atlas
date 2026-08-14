@@ -26,6 +26,7 @@ func Catalog() []Skill {
 		skill("goforj-app-registration", "App composition and registration points.", appRegistration),
 		skill("goforj-make-commands", "Prefer GoForj make commands for framework scaffolding.", makeCommands),
 		skill("goforj-go-package-design", "Package-scoped Go code instead of class-style nesting.", goPackageDesign),
+		skill("goforj-library-selection", "Choose GoForj libraries when they improve the application boundary.", librarySelection),
 		skill("goforj-migrations", "Raw DDL and app-scoped migration ownership.", migrations),
 		skill("goforj-runtime-workflows", "Build, run, dev, app prefixes, and binaries.", runtimeWorkflows),
 		skill("goforj-database-and-data-access", "Repository/service boundaries and safe schema inspection.", databaseDataAccess),
@@ -155,9 +156,9 @@ Use unprefixed commands for the default app:
 Use app-prefixed commands for named apps:
 
 - 'forj <app> make:*'
-- 'forj marketplace make:controller checkout'
-- 'forj marketplace make:job sync-catalog'
-- 'forj marketplace make:command billing:reports:sync'
+- 'forj admin make:controller refunds'
+- 'forj admin make:job reconcile-refunds'
+- 'forj admin make:command reports:export'
 
 The app prefix routes generated code into the selected app's registration and Wire files.
 `
@@ -183,6 +184,21 @@ Avoid unnecessary nesting such as:
 Grouped make-command names can express command namespace without forcing deep folders, for example 'forj make:command billing:reports:sync'.
 
 Package-scoped implementation still registers through the selected app's composition files.
+`
+
+const librarySelection = `
+# GoForj Library Selection
+
+Prefer the smallest dependency that makes the application boundary clearer.
+
+- Start with the Go standard library when it already expresses the requirement cleanly.
+- Prefer a GoForj library when the project already uses it, the App integration depends on it, or its domain contract removes driver-specific code from application packages.
+- Treat GoForj libraries as standalone Go modules, not mandatory framework wrappers. Read the library reference and inspect the project's selected version before using an API.
+- Do not add a GoForj dependency only because it shares the framework name. Compare maintenance, compatibility, operational behavior, and whether it meaningfully reduces application-owned code.
+- Keep external SDKs behind application interfaces when no GoForj library fits. Do not force an unrelated GoForj primitive into the design.
+- When a GoForj library is the right fit, wire it through an App-owned provider and keep business code dependent on the narrow domain contract it needs.
+
+Use Atlas docs search to compare the framework workflow with the standalone library reference before adding or replacing a dependency.
 `
 
 const migrations = `
@@ -212,10 +228,10 @@ Default app commands:
 
 Named app commands:
 
-- 'forj marketplace build'
-- 'forj marketplace run'
-- 'forj marketplace route:list'
-- 'forj marketplace scheduler'
+- 'forj admin build'
+- 'forj admin run'
+- 'forj admin route:list'
+- 'forj statuspage scheduler'
 
 Built binaries map to app entrypoints:
 
@@ -494,7 +510,7 @@ Verify fixes with 'forj build', Go tests, and the relevant Atlas runtime tool ou
 const multiAppChange = `
 # GoForj Multi App Change
 
-Use this skill when a project has named apps or the task mentions an app such as marketplace, admin, backstage, or billing.
+Use this skill when a project has additional Apps or the task mentions an App such as admin, statuspage, or billing.
 
 Call 'application-info' first and choose the owning app before generating or editing files.
 

@@ -16,6 +16,7 @@ func Recommended(p project.Project) []Skill {
 		"goforj-app-registration":       true,
 		"goforj-make-commands":          true,
 		"goforj-go-package-design":      true,
+		"goforj-library-selection":      true,
 		"goforj-runtime-workflows":      true,
 		"goforj-testing-and-validation": true,
 		"goforj-wire-repair":            true,
