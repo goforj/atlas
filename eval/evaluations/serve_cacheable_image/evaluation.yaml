@@ -1,0 +1,11 @@
+schema_version: 1
+id: serve-cacheable-image
+summary: Serve storage-backed image content without repeated unchanged transfers.
+suite: core
+project_scenario: cacheable-avatar-response
+workflow: goforj-serve-cacheable-image/v1
+verifier: serve-cacheable-image/v1
+limits:
+  wall_time: 10m
+  commands: 70
+  shell_network: off

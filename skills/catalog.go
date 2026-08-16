@@ -25,10 +25,10 @@ func Catalog() []Skill {
 		skill("goforj-app-architecture", "Project, app, runtime, and package layout.", appArchitecture),
 		skill("goforj-app-registration", "App composition and registration points.", appRegistration),
 		skill("goforj-make-commands", "Prefer GoForj make commands for framework scaffolding.", makeCommands),
-		skill("goforj-go-package-design", "Package-scoped Go code instead of class-style nesting.", goPackageDesign),
+		skill("goforj-go-package-design", "Package-scoped Go code and cohesive API shapes instead of class-style nesting.", goPackageDesign),
 		skill("goforj-migrations", "Raw DDL and app-scoped migration ownership.", migrations),
 		skill("goforj-runtime-workflows", "Build, run, dev, app prefixes, and binaries.", runtimeWorkflows),
-		skill("goforj-database-and-data-access", "Repository/service boundaries and safe schema inspection.", databaseDataAccess),
+		skill("goforj-database-and-data-access", "Repository/service boundaries, schema-derived models, relationships, and safe schema inspection.", databaseDataAccess),
 		skill("goforj-observability", "Logs, metrics, app/runtime identity, and Lighthouse boundaries.", observability),
 		skill("goforj-vue-starter-kit", "Vue starter kit paths, auth defaults, and embedded frontend assets.", vueStarterKit),
 		skill("goforj-react-starter-kit", "React starter kit paths, auth defaults, and embedded frontend assets.", reactStarterKit),
@@ -187,6 +187,8 @@ Avoid Java/PHP-style category nesting such as 'services', 'handlers', 'models', 
 Grouped make-command names can express command namespace, for example 'forj make:command billing:reports:sync'. Use a group only when that area is a real package responsibility, not as an organizational label for one implementation.
 
 Package-scoped implementation still registers through the selected app's composition files.
+
+When several returned values describe one application result, prefer a named result struct with meaningful fields over an expanding tuple. Preserve conventional and naturally small returns such as '(value, error)'; do not introduce a struct merely to satisfy a numeric rule.
 `
 
 const migrations = `
@@ -234,6 +236,10 @@ Keep data access behind repository/service boundaries.
 
 Agents should inspect schema through Atlas read-only tools when available. Do not guess table names when the project can report them.
 
+Use 'forj make:model <table> --package <package>' when an existing table needs GoForj's schema-derived model and repository scaffold. Inspect related tables, foreign keys, and nearby repository conventions before modeling relationships. Declare supported relationships in '.db-relationships.yaml' so the generator can validate keys and emit relationship fields; keep preload, join, and repository query policy in App-owned repository methods.
+
+Keep relationship lookup and persistence-specific eager loading in repositories. Controllers, commands, jobs, and frontend code should call application services rather than navigating the database directly.
+
 Never expose database secrets in agent output. Read-only query tools must be bounded by timeout and row limits.
 `
 
@@ -263,6 +269,10 @@ Named app frontend source lives under:
 - 'cmd/<app>/frontend/'
 
 Local generated auth defaults may use 'admin' / 'admin'. For real users, prefer the generated user creation command.
+
+Load feature-local server data in the owning view/component or a colocated composable. Do not promote feature-local server state into a global store merely to share loading machinery.
+
+Keep fast requests visually stable: delay transient skeletons or spinners briefly so a response that resolves immediately does not flash a loading state. During refresh or revalidation, retain usable content until replacement data is ready. Render deliberate loading, error, empty, and ready states without adding an artificial delay after data has arrived.
 `
 
 const reactStarterKit = `
@@ -281,6 +291,10 @@ Named app frontend source lives under:
 Use Atlas 'resource-inventory' and 'get-absolute-url' before guessing ports. Keep generated frontend assets in the owning app's command tree, not under shared backend packages.
 
 Local generated auth defaults may use 'admin' / 'admin'. For real users, prefer the generated user creation command.
+
+Load feature-local server data in the owning route/component or a colocated hook. Do not promote feature-local server state into global context merely to share loading machinery.
+
+Keep fast requests visually stable: delay transient skeletons or spinners briefly so a response that resolves immediately does not flash a loading state. During refresh or revalidation, retain usable content until replacement data is ready. Render deliberate loading, error, empty, and ready states without adding an artificial delay after data has arrived.
 `
 
 const templHTMXStarterKit = `
@@ -299,6 +313,8 @@ Named app frontend source lives under:
 Use Atlas 'workflow-plan', 'resource-inventory', and 'get-absolute-url' before changing UI routes. Keep server-rendered page behavior close to the owning UI package and avoid moving app composition into shared runtime code.
 
 Local generated auth defaults may use 'admin' / 'admin'. For real users, prefer the generated user creation command.
+
+Resolve data required for the initial page contract before rendering that page. For htmx refreshes, keep existing content in place while the request is pending and delay transient progress indicators so fast responses do not visibly flash. Use a stable target and intentional error or empty state instead of clearing the region before replacement content arrives.
 `
 
 const testingValidation = `
@@ -332,6 +348,8 @@ Prefer the make-command path:
 - named app: 'forj <app> make:controller <name>'
 
 Keep the controller thin. Put business behavior in an application service under 'internal/<domain>'. Wire service constructors through the selected app's service set. Do not edit 'wire_gen.go'.
+
+For images or other cacheable file responses, choose an explicit browser cache policy. Use an 'ETag' or 'Last-Modified' validator when content can be revalidated, honor conditional requests with '304 Not Modified', and keep storage lookup and authorization in the application boundary rather than coupling controllers to a filesystem or cloud SDK.
 
 Verify with:
 
@@ -446,10 +464,14 @@ Start with Atlas:
 
 Keep durable data in the database. Use cache for temporary or derived data. Use storage for files and blobs. Do not import backend driver packages into services or repositories when generated managers or named accessors should own that boundary.
 
+When a feature introduces a durable file category such as avatars, invoices, exports, or attachments, inspect existing resources and prefer a purpose-named storage resource when the category has distinct access, retention, or deployment policy. Inject its generated manager/accessor into the owning service; do not write directly to an incidental local directory.
+
 Prefer make commands for generated artifacts:
 
 - 'forj make:model <table> --package <package>'
 - 'forj make:migration <name>'
+
+The model generator derives fields from an existing table and reads supported relationship declarations from '.db-relationships.yaml'. Inspect the actual schema first, use the relationship config for generated fields, then keep relationship loading and repository query policy in App-owned repository code.
 
 Verify with 'forj build', Go tests, safe Atlas schema inspection, and app-specific migration or route commands when relevant.
 `

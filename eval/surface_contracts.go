@@ -59,6 +59,17 @@ func promotedSurfaceContracts() []surfaceContract {
 			commands: standardSurfaceCommands(),
 		},
 		{
+			id:                  "model-relationships/v1",
+			allowedChanges:      []string{".db-relationships.yaml", "internal/content/*.go", "app/wire/inject_repositories_app.go"},
+			qualityTestPatterns: []string{"internal/content/*_test.go"},
+			sources: []sourceContract{
+				{id: "relationship-contract", paths: []string{".db-relationships.yaml"}, text: []string{"users:", "1-many id->posts:user_id"}},
+				{id: "related-model-shape", paths: []string{"internal/content/*.go"}, identifiers: []string{"User", "Post", "Posts", "UserRepo", "PostRepo", "Relationships", "WithContext"}, stringLiterals: []string{"Posts"}},
+				{id: "related-repository-registration", paths: []string{"app/wire/inject_repositories_app.go"}, identifiers: []string{"NewUserRepo", "NewPostRepo"}},
+			},
+			commands: standardSurfaceCommands(),
+		},
+		{
 			id:             "add-named-app-route/v1",
 			allowedChanges: []string{"internal/audits/*.go", "app/admin/routes.go", "app/admin/wire/inject_http_controllers_app.go"},
 			sources: []sourceContract{
@@ -100,6 +111,30 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "named-storage-registration", paths: []string{"app/wire/inject_services_app.go"}, identifierChoices: [][]string{{"NewAvatarStorage", "NewStorage"}}},
 			},
 			commands: standardSurfaceCommands(),
+		},
+		{
+			id:                  "choose-storage-for-files/v1",
+			allowedChanges:      []string{".env", ".env.example", "internal/storages/*_gen.go", "internal/invoices/attachments.go", "internal/invoices/attachments_test.go", "app/wire/inject_services_app.go"},
+			qualityTestPatterns: []string{"internal/invoices/attachments_test.go"},
+			sources: []sourceContract{
+				{id: "attachment-storage-config", paths: []string{".env"}, text: []string{"STORAGE_ATTACHMENTS_DRIVER=", "STORAGE_ATTACHMENTS_ROOT="}},
+				{id: "attachment-storage-accessor", paths: []string{"internal/storages/*_gen.go"}, identifiers: []string{"Attachments"}},
+				{id: "attachment-service-boundary", paths: []string{"internal/invoices/attachments.go"}, identifiers: []string{"Attachment", "AttachmentService", "Manager", "Store", "Read"}, selectorCalls: []string{"Attachments", "WithContext", "Put", "Get"}, forbiddenCalls: []string{"Background", "WriteFile", "ReadFile"}},
+				{id: "attachment-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewAttachmentService"}},
+			},
+			commands: standardSurfaceCommands(),
+		},
+		{
+			id:                  "serve-cacheable-image/v1",
+			allowedChanges:      []string{"internal/avatars/*.go", "app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"},
+			qualityTestPatterns: []string{"internal/avatars/*_test.go"},
+			sources: []sourceContract{
+				{id: "avatar-storage-boundary", paths: []string{"internal/avatars/service.go"}, identifiers: []string{"Image", "Service", "Find", "Digest"}, selectorCalls: []string{"WithContext", "Get"}, forbiddenCalls: []string{"Background", "ReadFile"}},
+				{id: "avatar-revalidation", paths: []string{"internal/avatars/controller.go"}, identifiers: []string{"Controller", "Show"}, selectorCalls: []string{"Find", "SetHeader", "Request", "Get", "NoContent", "Blob"}, stringLiterals: []string{"Cache-Control", "ETag", "If-None-Match"}},
+				{id: "avatar-route-registration", paths: []string{"internal/avatars/controller.go", "app/routes.go", "app/wire/inject_http_controllers_app.go"}, identifiers: []string{"NewController", "Routes"}, stringLiterals: []string{"/avatars/:id"}},
+				{id: "avatar-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}, selectorCalls: []string{"Avatars"}},
+			},
+			commands: append(standardSurfaceCommands(), commandContract{id: "avatar-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/avatars/:id"}),
 		},
 		{
 			id:             "repair-wire-provider/v1",

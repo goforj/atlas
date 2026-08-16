@@ -1,0 +1,11 @@
+schema_version: 1
+id: model-relationships
+summary: Generate schema-derived models with an explicit relationship contract.
+suite: core
+project_scenario: user-post-relationships
+workflow: goforj-model-relationships/v1
+verifier: model-relationships/v1
+limits:
+  wall_time: 10m
+  commands: 60
+  shell_network: off

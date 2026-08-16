@@ -1,0 +1,1 @@
+Add invoice attachments that application services can write and read in local development and across multiple production App instances. Keep file placement, cancellation, and infrastructure replacement explicit, add focused tests, and leave the Project working.
