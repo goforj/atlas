@@ -194,6 +194,41 @@ func routes(invoicesController Controller) {
 	protectedRoutes := concat()
 	_, _ = publicRoutes, protectedRoutes
 }
+`
+	if err := os.WriteFile(path, []byte(mutant), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contract := sourceContract{
+		id:    "route-groups",
+		paths: []string{"routes.go"},
+		assignments: []assignmentContract{
+			{name: "publicRoutes", forbiddenIdentifiers: []string{"invoicesController"}},
+			{name: "protectedRoutes", identifiers: []string{"invoicesController"}, selectorCalls: []string{"Routes"}},
+		},
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+		t.Fatalf("mutant result = %#v, want wrong-group failure", result)
+	}
+}
+
+// TestSurfaceVerifierExcludesCandidateTestsFromSourceEvidence prevents candidate-owned tests from satisfying or invalidating implementation contracts.
+func TestSurfaceVerifierExcludesCandidateTestsFromSourceEvidence(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "service.go"), []byte("package feature\ntype Service struct{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	testSource := `package feature
+import "context"
+func candidateEvidence() { _ = context.Background() }
+`
+	if err := os.WriteFile(filepath.Join(root, "service_test.go"), []byte(testSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contract := sourceContract{id: "service", paths: []string{"*.go"}, identifiers: []string{"Service"}, forbiddenCalls: []string{"Background"}}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("result = %#v, want candidate tests excluded", result)
+	}
+}
 
 // TestRunIsolatedCommandInstallsSupervisorFiles proves executable behavior comes from verifier-owned source after candidate tests are removed.
 func TestRunIsolatedCommandInstallsSupervisorFiles(t *testing.T) {
@@ -212,21 +247,5 @@ func TestRunIsolatedCommandInstallsSupervisorFiles(t *testing.T) {
 	}
 	if got := string(runner.files["feature/atlas_eval_test.go"]); got != "package feature\n" {
 		t.Fatalf("supervisor file = %q", got)
-	}
-}
-`
-	if err := os.WriteFile(path, []byte(mutant), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	contract := sourceContract{
-		id:    "route-groups",
-		paths: []string{"routes.go"},
-		assignments: []assignmentContract{
-			{name: "publicRoutes", forbiddenIdentifiers: []string{"invoicesController"}},
-			{name: "protectedRoutes", identifiers: []string{"invoicesController"}, selectorCalls: []string{"Routes"}},
-		},
-	}
-	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
-		t.Fatalf("mutant result = %#v, want wrong-group failure", result)
 	}
 }

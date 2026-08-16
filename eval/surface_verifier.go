@@ -151,6 +151,9 @@ func verifySurfaceTextAbsent(root string, exclusion textExclusion) EndpointResul
 		return EndpointResult{ID: exclusion.id, Status: EndpointFailed, Details: err.Error()}
 	}
 	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
 		body, err := os.ReadFile(path)
 		if err != nil {
 			return EndpointResult{ID: exclusion.id, Status: EndpointFailed, Details: err.Error()}
@@ -225,6 +228,9 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 	assignments := map[string]*sourceFacts{}
 	var text strings.Builder
 	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
 		body, err := os.ReadFile(path)
 		if err != nil {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: err.Error()}
