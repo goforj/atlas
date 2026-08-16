@@ -14,14 +14,14 @@ func configureProcessGroup(command *exec.Cmd) {
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-// terminateProcessGroup requests graceful shutdown from the leader and every descendant that retained the group.
+// terminateProcessGroup uses os.Process identity state so a reaped leader PID cannot signal an unrelated reused process.
 func terminateProcessGroup(command *exec.Cmd) error {
-	return syscall.Kill(-command.Process.Pid, syscall.SIGTERM)
+	return command.Process.Signal(syscall.SIGTERM)
 }
 
-// killProcessGroup stops descendants that did not honor graceful termination.
+// killProcessGroup preserves the same identity-safe leader boundary during escalation.
 func killProcessGroup(command *exec.Cmd) error {
-	return syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+	return command.Process.Kill()
 }
 
 // ignoreMissingProcess treats an already-empty process group as successful cleanup.

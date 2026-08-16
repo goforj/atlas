@@ -128,33 +128,21 @@ func TestTerminateReturnsAfterEscalationWithoutWaitingForCompletion(t *testing.T
 	}
 }
 
-// TestTerminateSkipsReapedLeaderGroup prevents a reused leader PID from becoming a process-group signal target.
-func TestTerminateSkipsReapedLeaderGroup(t *testing.T) {
-	command := exec.Command("/bin/sh", "-c", "exec sleep 300")
+// TestTerminateSkipsReapedLeader prevents os/exec's completed identity from becoming a reused PID signal target.
+func TestTerminateSkipsReapedLeader(t *testing.T) {
+	command := exec.Command("/bin/sh", "-c", "exit 0")
 	configureProcessGroup(command)
 	if err := command.Start(); err != nil {
 		t.Fatalf("start process: %v", err)
 	}
-	defer func() {
-		_ = command.Process.Kill()
-		_ = command.Wait()
-	}()
-
-	process := &Process{
-		command:       command,
-		done:          make(chan struct{}),
-		descendants:   emptyDescendantTracker{},
-		terminateDone: make(chan struct{}),
+	if err := command.Wait(); err != nil {
+		t.Fatalf("wait for process: %v", err)
 	}
-	// Closing done models the state after os/exec has reaped the leader. The live helper makes an unsafe group signal observable.
-	close(process.done)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := process.Terminate(ctx); err != nil {
-		t.Fatalf("terminate reaped process: %v", err)
+	if err := terminateProcessGroup(command); !errors.Is(err, os.ErrProcessDone) {
+		t.Fatalf("terminate reaped process = %v, want os.ErrProcessDone", err)
 	}
-	if !processAlive(command.Process.Pid) {
-		t.Fatalf("leader group received a signal after completion")
+	if err := killProcessGroup(command); !errors.Is(err, os.ErrProcessDone) {
+		t.Fatalf("kill reaped process = %v, want os.ErrProcessDone", err)
 	}
 }
 
