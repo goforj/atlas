@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -220,6 +221,108 @@ func TestVerifyArtifactManifestDetectsTampering(t *testing.T) {
 	if _, err := VerifyArtifactManifest(directory, key); err == nil || !strings.Contains(err.Error(), "do not match") {
 		t.Fatalf("VerifyArtifactManifest() error = %v, want tamper detection", err)
 	}
+}
+
+// TestVerifyArtifactManifestRejectsNonCanonicalJSON prevents parser differentials from authenticating altered raw evidence.
+func TestVerifyArtifactManifestRejectsNonCanonicalJSON(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	for _, test := range []struct {
+		name   string
+		mutate func(string) string
+		want   string
+	}{
+		{
+			name: "unknown field",
+			mutate: func(body string) string {
+				return strings.Replace(body, "\n}", ",\n  \"untrusted\": true\n}", 1)
+			},
+			want: "unknown field",
+		},
+		{
+			name: "duplicate field",
+			mutate: func(body string) string {
+				return strings.Replace(body, "{\n  \"schema_version\": 1,", "{\n  \"schema_version\": 1,\n  \"schema_version\": 1,", 1)
+			},
+			want: "canonical form",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory := finalizedArtifactDirectory(t, key)
+			path := filepath.Join(directory, "manifest.json")
+			body, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(test.mutate(string(body))), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := VerifyArtifactManifest(directory, key); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("VerifyArtifactManifest() error = %v, want %q rejection", err, test.want)
+			}
+		})
+	}
+}
+
+// TestVerifyArtifactManifestRejectsUnsafeManifestFiles bounds authentication before reading untrusted file content.
+func TestVerifyArtifactManifestRejectsUnsafeManifestFiles(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	t.Run("symlink", func(t *testing.T) {
+		directory := finalizedArtifactDirectory(t, key)
+		path := filepath.Join(directory, "manifest.json")
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(directory, "summary.txt"), path); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := VerifyArtifactManifest(directory, key); err == nil || !strings.Contains(err.Error(), "regular file") {
+			t.Fatalf("VerifyArtifactManifest() error = %v, want symlink rejection", err)
+		}
+	})
+	t.Run("oversized", func(t *testing.T) {
+		directory := finalizedArtifactDirectory(t, key)
+		path := filepath.Join(directory, "manifest.json")
+		if err := os.WriteFile(path, bytes.Repeat([]byte{'x'}, maxArtifactManifestSize+1), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := VerifyArtifactManifest(directory, key); err == nil || !strings.Contains(err.Error(), "exceeds") {
+			t.Fatalf("VerifyArtifactManifest() error = %v, want size rejection", err)
+		}
+	})
+	t.Run("directory", func(t *testing.T) {
+		directory := finalizedArtifactDirectory(t, key)
+		path := filepath.Join(directory, "manifest.json")
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := VerifyArtifactManifest(directory, key); err == nil || !strings.Contains(err.Error(), "regular file") {
+			t.Fatalf("VerifyArtifactManifest() error = %v, want special-file rejection", err)
+		}
+	})
+}
+
+// finalizedArtifactDirectory creates one authenticated fixture whose manifest can be adversarially replaced.
+func finalizedArtifactDirectory(t *testing.T, key []byte) string {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), "artifacts")
+	store, err := NewArtifactStore(root, key, NewRedactor(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := store.Begin("manifest-fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := artifacts.WriteText("summary.txt", "fixture"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(root, "manifest-fixture")
 }
 
 // TestNewArtifactStoreRequiresAuthenticationKey prevents accidentally unsigned diagnostic evidence.
