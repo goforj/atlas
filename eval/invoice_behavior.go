@@ -228,7 +228,8 @@ func routeHandlerSelectorUsesReceiver(function *ast.FuncDecl, selector *ast.Sele
 		return false
 	}
 	receiver, ok := selector.X.(*ast.Ident)
-	return ok && receiver.Name == function.Recv.List[0].Names[0].Name
+	receiverDeclaration := function.Recv.List[0].Names[0]
+	return ok && receiver.Obj != nil && receiver.Obj == receiverDeclaration.Obj
 }
 
 // isInvoiceGETRoute recognizes the contract route without depending on the router constructor's imported name.
