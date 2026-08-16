@@ -1,0 +1,1 @@
+Add `GET /api/v1/avatars/:id` for the current user avatar stored on the existing named avatar resource. Browsers should not redownload unchanged bytes, while storage access remains application-owned and caller cancellation reaches storage. Add focused tests and leave the route, Wire graph, and Project working.

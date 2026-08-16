@@ -24,6 +24,14 @@ func PromotedWorkflows() []WorkflowExpectation {
 			},
 		},
 		promotedGeneratorWorkflow("goforj-create-model/v1", "generate-user-model", "make:model", "users"),
+		{
+			ID: "goforj-model-relationships/v1",
+			Generators: []GeneratorRequirement{
+				{ID: "generate-post-model", Arguments: []string{"make:model", "posts", "--package", "content"}},
+				{ID: "generate-user-model", Arguments: []string{"make:model", "users", "--package", "content"}},
+			},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-related-schema", "Inspect the related tables and explicit relationship contract before generating models.", ".db-relationships.yaml", "migrations/**", "internal/content/**")},
+		},
 		promotedGeneratorWorkflow("goforj-create-additional-app/v1", "generate-statuspage-app", "make:app", "statuspage", "--components", "web-api", "--dev-run", "run"),
 		{
 			ID:           "goforj-add-app-lifecycle-hook/v1",
@@ -57,6 +65,12 @@ func PromotedWorkflows() []WorkflowExpectation {
 		promotedGeneratorWorkflow("goforj-add-named-resource/v1", "generate-reports-queue", "make:queue", "reports", "--workers", "2"),
 		promotedGeneratorWorkflow("goforj-add-named-cache/v1", "generate-profiles-cache", "generate", "--cache"),
 		promotedGeneratorWorkflow("goforj-add-named-storage/v1", "generate-avatar-storage", "generate", "--storage"),
+		{
+			ID:           "goforj-choose-storage-for-files/v1",
+			Generators:   []GeneratorRequirement{{ID: "generate-attachment-storage", Arguments: []string{"generate", "--storage"}}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-file-resource-boundary", "Inspect existing storage resources and feature ownership before choosing where durable files belong.", ".env", "internal/storages/**", "internal/invoices/**")},
+		},
+		promotedGeneratorWorkflow("goforj-serve-cacheable-image/v1", "generate-avatar-controller", "make:controller", "avatars"),
 		promotedGeneratorWorkflow("goforj-build-json-api-feature/v1", "generate-users-controller", "make:controller", "users"),
 		{
 			ID:           "goforj-add-cached-repository/v1",

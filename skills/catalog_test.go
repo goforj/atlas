@@ -62,6 +62,13 @@ func TestSkillEffectivenessPhrases(t *testing.T) {
 		"route-list",
 		"cmd/<app>/frontend",
 		"templ/htmx",
+		"named result struct",
+		"relationship fields",
+		".db-relationships.yaml",
+		"feature-local server data",
+		"does not flash a loading state",
+		"304 Not Modified",
+		"durable file category",
 	} {
 		if !strings.Contains(all, want) {
 			t.Fatalf("catalog missing %q", want)

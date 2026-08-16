@@ -32,8 +32,8 @@ The diagnostic core portfolio is implemented across Atlas and GoForj:
   prepared bases are implemented in GoForj;
 - the Atlas runner, guidance treatments, verifier, redacted authenticated
   artifacts, focused supervisor diff, and diagnostic report are implemented;
-- 28 GoForj live scenario fixtures establish reusable starting state and
-  exercise the 27 promoted controller, command, job, migration, schedule,
+- 32 GoForj scenario fixtures establish reusable starting state and exercise
+  the 30 promoted controller, command, job, migration, schedule,
   event/subscriber, model, additional-App, named resource, Wire-repair, and
   clarification evaluations, including six application-shaped capstones that
   cross HTTP, repositories, cache, storage, events, jobs, and scheduling, plus
@@ -66,7 +66,7 @@ gate:
 | GoForj preparation | Scenario decoder, plan, preparation, clone, tree, and documentation-parity tests cover strict v2 YAML, unchanged v1 behavior, dependency ordering, target omission, symlink rejection, independent writable copies, and lexical tree identities. Tagged calibration covers the core golden Projects, targeted mutants, and safe abstention. |
 | Atlas evaluation core | Runner, artifact, manifest, diff, authenticated report, diagnostic, workflow, and isolation tests cover capability preflight, baseline timing, cancellation, timeout, cleanup, repairable finalization, sealing before verification, redaction, and HMAC-backed post-run tamper evidence for artifacts, plus separate outcome and conformance endpoints. Verifier phases keep separate writable Go state while using the supervisor's prepared module archives as a local proxy before falling back to the declared upstream. This HMAC evidence is not adversarial authentication when an unconfined candidate and the supervisor share a UID, because that candidate can read the signing key or replace retained files. |
 | Guidance ownership | Guidance reconciliation tests cover every native target, managed-block ownership, stable target selection, and legacy inference. Tagged `TestBaselineGuidanceSurvivesProjectLifecycle` proves baseline guidance survives render, build, and a representative generator workflow. |
-| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 27 versioned contracts. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. An additional-App topology case, six application-shaped capstones, and focused validation, middleware, transaction, mail, Auth, lifecycle, and outbound HTTP cases add golden and targeted-mutant calibration without presenting those calibrations as live treatment results. Current guided implementations satisfy their semantic, build, and test checks, while every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
+| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 30 versioned contracts. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. An additional-App topology case, six application-shaped capstones, focused validation, middleware, transaction, mail, Auth, lifecycle, and outbound HTTP cases, plus relationship modeling, inferred storage ownership, and conditional image delivery add golden and targeted-mutant calibration without presenting those calibrations as live treatment results. Current guided implementations satisfy their semantic, build, and test checks, while every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
 
 Live calibration found real harness defects rather than being rerun until
 green. A valid transport-package controller exposed constructor-name
@@ -261,6 +261,10 @@ use the local workspace run as the final release-qualified evidence.
 - Regenerate checked-in outputs from their authoritative templates and verify
   a second generation is clean.
 - Run live evaluations only through an explicit command or test tag.
+- Keep frontend loading-state guidance outside the promoted score until a
+  browser-capable verifier can observe timing, retained content, and transient
+  indicators. Source tokens cannot prove that fast responses avoid flicker or
+  that revalidation preserves already rendered content.
 - Keep authoritative sandbox claims disabled until the container or VM backend
   and negative isolation suite exist.
 - Treat `limits.commands` as a post-run adapter-telemetry diagnostic under the

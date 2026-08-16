@@ -1,0 +1,1 @@
+The configured database contains related `users` and `posts` tables. Add the Project's conventional models and a one-to-many user-to-post relationship while preserving the discovered schema, repository registration, and cancellation-aware access. Leave the Project working.
