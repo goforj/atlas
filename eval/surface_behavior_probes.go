@@ -1,5 +1,78 @@
 package eval
 
+const receiptJobBehaviorProbe = `package invoices
+
+import (
+	"context"
+	"testing"
+
+	"example.com/invoiceeval/internal/queues"
+)
+
+// TestAtlasReceiptJobBehavior proves typed receipt work reloads the requested invoice through the service.
+func TestAtlasReceiptJobBehavior(t *testing.T) {
+	t.Setenv("QUEUE_DRIVER", "sync")
+	manager, err := queues.NewManager()
+	if err != nil {
+		t.Fatalf("queues.NewManager(): %v", err)
+	}
+	runtimeQueue := manager.Default()
+	t.Cleanup(func() {
+		if err := runtimeQueue.Shutdown(context.Background()); err != nil {
+			t.Errorf("runtimeQueue.Shutdown(): %v", err)
+		}
+	})
+	job := NewReceiptJob(manager, NewService(&MemoryRepository{}))
+	manager.Register(ReceiptJobTypeName, job.HandleTask)
+	if err := runtimeQueue.StartWorkers(context.Background()); err != nil {
+		t.Fatalf("runtimeQueue.StartWorkers(): %v", err)
+	}
+	if err := job.Queue(context.Background(), ReceiptJobPayload{InvoiceID: "inv-42"}); err != nil {
+		t.Fatalf("job.Queue(): %v", err)
+	}
+}
+`
+
+const paidSubscriberBehaviorProbe = `package invoices
+
+import (
+	"context"
+	"testing"
+)
+
+// TestAtlasPaidSubscriberBehavior proves the subscriber delegates the event's invoice identity.
+func TestAtlasPaidSubscriberBehavior(t *testing.T) {
+	subscriber := NewPaidSubscriber(NewService(&MemoryRepository{}))
+	if err := subscriber.Handle(context.Background(), PaidEvent{InvoiceID: "inv-42"}); err != nil {
+		t.Fatalf("subscriber.Handle(): %v", err)
+	}
+	if err := subscriber.Handle(context.Background(), PaidEvent{InvoiceID: "missing"}); err == nil {
+		t.Fatal("subscriber.Handle() ignored the event invoice identity")
+	}
+}
+`
+
+const reconcileScheduleBehaviorProbe = `package invoices
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+// TestAtlasReconcileScheduleBehavior proves the generated cadence and registered work remain executable.
+func TestAtlasReconcileScheduleBehavior(t *testing.T) {
+	schedule := NewReconcileSchedule(NewService(&MemoryRepository{}))
+	interval, err := schedule.Interval()
+	if err != nil || interval != time.Hour {
+		t.Fatalf("schedule.Interval() = %s, %v; want 1h", interval, err)
+	}
+	if err := schedule.Handle(context.Background()); err != nil {
+		t.Fatalf("schedule.Handle(): %v", err)
+	}
+}
+`
+
 const attachmentStorageBehaviorProbe = `package invoices
 
 import (
