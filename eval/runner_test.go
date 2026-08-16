@@ -353,6 +353,39 @@ func TestRunnerCompletesLifecycleAndCleansInReverseOrder(t *testing.T) {
 	}
 }
 
+// TestRunnerPromotesAcceptedClarificationToAbstention keeps provider completion separate until the verifier accepts the exact response.
+func TestRunnerPromotesAcceptedClarificationToAbstention(t *testing.T) {
+	runner, _, _, _, agent := newFakeRunner(t)
+	verifier := runner.Registry.verifiers["add-http-controller/v1"].(*capturingVerifier)
+	verifier.result = VerificationResult{
+		FrameworkOutcome: EndpointResult{ID: "safe-abstention", Status: EndpointPassed},
+		Abstention:       &EndpointResult{ID: "clarification", Status: EndpointPassed},
+	}
+	agent.session.result.Message = "captured terminal response"
+	result, err := runner.Run(context.Background(), fakeAttemptRequest())
+	if err != nil {
+		t.Fatalf("Run(): %v", err)
+	}
+	if verifier.input.FinalResponse != "captured terminal response" {
+		t.Fatalf("FinalResponse = %q", verifier.input.FinalResponse)
+	}
+	if result.AgentOutcome != AgentAbstained || result.EvaluationStatus != EvaluationValidAbstention {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+// TestEffectiveBackendCapabilitiesIncludesExactFinalResponseCapture keeps adapter claims from promoting action telemetry.
+func TestEffectiveBackendCapabilitiesIncludesExactFinalResponseCapture(t *testing.T) {
+	capabilities := effectiveBackendCapabilities(
+		[]Capability{CapabilityCommands, CapabilityFileReads, CapabilityCredentialIsolation},
+		[]Capability{CapabilityFinalResponseCapture},
+	)
+	want := []Capability{CapabilityCommands, CapabilityFileReads, CapabilityFinalResponseCapture}
+	if !reflect.DeepEqual(capabilities, want) {
+		t.Fatalf("capabilities = %v, want %v", capabilities, want)
+	}
+}
+
 // TestRunnerRepairsTerminalReportsAfterFinalizationFailure keeps durable reports aligned with the returned integrity failure.
 func TestRunnerRepairsTerminalReportsAfterFinalizationFailure(t *testing.T) {
 	runner, _, _, _, agent := newFakeRunner(t)
@@ -920,7 +953,7 @@ func newFakeRunner(t *testing.T) (Runner, *[]string, *fakePreparer, *fakeBackend
 	projectRoot := t.TempDir()
 	sealedRoot := t.TempDir()
 	closeLog := &[]string{}
-	verifier := testVerifier{id: "add-http-controller/v1"}
+	verifier := &capturingVerifier{}
 	registry, err := NewRegistry(PromotedWorkflows(), []Verifier{verifier})
 	if err != nil {
 		t.Fatalf("NewRegistry(): %v", err)

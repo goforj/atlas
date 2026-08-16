@@ -1,0 +1,82 @@
+package eval
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+// TestSurfaceVerifierUsesSyntaxAndStopsBeforeExecutingInvalidCandidates proves comments cannot satisfy contracts and static failures do not run code.
+func TestSurfaceVerifierUsesSyntaxAndStopsBeforeExecutingInvalidCandidates(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "feature", "command.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	valid := `package feature
+import "context"
+type Service struct{}
+func (*Service) Find(context.Context, string) {}
+type ShowCmd struct{ service *Service }
+func (command *ShowCmd) Run(ctx context.Context) { command.service.Find(ctx, "42") }
+`
+	if err := os.WriteFile(path, []byte(valid), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	contract := surfaceContract{
+		id:             "surface-test/v1",
+		allowedChanges: []string{"internal/feature/*.go"},
+		sources:        []sourceContract{{id: "shape", paths: []string{"internal/feature/*.go"}, identifiers: []string{"ShowCmd", "Service"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}},
+		commands:       []commandContract{{id: "build", arguments: []string{"forj", "build"}}},
+	}
+	runner := &fakeCommandRunner{}
+	verifier := NewSurfaceVerifier(runner, contract)
+	result, err := verifier.Verify(context.Background(), VerificationInput{ProjectRoot: root})
+	if err != nil {
+		t.Fatalf("Verify(): %v", err)
+	}
+	if result.FrameworkOutcome.Status != EndpointPassed || len(runner.commands) != 1 {
+		t.Fatalf("valid result = %#v; commands = %#v", result, runner.commands)
+	}
+	mutant := `package feature
+import "context"
+// ShowCmd Service Find are comments, not implementation evidence.
+func Run() { _ = context.Background() }
+`
+	if err := os.WriteFile(path, []byte(mutant), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner.commands = nil
+	result, err = verifier.Verify(context.Background(), VerificationInput{ProjectRoot: root})
+	if err != nil {
+		t.Fatalf("Verify(mutant): %v", err)
+	}
+	if result.FrameworkOutcome.Status != EndpointFailed || len(runner.commands) != 0 {
+		t.Fatalf("mutant result = %#v; commands = %#v", result, runner.commands)
+	}
+}
+
+// TestSurfaceVerifierRejectsOutOfScopeChanges keeps semantic success from hiding unrelated Project mutation.
+func TestSurfaceVerifierRejectsOutOfScopeChanges(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "feature", "feature.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("package feature\ntype Feature struct{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	verifier := NewSurfaceVerifier(&fakeCommandRunner{}, surfaceContract{
+		id:             "ownership-test/v1",
+		allowedChanges: []string{"internal/feature/*.go"},
+		sources:        []sourceContract{{id: "shape", paths: []string{"internal/feature/*.go"}, identifiers: []string{"Feature"}}},
+	})
+	result, err := verifier.Verify(context.Background(), VerificationInput{ProjectRoot: root, Changes: []ProjectChange{{Path: "app/routes.go"}}})
+	if err != nil {
+		t.Fatalf("Verify(): %v", err)
+	}
+	if result.FrameworkOutcome.Status != EndpointFailed {
+		t.Fatalf("result = %#v", result)
+	}
+}

@@ -1,0 +1,1 @@
+The configured database already contains a `users` table. Add the Project's conventional model and repository access for that table using the active database connection. Preserve the discovered schema and leave the Project working.

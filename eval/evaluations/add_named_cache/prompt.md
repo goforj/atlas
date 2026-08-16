@@ -1,0 +1,1 @@
+Configure a named `profiles` memory cache. Add an application-owned cache boundary that receives the cache manager through dependency injection and selects the generated named accessor. Leave the Project working.

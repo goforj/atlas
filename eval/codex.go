@@ -157,9 +157,9 @@ func (*CodexAgent) Name() string {
 	return "codex"
 }
 
-// Properties returns no isolation guarantees because this diagnostic adapter shares the caller's operating-system identity.
+// Properties reports exact final-response capture while withholding isolation guarantees from the unconfined diagnostic adapter.
 func (*CodexAgent) Properties(context.Context) (AgentProperties, error) {
-	return AgentProperties{}, nil
+	return AgentProperties{Properties: []Capability{CapabilityFinalResponseCapture}}, nil
 }
 
 // Prepare fingerprints Codex and copies only the credential needed by the private app-server home.

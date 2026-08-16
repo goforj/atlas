@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-named-resource
+summary: Configure and inject a named reports queue.
+suite: core
+project_scenario: named-reports-queue
+workflow: goforj-add-named-resource/v1
+verifier: add-named-resource/v1
+limits:
+  wall_time: 8m
+  commands: 45
+  shell_network: off

@@ -1,0 +1,1 @@
+Add a typed invoice-paid event carrying an invoice ID and a subscriber that reloads the invoice through the existing application behavior. Preserve the event context and register the subscriber through the Project's normal lifecycle. Leave the Project working.

@@ -42,7 +42,12 @@ func NewAddHTTPControllerVerifier(runner CommandRunner) *AddHTTPControllerVerifi
 
 // PromotedVerifiers returns every live verifier that can run through the selected isolated command boundary.
 func PromotedVerifiers(runner CommandRunner) []Verifier {
-	return []Verifier{NewAddHTTPControllerVerifier(runner)}
+	verifiers := []Verifier{NewAddHTTPControllerVerifier(runner)}
+	for _, contract := range promotedSurfaceContracts() {
+		verifiers = append(verifiers, NewSurfaceVerifier(runner, contract))
+	}
+	verifiers = append(verifiers, NewSafeAbstentionVerifier())
+	return verifiers
 }
 
 // ID returns the promoted verifier contract identity.

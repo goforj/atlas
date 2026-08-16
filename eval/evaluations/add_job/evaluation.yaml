@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-job
+summary: Add typed background receipt work for an existing invoice service.
+suite: core
+project_scenario: invoice-receipt-job
+workflow: goforj-add-job/v1
+verifier: add-job/v1
+limits:
+  wall_time: 8m
+  commands: 40
+  shell_network: off

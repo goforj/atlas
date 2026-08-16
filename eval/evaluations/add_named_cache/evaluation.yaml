@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-named-cache
+summary: Configure and inject a named profiles cache.
+suite: core
+project_scenario: named-profiles-cache
+workflow: goforj-add-named-cache/v1
+verifier: add-named-cache/v1
+limits:
+  wall_time: 8m
+  commands: 45
+  shell_network: off

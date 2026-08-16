@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-event-subscriber
+summary: Add a typed invoice-paid event and registered subscriber.
+suite: core
+project_scenario: invoice-paid-subscriber
+workflow: goforj-add-event-subscriber/v1
+verifier: add-event-subscriber/v1
+limits:
+  wall_time: 8m
+  commands: 45
+  shell_network: off

@@ -1,0 +1,1 @@
+Add an hourly `invoices:reconcile` scheduled task. It should invoke the existing invoice application behavior with the scheduler's cancellation context and use the Project's established registration model. Leave the Project working.

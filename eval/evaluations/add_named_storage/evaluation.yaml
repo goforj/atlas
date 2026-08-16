@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-named-storage
+summary: Configure and inject a named avatar storage disk.
+suite: core
+project_scenario: named-avatar-storage
+workflow: goforj-add-named-storage/v1
+verifier: add-named-storage/v1
+limits:
+  wall_time: 8m
+  commands: 45
+  shell_network: off
