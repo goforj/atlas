@@ -164,9 +164,9 @@ func (agent *fakeAgent) Name() string {
 	return "fake-agent"
 }
 
-// Capabilities returns the adapter's normalized evidence classes.
-func (agent *fakeAgent) Capabilities(context.Context) (AgentCapabilities, error) {
-	return AgentCapabilities{Capabilities: append([]Capability(nil), agent.capabilities...)}, nil
+// Properties returns the adapter's enforced safety properties.
+func (agent *fakeAgent) Properties(context.Context) (AgentProperties, error) {
+	return AgentProperties{Properties: append([]Capability(nil), agent.capabilities...)}, nil
 }
 
 // Prepare records private-home and guidance preparation.
@@ -857,7 +857,7 @@ func newFakeRunner(t *testing.T) (Runner, *[]string, *fakePreparer, *fakeBackend
 	backend := &fakeBackend{
 		capabilities: append([]Capability{CapabilityCommands}, authoritativeCapabilities...),
 		environment: &fakeBackendEnvironment{
-			environment: RunEnvironment{ProjectRoot: projectRoot, Capabilities: []Capability{CapabilityCommands}},
+			environment: RunEnvironment{ProjectRoot: projectRoot},
 			baseline:    BaselineSnapshot{TreeDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", Complete: true},
 			events: []Event{
 				{Sequence: 1, Source: EventSourceSupervisor, Kind: EventCommandStarted, Fields: map[string]string{EventFieldCommandID: "command-1", EventFieldExecutableDigest: "sha256:forj", EventFieldArguments: `["make:controller","invoices"]`}},

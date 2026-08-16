@@ -74,7 +74,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	var baselineDiff projectDiffSnapshot
 	var supervisorEvents []Event
 	var artifactEvents []Event
-	var agentCapabilities AgentCapabilities
+	var agentProperties AgentProperties
 	var backendCapabilities []Capability
 	var err error
 	defer func() {
@@ -84,7 +84,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		}
 		normalizedEvents := normalizeArtifactEvents(artifactEvents)
 		recordAttemptEvents(&result, artifacts, normalizedEvents)
-		failures := writeAttemptReportArtifacts(artifacts, request, result, normalizedEvents, agentCapabilities.Capabilities, backendCapabilities)
+		failures := writeAttemptReportArtifacts(artifacts, request, result, normalizedEvents, agentProperties.Properties, backendCapabilities)
 		result.SecondaryFailures = append(result.SecondaryFailures, failures...)
 		if len(failures) > 0 {
 			result.EvaluationStatus = EvaluationEvaluatorError
@@ -142,7 +142,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	if err != nil {
 		return result, fmt.Errorf("preparation capabilities: %w", err)
 	}
-	agentCapabilities, err = runner.Agent.Capabilities(ctx)
+	agentProperties, err = runner.Agent.Properties(ctx)
 	if err != nil {
 		return result, fmt.Errorf("agent capabilities: %w", err)
 	}
@@ -174,7 +174,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	}
 	// Only the backend can attest to candidate actions. Adapter capabilities describe
 	// telemetry support and must never promote provider-originated events to evidence.
-	available := effectiveBackendCapabilities(backendCapabilities, agentCapabilities.Capabilities)
+	available := effectiveBackendCapabilities(backendCapabilities, agentProperties.Properties)
 	requiredCapabilities := append([]Capability(nil), resolved.Capabilities...)
 	requiredCapabilities = append(requiredCapabilities, authoritativeCapabilities...)
 	missing := missingCapabilities(requiredCapabilities, available)
@@ -681,9 +681,9 @@ func intersectCapabilities(groups ...[]Capability) []Capability {
 }
 
 // effectiveBackendCapabilities keeps backend observation authoritative while requiring the adapter to prove properties it can weaken.
-func effectiveBackendCapabilities(backendCapabilities, agentCapabilities []Capability) []Capability {
+func effectiveBackendCapabilities(backendCapabilities, agentProperties []Capability) []Capability {
 	available := intersectCapabilities(backendCapabilities)
-	if capabilityAvailable(agentCapabilities, CapabilityCredentialIsolation) {
+	if capabilityAvailable(agentProperties, CapabilityCredentialIsolation) {
 		return available
 	}
 	filtered := available[:0]
