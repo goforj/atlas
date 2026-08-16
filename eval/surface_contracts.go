@@ -81,7 +81,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "add-named-resource/v1",
-			allowedChanges: []string{".env", ".env.example", "internal/queues/*_gen.go", "internal/invoices/report_dispatcher.go", "internal/invoices/report_dispatcher_test.go", "internal/reports/*.go", "app/wire/inject_services_app.go"},
+			allowedChanges: generatedEnvironmentChanges("internal/queues/*_gen.go", "internal/invoices/report_dispatcher.go", "internal/invoices/report_dispatcher_test.go", "internal/reports/*.go", "app/wire/inject_services_app.go"),
 			sources: []sourceContract{
 				{id: "named-queue-config", paths: []string{".env"}, text: []string{"QUEUE_REPORTS_NAME=reports", "QUEUE_REPORTS_WORKERS=2"}},
 				{id: "named-queue-accessor", paths: []string{"internal/queues/*_gen.go"}, identifiers: []string{"Reports"}},
@@ -92,7 +92,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "add-named-cache/v1",
-			allowedChanges: []string{".env", ".env.example", "internal/caches/*_gen.go", "internal/invoices/profile_cache.go", "internal/invoices/profile_cache_test.go", "internal/profiles/*.go", "app/wire/inject_services_app.go"},
+			allowedChanges: generatedEnvironmentChanges("internal/caches/*_gen.go", "internal/invoices/profile_cache.go", "internal/invoices/profile_cache_test.go", "internal/profiles/*.go", "app/wire/inject_services_app.go"),
 			sources: []sourceContract{
 				{id: "named-cache-config", paths: []string{".env"}, text: []string{"CACHE_PROFILES_DRIVER=memory"}},
 				{id: "named-cache-accessor", paths: []string{"internal/caches/*_gen.go"}, identifiers: []string{"Profiles"}},
@@ -103,7 +103,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "add-named-storage/v1",
-			allowedChanges: []string{".env", ".env.example", "internal/storages/*_gen.go", "internal/invoices/avatar_storage.go", "internal/invoices/avatar_storage_test.go", "internal/avatars/*.go", "app/wire/inject_services_app.go"},
+			allowedChanges: generatedEnvironmentChanges("internal/storages/*_gen.go", "internal/invoices/avatar_storage.go", "internal/invoices/avatar_storage_test.go", "internal/avatars/*.go", "app/wire/inject_services_app.go"),
 			sources: []sourceContract{
 				{id: "named-storage-config", paths: []string{".env"}, text: []string{"STORAGE_AVATARS_DRIVER=local", "STORAGE_AVATARS_ROOT=storage/app/avatars"}},
 				{id: "named-storage-accessor", paths: []string{"internal/storages/*_gen.go"}, identifiers: []string{"Avatars"}},
@@ -114,7 +114,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "choose-storage-for-files/v1",
-			allowedChanges:      []string{".env", ".env.example", "internal/storages/*_gen.go", "internal/invoices/attachments.go", "internal/invoices/attachments_test.go", "app/wire/inject_services_app.go"},
+			allowedChanges:      generatedEnvironmentChanges("internal/storages/*_gen.go", "internal/invoices/attachments.go", "internal/invoices/attachments_test.go", "app/wire/inject_services_app.go"),
 			qualityTestPatterns: []string{"internal/invoices/attachments_test.go"},
 			sources: []sourceContract{
 				{id: "attachment-storage-config", paths: []string{".env"}, text: []string{"STORAGE_ATTACHMENTS_DRIVER=", "STORAGE_ATTACHMENTS_ROOT="}},
@@ -155,7 +155,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "create-additional-app/v1",
-			allowedChanges: []string{".env", ".env.example", ".env.local", ".goforj.yml", "Dockerfile", "Makefile", "app/statuspage/**", "cmd/statuspage/**", "internal/runtime/apps.go", "internal/runtime/apps_test.go"},
+			allowedChanges: generatedEnvironmentChanges(".env.local", ".goforj.yml", "Dockerfile", "Makefile", "app/statuspage/**", "cmd/statuspage/**", "internal/runtime/apps.go", "internal/runtime/apps_test.go"),
 			sources: []sourceContract{
 				{id: "statuspage-project-config", paths: []string{".goforj.yml"}, text: []string{"statuspage:", "./bin/statuspage"}},
 				{id: "statuspage-entrypoint", paths: []string{"cmd/statuspage/main.go"}, declarations: []declarationContract{{name: "main", selectorCalls: []string{"LaunchApplication"}}}},
@@ -231,7 +231,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "protect-route-with-auth/v1",
-			allowedChanges: []string{".env", ".env.example", ".env.local", "app/routes.go"},
+			allowedChanges: generatedEnvironmentChanges(".env.local", "app/routes.go"),
 			sources: []sourceContract{
 				{id: "generated-auth-composition", paths: []string{"app/routes.go"}, identifiers: []string{"publicRoutes", "protectedRoutes", "invoicesController", "authService", "RequireAuth"}, selectorCalls: []string{"NewRouteGroup"}, assignments: []assignmentContract{{name: "publicRoutes", forbiddenIdentifiers: []string{"invoicesController"}}, {name: "protectedRoutes", identifiers: []string{"invoicesController"}, selectorCalls: []string{"Routes"}}}},
 			},
@@ -239,7 +239,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "add-cached-repository/v1",
-			allowedChanges: []string{".env", ".env.example", "internal/caches/*_gen.go", "internal/users/*.go", "app/wire/inject_services_app.go"},
+			allowedChanges: generatedEnvironmentChanges("internal/caches/*_gen.go", "internal/users/*.go", "app/wire/inject_services_app.go"),
 			sources: []sourceContract{
 				{id: "cache-aside-repository", paths: []string{"internal/users/repository.go", "internal/users/service.go"}, identifiers: []string{"UserRepository", "MemoryUserRepository", "CachedUserRepository", "Get", "Set"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Find", receiver: "CachedUserRepository", identifiers: []string{"ctx"}, selectorCalls: []string{"Get", "Set", "WithContext", "Find"}}, {name: "Find", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}}}},
 				{id: "profiles-cache-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewCachedUserRepository"}, selectorCalls: []string{"Profiles"}},
@@ -248,7 +248,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "add-upload-workflow/v1",
-			allowedChanges:      []string{".env", ".env.example", "go.mod", "internal/storages/*_gen.go", "internal/uploads/*.go", "app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"},
+			allowedChanges:      generatedEnvironmentChanges("go.mod", "internal/storages/*_gen.go", "internal/uploads/*.go", "app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"),
 			qualityTestPatterns: []string{"internal/uploads/*_test.go"},
 			sources: []sourceContract{
 				{id: "upload-boundary", paths: []string{"internal/uploads/service.go", "internal/uploads/controller.go"}, identifiers: []string{"StoreInput", "StoredUpload", "Service", "Controller", "Store", "Routes"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"/uploads"}, declarations: []declarationContract{{name: "Store", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "Put"}}, {name: "Store", receiver: "Controller", selectorCalls: []string{"Bind", "Store"}}, {name: "Routes", receiver: "Controller", selectorCalls: []string{"NewRoute"}}}},
@@ -269,7 +269,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "dispatch-event-followup-job/v1",
-			allowedChanges:      []string{".env", ".env.example", "internal/jobs/*.go", "internal/reports/*.go", "internal/notifications/*.go", "internal/storages/*_gen.go", "app/lifecycle.go", "app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"},
+			allowedChanges:      generatedEnvironmentChanges("internal/jobs/*.go", "internal/reports/*.go", "internal/notifications/*.go", "internal/storages/*_gen.go", "app/lifecycle.go", "app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"),
 			qualityTestPatterns: []string{"internal/reports/*_test.go", "internal/notifications/*_test.go"},
 			sources: []sourceContract{
 				{id: "typed-report-job", paths: []string{"internal/reports/service.go", "internal/reports/generate_job.go"}, identifiers: []string{"GeneratePayload", "GenerateJob", "GenerateJobTypeName", "HandleTask", "ReportQueue"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:generate"}, declarations: []declarationContract{{name: "GeneratePayload", identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}, {name: "ReportQueue", identifiers: []string{"Queue"}}, {name: "GenerateForUser", receiver: "Service", selectorCalls: []string{"Find"}}, {name: "HandleTask", receiver: "GenerateJob", selectorCalls: []string{"Bind", "GenerateForUser"}}, {name: "Queue", receiver: "GenerateJob", selectorCalls: []string{"Dispatch"}}}},
@@ -289,6 +289,12 @@ func promotedSurfaceContracts() []surfaceContract {
 			commands: standardSurfaceCommands(),
 		},
 	}
+}
+
+// generatedEnvironmentChanges keeps synchronized environment mirrors inside ownership whenever a task changes project configuration.
+func generatedEnvironmentChanges(paths ...string) []string {
+	changes := []string{".env", ".env.example", ".env.testing"}
+	return append(changes, paths...)
 }
 
 const tokenPolicyBehaviorProbe = `package invoices
