@@ -35,6 +35,7 @@ func Compose(p project.Project) string {
 	out.WriteString("- Keep packages as flat, self-contained, and portable as practical. Start with one cohesive package for a responsibility and add files within it. Create a subpackage only when it has a cohesive API and can stand on its own; avoid Java/PHP-style category nesting such as `services`, `handlers`, `models`, `types`, or `utils` merely to sort code.\n")
 	out.WriteString("- Keep controllers, commands, jobs, and schedules thin; invoke services for application behavior.\n")
 	out.WriteString("- Register application service constructors in the owning App's `wire/inject_services_app.go`; keep controller, command, job, and subscriber Wire sets focused on those adapter providers.\n")
+	out.WriteString("- For a named cache, queue, or storage, use its generator, inject the resource manager into the owning service, and resolve the generated named accessor there.\n")
 	out.WriteString("- Keep database access behind repositories or equivalent domain ports, and propagate cancellation through connection-backed work.\n")
 	out.WriteString("- Treat generated registration points as in-use framework code: preserve the generated integration unless the requested design deliberately replaces it.\n\n")
 
