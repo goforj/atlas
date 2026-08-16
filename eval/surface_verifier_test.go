@@ -80,3 +80,16 @@ func TestSurfaceVerifierRejectsOutOfScopeChanges(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 }
+
+// TestSurfaceVerifierAllowsToolDerivedOutputs keeps build products from being misclassified as application ownership.
+func TestSurfaceVerifierAllowsToolDerivedOutputs(t *testing.T) {
+	result := verifySurfaceOwnership([]ProjectChange{
+		{Path: "go.sum"},
+		{Path: "bin/app"},
+		{Path: "build/api_index.json"},
+		{Path: "app/wire/wire_gen.go"},
+	}, nil)
+	if result.Status != EndpointPassed {
+		t.Fatalf("result = %#v", result)
+	}
+}
