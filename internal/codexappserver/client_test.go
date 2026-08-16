@@ -172,6 +172,26 @@ func TestClientCloseIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestClientCloseCancelsBlockedNotificationDelivery verifies cleanup does not require an abandoned notifications receiver to drain telemetry.
+func TestClientCloseCancelsBlockedNotificationDelivery(t *testing.T) {
+	client := startFakeClient(t)
+	client.deliverNotification(Notification{Method: "item", Params: json.RawMessage("1")})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Close(ctx); err != nil {
+		t.Fatalf("close app-server: %v", err)
+	}
+	select {
+	case _, ok := <-client.Notifications():
+		if ok {
+			t.Fatal("notifications channel delivered telemetry after client close")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("notification delivery remained blocked after client close")
+	}
+}
+
 // TestFakeAppServerProcess implements the versioned protocol subset without a live model.
 func TestFakeAppServerProcess(t *testing.T) {
 	if os.Getenv(fakeAppServerEnv) != "1" {
@@ -218,6 +238,7 @@ func newNotificationTestClient(byteLimit int) *Client {
 		notifications:         make(chan Notification),
 		notificationByteLimit: byteLimit,
 		notificationWake:      make(chan struct{}, 1),
+		notificationCancel:    make(chan struct{}),
 	}
 }
 
