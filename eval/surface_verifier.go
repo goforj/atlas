@@ -14,11 +14,12 @@ import (
 
 // surfaceContract describes one framework surface without turning evaluation manifests into executable policy.
 type surfaceContract struct {
-	id             string
-	allowedChanges []string
-	sources        []sourceContract
-	forbiddenText  []textExclusion
-	commands       []commandContract
+	id                  string
+	allowedChanges      []string
+	qualityTestPatterns []string
+	sources             []sourceContract
+	forbiddenText       []textExclusion
+	commands            []commandContract
 }
 
 // textExclusion rejects one semantic leak into a protected Project surface.
@@ -54,6 +55,8 @@ type assignmentContract struct {
 // declarationContract requires related syntax to occur inside one named declaration instead of anywhere in a package.
 type declarationContract struct {
 	name                 string
+	nameChoices          []string
+	receiver             string
 	identifiers          []string
 	forbiddenIdentifiers []string
 	selectorCalls        []string
@@ -110,6 +113,9 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		return VerificationResult{}, fmt.Errorf("surface verifier requires an isolated command runner")
 	}
 	checks := []EndpointResult{verifySurfaceOwnership(input.Changes, verifier.contract.allowedChanges)}
+	if len(verifier.contract.qualityTestPatterns) > 0 {
+		checks = append(checks, verifyCandidateTestQuality(input.Changes, verifier.contract.qualityTestPatterns))
+	}
 	for _, contract := range verifier.contract.sources {
 		checks = append(checks, verifySurfaceSource(input.ProjectRoot, contract))
 	}
@@ -137,11 +143,33 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 // surfaceChecksFailed avoids executing candidate code after sealed static evidence already proves failure.
 func surfaceChecksFailed(checks []EndpointResult) bool {
 	for _, check := range checks {
-		if check.Status == EndpointFailed {
+		if check.Kind != RequirementQuality && check.Status == EndpointFailed {
 			return true
 		}
 	}
 	return false
+}
+
+// verifyCandidateTestQuality reports whether the candidate authored focused tests without trusting those tests as outcome evidence.
+func verifyCandidateTestQuality(changes []ProjectChange, patterns []string) EndpointResult {
+	for _, change := range changes {
+		candidatePath := filepath.ToSlash(change.Path)
+		if change.After.Kind == "" || !strings.HasSuffix(candidatePath, "_test.go") {
+			continue
+		}
+		for _, pattern := range patterns {
+			matched, _ := filepath.Match(pattern, candidatePath)
+			if matched {
+				return EndpointResult{ID: "focused-tests-added", Kind: RequirementQuality, Status: EndpointPassed}
+			}
+		}
+	}
+	return EndpointResult{
+		ID:      "focused-tests-added",
+		Kind:    RequirementQuality,
+		Status:  EndpointFailed,
+		Details: "candidate did not add or update a focused test in the evaluated surface",
+	}
 }
 
 // verifySurfaceTextAbsent protects an owning App or generated boundary from cross-surface registration.
@@ -249,21 +277,37 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details}
 	}
 	for _, declaration := range contract.declarations {
-		scope := declarations[declaration.name]
+		names := append([]string(nil), declaration.nameChoices...)
+		if declaration.name != "" {
+			names = append([]string{declaration.name}, names...)
+		}
+		key := ""
+		var scope *sourceFacts
+		for _, name := range names {
+			candidate := name
+			if declaration.receiver != "" {
+				candidate = declaration.receiver + "." + name
+			}
+			if declarations[candidate] != nil {
+				key = candidate
+				scope = declarations[candidate]
+				break
+			}
+		}
 		if scope == nil {
-			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required declaration %q is absent", declaration.name)}
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required declaration %q is absent", names)}
 		}
 		if details := verifySourceFacts(*scope, declaration.identifiers, nil, declaration.selectorCalls, declaration.forbiddenCalls, declaration.stringLiterals, declaration.forbiddenLiterals); details != "" {
-			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q: %s", declaration.name, details)}
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q: %s", key, details)}
 		}
 		for _, identifier := range declaration.forbiddenIdentifiers {
 			if scope.identifiers[identifier] {
-				return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q contains forbidden identifier %q", declaration.name, identifier)}
+				return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q contains forbidden identifier %q", key, identifier)}
 			}
 		}
 		for _, nested := range declaration.nestedCalls {
 			if !scope.nestedCalls[nested.outer+">"+nested.inner] {
-				return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q does not call %q within %q", declaration.name, nested.inner, nested.outer)}
+				return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q does not call %q within %q", key, nested.inner, nested.outer)}
 			}
 		}
 	}
@@ -356,6 +400,9 @@ func collectSourceFacts(file *ast.File, facts *sourceFacts, declarations, assign
 		switch value := declaration.(type) {
 		case *ast.FuncDecl:
 			collectDeclarationFacts(value.Name.Name, value, declarations)
+			if receiver := functionReceiverName(value); receiver != "" {
+				collectDeclarationFacts(receiver+"."+value.Name.Name, value, declarations)
+			}
 		case *ast.GenDecl:
 			for _, spec := range value.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
@@ -384,6 +431,22 @@ func collectSourceFacts(file *ast.File, facts *sourceFacts, declarations, assign
 		}
 		return true
 	})
+}
+
+// functionReceiverName identifies a method owner without coupling contracts to pointer or value syntax.
+func functionReceiverName(declaration *ast.FuncDecl) string {
+	if declaration == nil || declaration.Recv == nil || len(declaration.Recv.List) != 1 {
+		return ""
+	}
+	expression := declaration.Recv.List[0].Type
+	if pointer, ok := expression.(*ast.StarExpr); ok {
+		expression = pointer.X
+	}
+	identifier, _ := expression.(*ast.Ident)
+	if identifier == nil {
+		return ""
+	}
+	return identifier.Name
 }
 
 // collectDeclarationFacts merges declarations with the same name so reviewed method families remain supported.
@@ -430,11 +493,20 @@ func collectNodeFacts(node ast.Node, facts *sourceFacts) {
 
 // callName returns the stable terminal name used by reviewed contracts across package and receiver choices.
 func callName(call *ast.CallExpr) string {
-	switch value := call.Fun.(type) {
+	return expressionCallName(call.Fun)
+}
+
+// expressionCallName unwraps generic instantiation so calls such as cache.Get[User] retain the same semantic name as ordinary calls.
+func expressionCallName(expression ast.Expr) string {
+	switch value := expression.(type) {
 	case *ast.Ident:
 		return value.Name
 	case *ast.SelectorExpr:
 		return value.Sel.Name
+	case *ast.IndexExpr:
+		return expressionCallName(value.X)
+	case *ast.IndexListExpr:
+		return expressionCallName(value.X)
 	default:
 		return ""
 	}
@@ -489,6 +561,9 @@ func summarizeSurfaceChecks(id string, checks []EndpointResult) EndpointResult {
 	failed := 0
 	ineligible := 0
 	for _, check := range checks {
+		if check.Kind == RequirementQuality {
+			continue
+		}
 		switch check.Status {
 		case EndpointFailed:
 			failed++

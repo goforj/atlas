@@ -137,6 +137,9 @@ func TestRegistryRejectsInvalidPromotedContracts(t *testing.T) {
 		{name: "duplicate generator requirement", workflows: []WorkflowExpectation{{ID: "workflow/v1", Requirements: []WorkflowRequirement{{ID: "generate", Kind: RequirementQuality, Capability: CapabilityCommands}}, Generators: []GeneratorRequirement{{ID: "generate", Arguments: []string{"make:controller", "invoices"}}}}}, wantErr: "duplicate requirement ID"},
 		{name: "invalid generator arguments", workflows: []WorkflowExpectation{{ID: "workflow/v1", Generators: []GeneratorRequirement{{ID: "generate", Arguments: []string{"make:controller"}}}}}, wantErr: "requires structured arguments"},
 		{name: "unobservable requirement", workflows: []WorkflowExpectation{{ID: "workflow/v1", Requirements: []WorkflowRequirement{{ID: "inspect", Kind: RequirementWorkflow}}}}, wantErr: "no observation capability"},
+		{name: "unsafe requirement path", workflows: []WorkflowExpectation{{ID: "workflow/v1", Requirements: []WorkflowRequirement{{ID: "inspect", Kind: RequirementQuality, Capability: CapabilityFileReads, Paths: []string{"../outside"}}}}}, wantErr: "unsafe Project path pattern"},
+		{name: "windows requirement path", workflows: []WorkflowExpectation{{ID: "workflow/v1", Requirements: []WorkflowRequirement{{ID: "inspect", Kind: RequirementQuality, Capability: CapabilityFileReads, Paths: []string{`C:\outside`}}}}}, wantErr: "unsafe Project path pattern"},
+		{name: "invalid requirement path", workflows: []WorkflowExpectation{{ID: "workflow/v1", Requirements: []WorkflowRequirement{{ID: "inspect", Kind: RequirementQuality, Capability: CapabilityFileReads, Paths: []string{"internal/["}}}}}, wantErr: "invalid Project path pattern"},
 		{name: "nil verifier", verifiers: []Verifier{nil}, wantErr: "nil verifier"},
 		{name: "duplicate verifier", verifiers: []Verifier{testVerifier{id: "verify/v1"}, testVerifier{id: "verify/v1"}}, wantErr: "duplicate verifier ID"},
 	}

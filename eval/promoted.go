@@ -9,12 +9,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 				{ID: "generate-invoice-controller", Arguments: []string{"make:controller", "invoices"}},
 			},
 			Requirements: []WorkflowRequirement{
-				{
-					ID:          "inspect-project",
-					Kind:        RequirementQuality,
-					Capability:  CapabilityFileReads,
-					Description: "Inspect the owning App and existing invoice boundary before editing.",
-				},
+				qualityInspection("inspect-project", "Inspect the owning App and existing invoice boundary before editing.", "app/**", "internal/invoices/**"),
 			},
 		},
 		promotedGeneratorWorkflow("goforj-add-app-command/v1", "generate-invoice-command", "make:command", "invoices:show"),
@@ -32,31 +27,31 @@ func PromotedWorkflows() []WorkflowExpectation {
 		promotedGeneratorWorkflow("goforj-create-additional-app/v1", "generate-statuspage-app", "make:app", "statuspage", "--components", "web-api", "--dev-run", "run"),
 		{
 			ID:           "goforj-add-app-lifecycle-hook/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-lifecycle-registry", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect the App lifecycle registry and existing application boundary before registering readiness work."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-lifecycle-registry", "Inspect the App lifecycle registry and existing application boundary before registering readiness work.", "app/lifecycle.go", "internal/invoices/**")},
 		},
 		{
 			ID:           "goforj-add-outbound-http-integration/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-integration-boundary", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect the existing application boundary and keep the remote contract in a focused context-aware client."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-integration-boundary", "Inspect the existing application boundary and keep the remote contract in a focused context-aware client.", "app/wire/**", "internal/invoices/**", "internal/taxrates/**")},
 		},
 		{
 			ID:           "goforj-add-validated-write-endpoint/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-request-boundary", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect the existing controller, service, and repository before extending the write contract."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-request-boundary", "Inspect the existing controller, service, and repository before extending the write contract.", "internal/invoices/**")},
 		},
 		{
 			ID:           "goforj-add-route-middleware/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-route-composition", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect route composition and resolve middleware configuration outside the request path."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-route-composition", "Inspect route composition and resolve middleware configuration outside the request path.", "app/routes.go", "app/wire/**", "internal/invoices/**")},
 		},
 		{
 			ID:           "goforj-add-database-transaction/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-database-boundary", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect generated database access and keep the transaction boundary in the application service."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-database-boundary", "Inspect generated database access and keep the transaction boundary in the application service.", "internal/accounts/**", "internal/database/**")},
 		},
 		{
 			ID:           "goforj-add-mail-workflow/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-mail-boundary", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect the generated mail manager and existing service boundary before adding delivery."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-mail-boundary", "Inspect the generated mail manager and existing service boundary before adding delivery.", "internal/invoices/**", "internal/mail/**")},
 		},
 		{
 			ID:           "goforj-protect-route-with-auth/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-auth-route-groups", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect generated Auth route composition and reuse its existing middleware boundary."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-auth-route-groups", "Inspect generated Auth route composition and reuse its existing middleware boundary.", "app/routes.go", "internal/auth/**")},
 		},
 		promotedGeneratorWorkflow("goforj-add-named-app-route/v1", "generate-admin-audit-controller", "admin", "make:controller", "audits"),
 		promotedGeneratorWorkflow("goforj-add-named-resource/v1", "generate-reports-queue", "make:queue", "reports", "--workers", "2"),
@@ -65,22 +60,22 @@ func PromotedWorkflows() []WorkflowExpectation {
 		promotedGeneratorWorkflow("goforj-build-json-api-feature/v1", "generate-users-controller", "make:controller", "users"),
 		{
 			ID:           "goforj-add-cached-repository/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-repository-boundary", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect the existing service and keep cache-aside behavior behind its repository contract."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-repository-boundary", "Inspect the existing service and keep cache-aside behavior behind its repository contract.", "internal/users/**", "internal/caches/**")},
 		},
 		promotedGeneratorWorkflow("goforj-add-upload-workflow/v1", "generate-uploads-controller", "make:controller", "uploads"),
 		{
 			ID:           "goforj-publish-domain-event/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-domain-boundary", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect the existing write workflow before publishing a typed domain fact through the App event bus."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-domain-boundary", "Inspect the existing write workflow before publishing a typed domain fact through the App event bus.", "app/lifecycle.go", "internal/users/**")},
 		},
 		promotedGeneratorWorkflow("goforj-dispatch-event-followup-job/v1", "generate-report-job", "make:job", "reports:generate", "--output-dir", "./internal/jobs"),
 		promotedGeneratorWorkflow("goforj-schedule-existing-job/v1", "generate-report-schedule", "make:schedule", "reports:daily", "--every", "24h", "--no-open"),
 		{
 			ID:           "goforj-repair-wire-provider/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-wire-diagnostics", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect the Wire failure and owning provider set before editing."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-wire-diagnostics", "Inspect the Wire failure and owning provider set before editing.", "app/wire/**", "internal/reports/**")},
 		},
 		{
 			ID:           "goforj-clarify-unknown-shape/v1",
-			Requirements: []WorkflowRequirement{{ID: "inspect-project", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect the existing application boundaries before requesting a decision."}},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-project", "Inspect the existing application boundaries before requesting a decision.", ".goforj.yml", "app/**", "internal/**")},
 		},
 	}
 }
@@ -90,6 +85,11 @@ func promotedGeneratorWorkflow(id, requirement string, arguments ...string) Work
 	return WorkflowExpectation{
 		ID:           id,
 		Generators:   []GeneratorRequirement{{ID: requirement, Arguments: append([]string(nil), arguments...)}},
-		Requirements: []WorkflowRequirement{{ID: "inspect-project", Kind: RequirementQuality, Capability: CapabilityFileReads, Description: "Inspect the owning App and existing application boundary before editing."}},
+		Requirements: []WorkflowRequirement{qualityInspection("inspect-project", "Inspect the owning App and existing application boundary before editing.", ".goforj.yml", "app/**", "internal/**")},
 	}
+}
+
+// qualityInspection records scoped read evidence without promoting an implementation preference into workflow conformance.
+func qualityInspection(id, description string, paths ...string) WorkflowRequirement {
+	return WorkflowRequirement{ID: id, Kind: RequirementQuality, Capability: CapabilityFileReads, Description: description, Paths: append([]string(nil), paths...)}
 }
