@@ -69,6 +69,48 @@ func buildProjectDiff(baseline projectDiffSnapshot, finalRoot string) (string, e
 	return output.String(), nil
 }
 
+// projectChanges returns a compact semantic delta so verifiers never need to interpret display-oriented patch text.
+func projectChanges(baseline projectDiffSnapshot, finalRoot string) ([]ProjectChange, error) {
+	final, _, err := snapshotProjectForDiff(finalRoot)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot final Project: %w", err)
+	}
+	paths := make([]string, 0, len(baseline)+len(final))
+	seen := map[string]bool{}
+	for path := range baseline {
+		seen[path] = true
+		paths = append(paths, path)
+	}
+	for path := range final {
+		if !seen[path] {
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	changes := make([]ProjectChange, 0, len(paths))
+	for _, path := range paths {
+		before, hadBefore := baseline[path]
+		after, hasAfter := final[path]
+		if hadBefore && hasAfter && equalProjectDiffEntry(before, after) {
+			continue
+		}
+		change := ProjectChange{Path: path}
+		if hadBefore {
+			change.Before = projectPathState(before)
+		}
+		if hasAfter {
+			change.After = projectPathState(after)
+		}
+		changes = append(changes, change)
+	}
+	return changes, nil
+}
+
+// projectPathState removes retained content while preserving the immutable identity relevant to ownership checks.
+func projectPathState(entry projectDiffEntry) ProjectPathState {
+	return ProjectPathState{Kind: entry.kind, Digest: entry.digest, Mode: uint32(entry.mode)}
+}
+
 // snapshotProjectForDiff walks without following links and returns the exact tree identity presented to the agent.
 func snapshotProjectForDiff(root string) (projectDiffSnapshot, string, error) {
 	root, err := filepath.Abs(root)

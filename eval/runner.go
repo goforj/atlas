@@ -152,7 +152,9 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.Milestones = append(result.Milestones, MilestonePreflight, MilestoneEvaluationTerminal)
 		return result, nil
 	}
-	available := intersectCapabilities(agentCapabilities.Capabilities, backendCapabilities)
+	// Only the backend can attest to candidate actions. Adapter capabilities describe
+	// telemetry support and must never promote provider-originated events to evidence.
+	available := intersectCapabilities(backendCapabilities)
 	missing := missingCapabilities(resolved.Capabilities, available)
 	result.UnavailableEvidence = append([]Capability(nil), missing...)
 	if len(missing) > 0 && request.Intent != IntentDiagnostic {
@@ -261,13 +263,27 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("snapshot treatment baseline Project: %w", err)
 	}
+	baseline, err := backendEnvironment.Baseline(ctx)
+	if err != nil {
+		result.EvaluationStatus = EvaluationEvaluatorError
+		return result, fmt.Errorf("capture supervisor baseline: %w", err)
+	}
+	if request.Intent == IntentAuthoritative && (!baseline.Complete || baseline.TreeDigest == "") {
+		result.EvaluationStatus = EvaluationIneligible
+		result.Milestones = append(result.Milestones, MilestoneEvaluationTerminal)
+		return result, nil
+	}
+	if baseline.TreeDigest != "" && baseline.TreeDigest != baselineTree {
+		result.EvaluationStatus = EvaluationEvaluatorError
+		return result, fmt.Errorf("supervisor baseline digest does not match Project snapshot: got %s, want %s", baseline.TreeDigest, baselineTree)
+	}
 	result.BaselineTree = baselineTree
 
 	runContext, cancel := context.WithTimeout(ctx, request.Definition.Limits.WallTime)
 	defer cancel()
 	session, err := runner.Agent.Start(runContext, preparedAgent)
 	if err != nil {
-		result.AgentOutcome = classifyAgentError(runContext, AgentAdapterError)
+		result.AgentOutcome = classifyOperationError(runContext, err, AgentAdapterError)
 		if session != nil {
 			result.SecondaryFailures = append(result.SecondaryFailures, closeEvaluationResource("agent_session", session.Close)...)
 		}
@@ -298,7 +314,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 
 	turn, err := session.Turn(runContext, AgentTurn{Prompt: request.Definition.Prompt, Limits: request.Definition.Limits})
 	if err != nil {
-		result.AgentOutcome = classifyAgentError(runContext, AgentAdapterError)
+		result.AgentOutcome = classifyOperationError(runContext, err, AgentAdapterError)
 		return result, fmt.Errorf("deliver prompt: %w", err)
 	}
 	if !turn.Accepted {
@@ -306,33 +322,42 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		return result, fmt.Errorf("agent did not accept the prompt")
 	}
 	result.Milestones = append(result.Milestones, MilestonePromptDelivered)
-	events = append([]Event(nil), turn.Events...)
-	recordAttemptEvents(&result, artifacts, turn.Events)
-	if countCommandEvents(events) > request.Definition.Limits.Commands {
-		result.AgentOutcome = AgentAdapterError
-		result.EvaluationStatus = EvaluationEvaluatorError
-		return result, fmt.Errorf("agent exceeded command limit %d", request.Definition.Limits.Commands)
-	}
-	if len(events) > 0 {
-		result.Milestones = append(result.Milestones, MilestoneFirstAgentAction)
-	}
+	_ = turn.Events // Adapter telemetry is intentionally excluded from trusted evaluation evidence.
 
 	agentResult, err := session.Wait(runContext)
 	if err != nil {
-		result.AgentOutcome = classifyAgentError(runContext, AgentProviderError)
+		result.AgentOutcome = classifyOperationError(runContext, err, AgentProviderError)
+		if observed, observationErr := backendEnvironment.ObservedEvents(ctx); observationErr == nil && validateSupervisorEvents(observed) == nil {
+			events = observed
+			recordAttemptEvents(&result, artifacts, events)
+			if len(events) > 0 {
+				result.Milestones = append(result.Milestones, MilestoneFirstAgentAction)
+			}
+		} else if observationErr != nil {
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: observationErr.Error()})
+		}
 		if containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
 			result.EvaluationStatus = EvaluationEvaluatorError
 		}
 		return result, fmt.Errorf("wait for agent: %w", err)
 	}
-	events = append(events, agentResult.Events...)
-	recordAttemptEvents(&result, artifacts, agentResult.Events)
+	_ = agentResult.Events // Adapter telemetry is intentionally excluded from trusted evaluation evidence.
+	events, err = backendEnvironment.ObservedEvents(ctx)
+	if err != nil {
+		result.EvaluationStatus = EvaluationEvaluatorError
+		return result, fmt.Errorf("collect supervisor events: %w", err)
+	}
+	if err := validateSupervisorEvents(events); err != nil {
+		result.EvaluationStatus = EvaluationEvaluatorError
+		return result, err
+	}
+	recordAttemptEvents(&result, artifacts, events)
 	if countCommandEvents(events) > request.Definition.Limits.Commands {
 		result.AgentOutcome = AgentAdapterError
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("agent exceeded command limit %d", request.Definition.Limits.Commands)
 	}
-	if !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
+	if len(events) > 0 && !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
 		result.Milestones = append(result.Milestones, MilestoneFirstAgentAction)
 	}
 	result.AgentOutcome = agentResult.Outcome
@@ -366,10 +391,16 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.EvaluationStatus = EvaluationEvaluatorError
 	}
 
+	changes, err := projectChanges(baselineDiff, sealed.Root)
+	if err != nil {
+		result.EvaluationStatus = EvaluationEvaluatorError
+		return result, fmt.Errorf("project change projection: %w", err)
+	}
 	verification, err := resolved.Verifier.Verify(ctx, VerificationInput{
 		ProjectRoot:  sealed.Root,
 		BaselineTree: baselineTree,
 		FinalTree:    sealed.TreeDigest,
+		Changes:      changes,
 		Events:       events,
 	})
 	if err != nil {
@@ -380,7 +411,9 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	verification.WorkflowConformance = workflow
 	verification.Checks = append(verification.Checks, workflowChecks...)
 	result.Verification = &verification
-	if result.EvaluationStatus != EvaluationEvaluatorError {
+	if len(missing) > 0 && request.Intent == IntentDiagnostic {
+		result.EvaluationStatus = EvaluationDiagnostic
+	} else if result.EvaluationStatus != EvaluationEvaluatorError {
 		if result.AgentOutcome == AgentAbstained {
 			result.EvaluationStatus = EvaluationValidAbstention
 		} else {
@@ -605,15 +638,29 @@ func missingCapabilities(required, available []Capability) []Capability {
 	return missing
 }
 
-// classifyAgentError distinguishes operator cancellation and budget expiry from adapter or provider failures.
-func classifyAgentError(ctx context.Context, fallback AgentOutcome) AgentOutcome {
+// classifyOperationError preserves a typed provider/adapter failure unless the run context supplies a stronger terminal cause.
+func classifyOperationError(ctx context.Context, err error, fallback AgentOutcome) AgentOutcome {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return AgentTimeout
 	}
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return AgentCancelled
 	}
+	var failure *AgentFailure
+	if errors.As(err, &failure) && (failure.Outcome == AgentProviderError || failure.Outcome == AgentAdapterError) {
+		return failure.Outcome
+	}
 	return fallback
+}
+
+// validateSupervisorEvents rejects adapter telemetry from the evidence channel.
+func validateSupervisorEvents(events []Event) error {
+	for _, event := range events {
+		if event.Source != EventSourceSupervisor {
+			return fmt.Errorf("event %d does not have supervisor provenance", event.Sequence)
+		}
+	}
+	return nil
 }
 
 // closeEvaluationResource gives teardown a fresh budget and preserves every secondary failure.

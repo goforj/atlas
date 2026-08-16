@@ -45,3 +45,27 @@ func TestAttemptReportProjectionsSeparateHumanAndMachineEvidence(t *testing.T) {
 		t.Fatalf("transcript = %q", attemptTranscript(events))
 	}
 }
+
+// TestAttemptSummaryListsFailedChecksAndUsesActualBackend verifies reports retain actionable failures without assuming one backend name.
+func TestAttemptSummaryListsFailedChecksAndUsesActualBackend(t *testing.T) {
+	request := fakeAttemptRequest()
+	request.Intent = IntentDiagnostic
+	result := AttemptResult{
+		Backend:          "sandboxed-local",
+		EvaluationStatus: EvaluationDiagnostic,
+		Verification: &VerificationResult{
+			FrameworkOutcome:    EndpointResult{ID: "framework", Status: EndpointFailed, Details: "route is missing"},
+			WorkflowConformance: EndpointResult{ID: "workflow", Status: EndpointFailed},
+			Checks:              []EndpointResult{{ID: "generator", Status: EndpointFailed, Details: "not observed"}},
+		},
+	}
+	summary := attemptSummary(request, result)
+	for _, value := range []string{"Diagnostic result only", "Failed checks: framework: route is missing; workflow; generator: not observed", `backend "sandboxed-local"`} {
+		if !strings.Contains(summary, value) {
+			t.Fatalf("summary %q does not contain %q", summary, value)
+		}
+	}
+	if strings.Contains(summary, "unconfined local") {
+		t.Fatalf("summary hardcodes backend wording: %q", summary)
+	}
+}

@@ -67,6 +67,23 @@ func (environment *unconfinedEnvironment) Environment() RunEnvironment {
 	return environment.environment
 }
 
+// Baseline reports the diagnostic baseline without claiming the complete supervisor provenance required for authoritative evaluation.
+func (environment *unconfinedEnvironment) Baseline(context.Context) (BaselineSnapshot, error) {
+	if environment == nil {
+		return BaselineSnapshot{}, fmt.Errorf("unconfined environment is required")
+	}
+	digest, err := digestProjectTree(environment.environment.ProjectRoot)
+	if err != nil {
+		return BaselineSnapshot{}, err
+	}
+	return BaselineSnapshot{TreeDigest: digest}, nil
+}
+
+// ObservedEvents returns no action evidence because unconfined execution has no supervisor monitor.
+func (*unconfinedEnvironment) ObservedEvents(context.Context) ([]Event, error) {
+	return nil, nil
+}
+
 // Seal copies the stopped candidate tree into backend-owned verifier input and records its deterministic digest.
 func (environment *unconfinedEnvironment) Seal(_ context.Context) (SealedProject, error) {
 	if environment == nil {
