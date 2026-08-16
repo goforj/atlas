@@ -2,14 +2,13 @@ package install
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"slices"
 
 	"github.com/goforj/atlas/agents"
 	"github.com/goforj/atlas/config"
-	"github.com/goforj/atlas/files"
-	"github.com/goforj/atlas/guidelines"
 	"github.com/goforj/atlas/project"
 	"github.com/goforj/atlas/skills"
 )
@@ -26,12 +25,38 @@ type Options struct {
 	MCP           bool
 	NoInteraction bool
 	DryRun        bool
+	// GuidelinesSelection explicitly enables or disables guideline projections. A nil value preserves the legacy selection behavior.
+	GuidelinesSelection *bool
+	// SkillsSelection explicitly enables or disables skill projections. A nil value preserves the legacy selection behavior.
+	SkillsSelection *bool
+	// MCPSelection explicitly enables or disables MCP projections. A nil value preserves the legacy selection behavior.
+	MCPSelection *bool
 }
 
 // Result describes the files and agents touched during install.
 type Result struct {
-	Agents []string
-	Files  []string
+	Agents   []string
+	Files    []string
+	Guidance GuidanceReconciliation
+}
+
+// GuidanceReconciliation describes the native guideline projection that the host must reconcile.
+type GuidanceReconciliation struct {
+	Version int      `json:"version"`
+	Enabled bool     `json:"enabled"`
+	Targets []string `json:"targets"`
+}
+
+// GuidanceReconciliationVersion identifies the current host reconciliation contract.
+const GuidanceReconciliationVersion = 1
+
+// GuidanceIntent returns the versioned host reconciliation payload for this install result.
+func (r Result) GuidanceIntent() []byte {
+	content, err := json.Marshal(r.Guidance)
+	if err != nil {
+		return nil
+	}
+	return content
 }
 
 // Installer installs Atlas project guidance and agent configuration.
@@ -72,7 +97,6 @@ func (i Installer) install(ctx context.Context, opts Options, prior *config.Conf
 	}
 
 	result := Result{}
-	guidelineContent := guidelines.Compose(opts.Project)
 	server := agents.DefaultMCPServerConfig(opts.Root)
 	previousSkills := []string{}
 	if prior != nil {
@@ -86,7 +110,7 @@ func (i Installer) install(ctx context.Context, opts Options, prior *config.Conf
 				*prior,
 				agentRemovalOptions{
 					Root:       opts.Root,
-					Guidelines: prior.Features.Guidelines && !opts.Guidelines,
+					Guidelines: false,
 					MCP:        prior.Features.MCP && !opts.MCP,
 					Skills:     prior.Features.Skills && !opts.Skills,
 					DryRun:     opts.DryRun,
@@ -101,15 +125,6 @@ func (i Installer) install(ctx context.Context, opts Options, prior *config.Conf
 
 	for _, agent := range selected {
 		result.Agents = append(result.Agents, agent.Name())
-		if opts.Guidelines {
-			path := agent.GuidelinesPath(opts.Root)
-			if !opts.DryRun {
-				if err := files.WriteMarkerFile(path, files.DefaultMarker, guidelineContent); err != nil {
-					return Result{}, err
-				}
-			}
-			result.Files = append(result.Files, path)
-		}
 		if opts.MCP {
 			if !opts.DryRun {
 				if err := agent.WriteMCPConfig(ctx, opts.Root, server); err != nil {
@@ -143,9 +158,9 @@ func (i Installer) install(ctx context.Context, opts Options, prior *config.Conf
 		cfg = *prior
 	}
 	if preserveFeatures {
-		cfg.Features.Guidelines = cfg.Features.Guidelines || opts.Guidelines
-		cfg.Features.Skills = cfg.Features.Skills || opts.Skills
-		cfg.Features.MCP = cfg.Features.MCP || opts.MCP
+		cfg.Features.Guidelines = preserveFeature(cfg.Features.Guidelines, opts.Guidelines, opts.GuidelinesSelection)
+		cfg.Features.Skills = preserveFeature(cfg.Features.Skills, opts.Skills, opts.SkillsSelection)
+		cfg.Features.MCP = preserveFeature(cfg.Features.MCP, opts.MCP, opts.MCPSelection)
 	} else {
 		cfg.Features.Guidelines = opts.Guidelines
 		cfg.Features.Skills = opts.Skills
@@ -181,6 +196,11 @@ func (i Installer) install(ctx context.Context, opts Options, prior *config.Conf
 		paths = enabledSurfacePaths(opts.Root, agent, cfg.Features, paths)
 		cfg.GeneratedFiles[agent.Name()] = existingRelativePaths(opts.Root, paths)
 	}
+	result.Guidance = GuidanceReconciliation{
+		Version: GuidanceReconciliationVersion,
+		Enabled: cfg.Features.Guidelines,
+		Targets: slices.Clone(result.Agents),
+	}
 
 	if !opts.DryRun {
 		if err := config.Save(opts.Root, cfg); err != nil {
@@ -190,6 +210,14 @@ func (i Installer) install(ctx context.Context, opts Options, prior *config.Conf
 	result.Files = append(result.Files, config.FilePath(opts.Root))
 
 	return result, nil
+}
+
+// preserveFeature applies an explicit tri-state update while retaining legacy true-only surface requests.
+func preserveFeature(current bool, legacy bool, selection *bool) bool {
+	if selection != nil {
+		return *selection
+	}
+	return current || legacy
 }
 
 // selectAgents keeps non-interactive installs deterministic while still honoring existing project files.
@@ -240,12 +268,26 @@ func (i Installer) selectAgents(ctx context.Context, opts Options) ([]agents.Age
 // normalizeOptions applies Atlas defaults only when the caller did not select explicit surfaces.
 func normalizeOptions(opts Options) Options {
 	opts = normalizeProjectOptions(opts)
-	if !opts.Guidelines && !opts.Skills && !opts.MCP {
+	applySurfaceSelections(&opts)
+	if !opts.Guidelines && !opts.Skills && !opts.MCP && opts.GuidelinesSelection == nil && opts.SkillsSelection == nil && opts.MCPSelection == nil {
 		opts.Guidelines = true
 		opts.Skills = true
 		opts.MCP = true
 	}
 	return opts
+}
+
+// applySurfaceSelections applies explicit tri-state surface choices without changing legacy callers.
+func applySurfaceSelections(opts *Options) {
+	if opts.GuidelinesSelection != nil {
+		opts.Guidelines = *opts.GuidelinesSelection
+	}
+	if opts.SkillsSelection != nil {
+		opts.Skills = *opts.SkillsSelection
+	}
+	if opts.MCPSelection != nil {
+		opts.MCP = *opts.MCPSelection
+	}
 }
 
 // normalizeProjectOptions fills project paths and discovery without changing selected surfaces.
