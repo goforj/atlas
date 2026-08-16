@@ -25,7 +25,7 @@ func TestResolveSeparatesControlAndBaselineTreatments(t *testing.T) {
 		t.Fatalf("none files = %#v", none.Files)
 	}
 	body := string(agents.Files["AGENTS.md"])
-	for _, token := range []string{"forj make:*", "Never edit `wire_gen.go`", "Keep controllers, commands, jobs, and schedules thin"} {
+	for _, token := range []string{"forj make:*", "Never edit `wire_gen.go`", "can stand on its own", "Keep controllers, commands, jobs, and schedules thin"} {
 		if !strings.Contains(body, token) {
 			t.Fatalf("AGENTS.md missing %q", token)
 		}

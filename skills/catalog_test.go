@@ -49,6 +49,8 @@ func TestSkillEffectivenessPhrases(t *testing.T) {
 		"app/<name>/",
 		"forj <app> make:*",
 		"Java/PHP-style",
+		"can stand on its own",
+		"File count, type count, and directory symmetry do not justify a package boundary",
 		"migrations/<app>/<connection>/",
 		"GOCACHE=/tmp/gocache",
 		"render test projects in '/tmp'",

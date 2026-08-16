@@ -165,7 +165,9 @@ The app prefix routes generated code into the selected app's registration and Wi
 const goPackageDesign = `
 # GoForj Go Package Design
 
-Prefer cohesive Go packages over Java/PHP-style nested class folders.
+Begin with one cohesive Go package for a responsibility instead of a Java/PHP-style folder hierarchy. Add files inside that package as the implementation grows.
+
+Create a subpackage only when the extracted responsibility has a cohesive API and can stand on its own. A useful boundary should be understandable and testable independently, have a clear owner, and simplify dependencies rather than merely rearranging files.
 
 Good package-scoped code:
 
@@ -180,7 +182,9 @@ Avoid unnecessary nesting such as:
 - 'internal/billing/services/reporting/sync/service.go'
 - 'internal/billing/controllers/http/v1/admin/controller.go'
 
-Grouped make-command names can express command namespace without forcing deep folders, for example 'forj make:command billing:reports:sync'.
+Do not create category packages such as 'services', 'handlers', 'models', 'types', or 'utils' merely to sort code. File count, type count, and directory symmetry do not justify a package boundary.
+
+Grouped make-command names can express command namespace, for example 'forj make:command billing:reports:sync'. Use a group only when that area is a real package responsibility, not as an organizational label for one implementation.
 
 Package-scoped implementation still registers through the selected app's composition files.
 `
