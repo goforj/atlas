@@ -2,6 +2,7 @@ schema_version: 1
 id: add-validated-write-endpoint
 summary: Add a validated write endpoint with stable public errors.
 suite: core
+task_kind: feature
 project_scenario: create-invoice-validation
 workflow: goforj-add-validated-write-endpoint/v1
 verifier: add-validated-write-endpoint/v1

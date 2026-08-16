@@ -2,6 +2,7 @@ schema_version: 1
 id: create-model
 summary: Generate a user model and repository from the seeded database table.
 suite: core
+task_kind: scaffold
 project_scenario: create-user-model
 workflow: goforj-create-model/v1
 verifier: create-model/v1

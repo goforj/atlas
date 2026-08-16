@@ -41,6 +41,7 @@ type EvaluationDefinition struct {
 	ID              string
 	Summary         string
 	Suite           string
+	TaskKind        EvaluationTaskKind
 	ProjectScenario string
 	WorkflowID      string
 	VerifierID      string
@@ -48,6 +49,20 @@ type EvaluationDefinition struct {
 	Prompt          string
 	PromptDigest    string
 }
+
+// EvaluationTaskKind separates workflow discovery from broader implementation and repair measurements.
+type EvaluationTaskKind string
+
+const (
+	// TaskScaffold evaluates whether an agent discovers and uses a framework-owned creation workflow.
+	TaskScaffold EvaluationTaskKind = "scaffold"
+	// TaskFeature evaluates a complete application behavior across one or more framework surfaces.
+	TaskFeature EvaluationTaskKind = "feature"
+	// TaskRepair evaluates diagnosis and correction of an existing broken integration.
+	TaskRepair EvaluationTaskKind = "repair"
+	// TaskAbstention evaluates safe behavior when the available Project evidence is insufficient.
+	TaskAbstention EvaluationTaskKind = "abstention"
+)
 
 // Limits bounds one logical evaluation trial independently from provider defaults.
 type Limits struct {

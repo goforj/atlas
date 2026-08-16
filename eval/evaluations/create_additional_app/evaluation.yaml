@@ -2,6 +2,7 @@ schema_version: 1
 id: create-additional-app
 summary: Add an independently runnable status page App.
 suite: core
+task_kind: scaffold
 project_scenario: create-statuspage-app
 workflow: goforj-create-additional-app/v1
 verifier: create-additional-app/v1

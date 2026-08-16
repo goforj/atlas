@@ -80,38 +80,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	var err error
 	defer func() {
 		result.FinishedAt = now().UTC()
-		if artifacts == nil {
-			return
-		}
-		normalizedEvents := normalizeArtifactEvents(artifactEvents)
-		recordAttemptEvents(&result, artifacts, normalizedEvents)
-		failures := writeAttemptReportArtifacts(artifacts, request, result, normalizedEvents, agentProperties.Properties, backendCapabilities)
-		result.SecondaryFailures = append(result.SecondaryFailures, failures...)
-		if len(failures) > 0 {
-			result.EvaluationStatus = EvaluationEvaluatorError
-		}
-		if err := artifacts.WriteJSON("run.json", result); err != nil {
-			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_run", Message: err.Error()})
-			result.EvaluationStatus = EvaluationEvaluatorError
-		}
-		if result.Verification != nil {
-			if err := artifacts.WriteJSON("verification.json", result.Verification); err != nil {
-				result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_verification", Message: err.Error()})
-				result.EvaluationStatus = EvaluationEvaluatorError
-			}
-		}
-		if attemptNeedsTriage(result) {
-			triage := TriageRecord{State: TriageUnreviewed}
-			if err := artifacts.WriteJSON("triage.json", triage); err != nil {
-				result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_triage", Message: err.Error()})
-				result.EvaluationStatus = EvaluationEvaluatorError
-			}
-		}
-		if _, err := artifacts.Finalize(planDigest, baselineTree, finalTree); err != nil {
-			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_manifest", Message: err.Error()})
-			result.EvaluationStatus = EvaluationEvaluatorError
-			repairFinalizationArtifacts(artifacts, request, &result)
-		}
+		finalizeAttemptArtifacts(artifacts, request, &result, artifactEvents, agentProperties.Properties, backendCapabilities, planDigest, baselineTree, finalTree)
 		if runErr == nil && result.EvaluationStatus == EvaluationEvaluatorError {
 			runErr = fmt.Errorf("evaluation integrity failed during deferred cleanup or artifact finalization")
 		}
@@ -139,58 +108,16 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("begin attempt artifacts: %w", err)
 	}
-	resolved, err := runner.Registry.Resolve(request.Definition)
-	if err != nil {
+	preflight, terminal, err := runner.preflightAttempt(ctx, request, &result)
+	if err != nil || terminal {
 		return result, err
 	}
-	preparationCapabilities, err := runner.Preparer.Capabilities(ctx)
-	if err != nil {
-		return result, fmt.Errorf("preparation capabilities: %w", err)
-	}
-	agentProperties, err = runner.Agent.Properties(ctx)
-	if err != nil {
-		return result, fmt.Errorf("agent capabilities: %w", err)
-	}
-	backendCapabilities, err = runner.Backend.Capabilities(ctx)
-	if err != nil {
-		return result, fmt.Errorf("backend capabilities: %w", err)
-	}
-	plan, err := runner.Preparer.Resolve(ctx, request.Preparation)
-	if err != nil {
-		result.EvaluationStatus = EvaluationFixtureError
-		return result, fmt.Errorf("resolve preparation: %w", err)
-	}
-	if err := validateResolvedPreparation(request.Definition, request.Preparation, plan); err != nil {
-		result.EvaluationStatus = EvaluationFixtureError
-		return result, err
-	}
+	resolved := preflight.resolved
+	plan := preflight.plan
+	agentProperties = preflight.agentProperties
+	backendCapabilities = preflight.backendCapabilities
+	available := preflight.availableCapabilities
 	planDigest = plan.PlanDigest
-	result.PlanDigest = plan.PlanDigest
-	result.ScenarioSchema = plan.ScenarioSchema
-	result.ScenarioPlanDigest = plan.ScenarioPlanDigest
-	result.CatalogDigest = plan.CatalogDigest
-	result.DependencyDigests = cloneStringMap(plan.DependencyDigests)
-	result.ProjectConfigDigest = digestBytes(plan.ProjectConfiguration)
-	result.EnvironmentDigest = plan.EnvironmentDigest
-	if !containsScenarioSchema(preparationCapabilities.ScenarioSchemaVersions, plan.ScenarioSchema) {
-		result.EvaluationStatus = EvaluationIneligible
-		result.Milestones = append(result.Milestones, MilestonePreflight, MilestoneEvaluationTerminal)
-		return result, nil
-	}
-	// Only the backend can attest to candidate actions. Adapter capabilities describe
-	// telemetry support and must never promote provider-originated events to evidence.
-	available := effectiveBackendCapabilities(backendCapabilities, agentProperties.Properties)
-	requiredCapabilities := append([]Capability(nil), resolved.Capabilities...)
-	requiredCapabilities = append(requiredCapabilities, authoritativeCapabilities...)
-	missing := missingCapabilities(requiredCapabilities, available)
-	result.UnavailableEvidence = append([]Capability(nil), missing...)
-	if len(missing) > 0 && request.Intent != IntentDiagnostic {
-		result.EvaluationStatus = EvaluationIneligible
-		result.UnavailableEvidence = missing
-		result.Milestones = append(result.Milestones, MilestonePreflight, MilestoneEvaluationTerminal)
-		return result, nil
-	}
-	result.Milestones = append(result.Milestones, MilestonePreflight)
 	preparedProject, err := runner.Preparer.Prepare(ctx, request.Preparation, plan)
 	if err != nil {
 		result.EvaluationStatus = EvaluationFixtureError
@@ -426,12 +353,90 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("seal candidate Project: %w", err)
 	}
-	if strings.TrimSpace(sealed.Root) == "" || strings.TrimSpace(sealed.TreeDigest) == "" {
-		result.EvaluationStatus = EvaluationEvaluatorError
-		return result, fmt.Errorf("backend returned an incomplete sealed Project")
+	if err := verifySealedAttempt(ctx, sealed, baselineDiff, baselineTree, supervisorEvents, agentResult.Message, preparedProject.Result().ForjDigest, available, resolved, request.Intent, artifacts, &result); err != nil {
+		return result, err
 	}
 	finalTree = sealed.TreeDigest
-	result.FinalTree = finalTree
+	return result, nil
+}
+
+// attemptPreflight contains resolved identities needed after capability and fixture admission.
+type attemptPreflight struct {
+	resolved              ResolvedEvaluation
+	plan                  ResolvedPreparationPlan
+	agentProperties       AgentProperties
+	backendCapabilities   []Capability
+	availableCapabilities []Capability
+}
+
+// preflightAttempt resolves immutable inputs and stops ineligible attempts before Project mutation.
+func (runner Runner) preflightAttempt(ctx context.Context, request AttemptRequest, result *AttemptResult) (attemptPreflight, bool, error) {
+	resolved, err := runner.Registry.Resolve(request.Definition)
+	if err != nil {
+		return attemptPreflight{}, false, err
+	}
+	preparationCapabilities, err := runner.Preparer.Capabilities(ctx)
+	if err != nil {
+		return attemptPreflight{}, false, fmt.Errorf("preparation capabilities: %w", err)
+	}
+	agentProperties, err := runner.Agent.Properties(ctx)
+	if err != nil {
+		return attemptPreflight{}, false, fmt.Errorf("agent capabilities: %w", err)
+	}
+	backendCapabilities, err := runner.Backend.Capabilities(ctx)
+	if err != nil {
+		return attemptPreflight{}, false, fmt.Errorf("backend capabilities: %w", err)
+	}
+	plan, err := runner.Preparer.Resolve(ctx, request.Preparation)
+	if err != nil {
+		result.EvaluationStatus = EvaluationFixtureError
+		return attemptPreflight{}, false, fmt.Errorf("resolve preparation: %w", err)
+	}
+	if err := validateResolvedPreparation(request.Definition, request.Preparation, plan); err != nil {
+		result.EvaluationStatus = EvaluationFixtureError
+		return attemptPreflight{}, false, err
+	}
+	result.PlanDigest = plan.PlanDigest
+	result.ScenarioSchema = plan.ScenarioSchema
+	result.ScenarioPlanDigest = plan.ScenarioPlanDigest
+	result.CatalogDigest = plan.CatalogDigest
+	result.DependencyDigests = cloneStringMap(plan.DependencyDigests)
+	result.ProjectConfigDigest = digestBytes(plan.ProjectConfiguration)
+	result.EnvironmentDigest = plan.EnvironmentDigest
+	if !containsScenarioSchema(preparationCapabilities.ScenarioSchemaVersions, plan.ScenarioSchema) {
+		result.EvaluationStatus = EvaluationIneligible
+		result.Milestones = append(result.Milestones, MilestonePreflight, MilestoneEvaluationTerminal)
+		return attemptPreflight{}, true, nil
+	}
+	// Only the backend can attest to candidate actions. Adapter capabilities describe
+	// telemetry support and must never promote provider-originated events to evidence.
+	available := effectiveBackendCapabilities(backendCapabilities, agentProperties.Properties)
+	requiredCapabilities := append([]Capability(nil), resolved.Capabilities...)
+	requiredCapabilities = append(requiredCapabilities, authoritativeCapabilities...)
+	missing := missingCapabilities(requiredCapabilities, available)
+	result.UnavailableEvidence = append([]Capability(nil), missing...)
+	if len(missing) > 0 && request.Intent != IntentDiagnostic {
+		result.EvaluationStatus = EvaluationIneligible
+		result.Milestones = append(result.Milestones, MilestonePreflight, MilestoneEvaluationTerminal)
+		return attemptPreflight{}, true, nil
+	}
+	result.Milestones = append(result.Milestones, MilestonePreflight)
+	return attemptPreflight{
+		resolved:              resolved,
+		plan:                  plan,
+		agentProperties:       agentProperties,
+		backendCapabilities:   backendCapabilities,
+		availableCapabilities: available,
+	}, false, nil
+}
+
+// verifySealedAttempt projects the immutable candidate tree into outcome and workflow results.
+func verifySealedAttempt(ctx context.Context, sealed SealedProject, baselineDiff projectDiffSnapshot, baselineTree string, events []Event, finalResponse, forjDigest string, available []Capability, resolved ResolvedEvaluation, intent RunIntent, artifacts *AttemptArtifacts, result *AttemptResult) error {
+	if strings.TrimSpace(sealed.Root) == "" || strings.TrimSpace(sealed.TreeDigest) == "" {
+		result.EvaluationStatus = EvaluationEvaluatorError
+		return fmt.Errorf("backend returned an incomplete sealed Project")
+	}
+	result.FinalTree = sealed.TreeDigest
 	diff, diffErr := buildProjectDiff(baselineDiff, sealed.Root)
 	if diffErr != nil {
 		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: diffErr.Error()})
@@ -440,32 +445,31 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: err.Error()})
 		result.EvaluationStatus = EvaluationEvaluatorError
 	}
-
 	changes, err := projectChanges(baselineDiff, sealed.Root)
 	if err != nil {
 		result.EvaluationStatus = EvaluationEvaluatorError
-		return result, fmt.Errorf("project change projection: %w", err)
+		return fmt.Errorf("project change projection: %w", err)
 	}
 	verification, err := resolved.Verifier.Verify(ctx, VerificationInput{
 		ProjectRoot:   sealed.Root,
 		BaselineTree:  baselineTree,
 		FinalTree:     sealed.TreeDigest,
 		Changes:       changes,
-		Events:        supervisorEvents,
-		FinalResponse: agentResult.Message,
+		Events:        events,
+		FinalResponse: finalResponse,
 	})
 	if err != nil {
 		result.EvaluationStatus = EvaluationEvaluatorError
-		return result, fmt.Errorf("verify evaluation: %w", err)
+		return fmt.Errorf("verify evaluation: %w", err)
 	}
-	workflow, workflowChecks := EvaluateWorkflow(resolved.Workflow, supervisorEvents, preparedProject.Result().ForjDigest, available)
+	workflow, workflowChecks := EvaluateWorkflow(resolved.Workflow, events, forjDigest, available)
 	verification.WorkflowConformance = workflow
 	verification.Checks = append(verification.Checks, workflowChecks...)
 	result.Verification = &verification
 	if verification.Abstention != nil && verification.Abstention.Status == EndpointPassed {
 		result.AgentOutcome = AgentAbstained
 	}
-	if request.Intent == IntentDiagnostic {
+	if intent == IntentDiagnostic {
 		verification.FrameworkOutcome = EndpointResult{ID: verification.FrameworkOutcome.ID, Status: EndpointIneligible, Details: "diagnostic backend cannot establish an authoritative framework outcome"}
 		if verification.Contract != nil {
 			verification.Contract = &EndpointResult{ID: verification.Contract.ID, Status: EndpointIneligible, Details: "diagnostic backend cannot establish an authoritative contract outcome"}
@@ -480,7 +484,42 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		}
 	}
 	result.Milestones = append(result.Milestones, MilestoneEvaluationTerminal)
-	return result, nil
+	return nil
+}
+
+// finalizeAttemptArtifacts keeps terminal evidence repair independent from the execution state machine.
+func finalizeAttemptArtifacts(artifacts *AttemptArtifacts, request AttemptRequest, result *AttemptResult, events []Event, agentProperties []Capability, backendCapabilities []Capability, planDigest, baselineTree, finalTree string) {
+	if artifacts == nil {
+		return
+	}
+	normalizedEvents := normalizeArtifactEvents(events)
+	recordAttemptEvents(result, artifacts, normalizedEvents)
+	failures := writeAttemptReportArtifacts(artifacts, request, *result, normalizedEvents, agentProperties, backendCapabilities)
+	result.SecondaryFailures = append(result.SecondaryFailures, failures...)
+	if len(failures) > 0 {
+		result.EvaluationStatus = EvaluationEvaluatorError
+	}
+	if err := artifacts.WriteJSON("run.json", result); err != nil {
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_run", Message: err.Error()})
+		result.EvaluationStatus = EvaluationEvaluatorError
+	}
+	if result.Verification != nil {
+		if err := artifacts.WriteJSON("verification.json", result.Verification); err != nil {
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_verification", Message: err.Error()})
+			result.EvaluationStatus = EvaluationEvaluatorError
+		}
+	}
+	if attemptNeedsTriage(*result) {
+		if err := artifacts.WriteJSON("triage.json", TriageRecord{State: TriageUnreviewed}); err != nil {
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_triage", Message: err.Error()})
+			result.EvaluationStatus = EvaluationEvaluatorError
+		}
+	}
+	if _, err := artifacts.Finalize(planDigest, baselineTree, finalTree); err != nil {
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_manifest", Message: err.Error()})
+		result.EvaluationStatus = EvaluationEvaluatorError
+		repairFinalizationArtifacts(artifacts, request, result)
+	}
 }
 
 // adapterCommandCount uses the adapter's complete observed count when bounded retention omitted result events.

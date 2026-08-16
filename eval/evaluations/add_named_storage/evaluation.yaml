@@ -2,6 +2,7 @@ schema_version: 1
 id: add-named-storage
 summary: Configure and inject a named avatar storage disk.
 suite: core
+task_kind: scaffold
 project_scenario: named-avatar-storage
 workflow: goforj-add-named-storage/v1
 verifier: add-named-storage/v1

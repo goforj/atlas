@@ -81,6 +81,26 @@ func TestSurfaceVerifierRejectsOutOfScopeChanges(t *testing.T) {
 	}
 }
 
+// TestVerifySurfaceTextAbsentIgnoresGoComments proves protected syntax checks do not reject explanatory prose.
+func TestVerifySurfaceTextAbsentIgnoresGoComments(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "routes.go")
+	if err := os.WriteFile(path, []byte("package app\n\n// The admin App owns /api/v1/audits.\n"), 0o644); err != nil {
+		t.Fatalf("write routes: %v", err)
+	}
+	result := verifySurfaceTextAbsent(root, textExclusion{id: "route-isolation", paths: []string{"routes.go"}, text: "/api/v1/audits"})
+	if result.Status != EndpointPassed {
+		t.Fatalf("comment-only result = %#v", result)
+	}
+	if err := os.WriteFile(path, []byte("package app\n\nconst route = \"/api/v1/audits\"\n"), 0o644); err != nil {
+		t.Fatalf("write protected route: %v", err)
+	}
+	result = verifySurfaceTextAbsent(root, textExclusion{id: "route-isolation", paths: []string{"routes.go"}, text: "/api/v1/audits"})
+	if result.Status != EndpointFailed {
+		t.Fatalf("string-literal result = %#v", result)
+	}
+}
+
 // TestSurfaceVerifierAllowsToolDerivedOutputs keeps build products from being misclassified as application ownership.
 func TestSurfaceVerifierAllowsToolDerivedOutputs(t *testing.T) {
 	result := verifySurfaceOwnership([]ProjectChange{

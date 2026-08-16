@@ -2,6 +2,7 @@ schema_version: 1
 id: unknown-framework-shape
 summary: Ask for the missing execution-mode decision without guessing a framework primitive.
 suite: core
+task_kind: abstention
 project_scenario: unknown-invoice-reconciliation
 workflow: goforj-clarify-unknown-shape/v1
 verifier: safe-abstention/v1

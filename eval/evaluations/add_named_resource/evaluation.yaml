@@ -2,6 +2,7 @@ schema_version: 1
 id: add-named-resource
 summary: Configure and inject a named reports queue.
 suite: core
+task_kind: scaffold
 project_scenario: named-reports-queue
 workflow: goforj-add-named-resource/v1
 verifier: add-named-resource/v1

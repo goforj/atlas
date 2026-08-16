@@ -2,6 +2,7 @@ schema_version: 1
 id: add-upload-workflow
 summary: Add a validated upload workflow backed by named storage.
 suite: core
+task_kind: feature
 project_scenario: file-upload-storage
 workflow: goforj-add-upload-workflow/v1
 verifier: add-upload-workflow/v1

@@ -186,11 +186,40 @@ func verifySurfaceTextAbsent(root string, exclusion textExclusion) EndpointResul
 		if err != nil {
 			return EndpointResult{ID: exclusion.id, Status: EndpointFailed, Details: err.Error()}
 		}
-		if strings.Contains(string(body), exclusion.text) {
+		contains, err := surfaceSourceContains(path, body, exclusion.text)
+		if err != nil {
+			return EndpointResult{ID: exclusion.id, Status: EndpointFailed, Details: err.Error()}
+		}
+		if contains {
 			return EndpointResult{ID: exclusion.id, Status: EndpointFailed, Details: fmt.Sprintf("protected path %q contains %q", filepath.ToSlash(path), exclusion.text)}
 		}
 	}
 	return EndpointResult{ID: exclusion.id, Status: EndpointPassed}
+}
+
+// surfaceSourceContains ignores Go comments while preserving checks against syntax and string literals.
+func surfaceSourceContains(path string, body []byte, text string) (bool, error) {
+	if filepath.Ext(path) != ".go" {
+		return strings.Contains(string(body), text), nil
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), path, body, 0)
+	if err != nil {
+		return false, fmt.Errorf("parse protected path %q: %w", filepath.ToSlash(path), err)
+	}
+	found := false
+	ast.Inspect(file, func(node ast.Node) bool {
+		if found || node == nil {
+			return false
+		}
+		switch typed := node.(type) {
+		case *ast.Ident:
+			found = strings.Contains(typed.Name, text)
+		case *ast.BasicLit:
+			found = strings.Contains(typed.Value, text)
+		}
+		return !found
+	})
+	return found, nil
 }
 
 // verifySurfaceOwnership limits candidate changes while allowing regenerated Wire output as derived evidence.

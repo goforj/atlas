@@ -12,6 +12,7 @@ const validEvaluationManifest = `schema_version: 1
 id: add-http-controller
 summary: Add an HTTP controller for existing invoice behavior
 suite: core
+task_kind: scaffold
 project_scenario: invoice-http-route
 workflow: goforj-add-http-route/v1
 verifier: add-http-controller/v1
@@ -55,11 +56,31 @@ func TestLoadDefinitionReadsMinimalContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadDefinition(): %v", err)
 	}
-	if definition.ID != "add-http-controller" || definition.WorkflowID != "goforj-add-http-route/v1" || definition.VerifierID != "add-http-controller/v1" {
+	if definition.ID != "add-http-controller" || definition.TaskKind != TaskScaffold || definition.WorkflowID != "goforj-add-http-route/v1" || definition.VerifierID != "add-http-controller/v1" {
 		t.Fatalf("resolved definition = %#v", definition)
 	}
 	if definition.Limits.WallTime.String() != "10m0s" || definition.Limits.Commands != 80 || definition.PromptDigest == "" {
 		t.Fatalf("resolved limits and prompt = %#v", definition)
+	}
+}
+
+// TestPromotedEvaluationIDsMatchingSeparatesMeasurementKinds proves focused runs do not rely on naming conventions.
+func TestPromotedEvaluationIDsMatchingSeparatesMeasurementKinds(t *testing.T) {
+	featureIDs, err := PromotedEvaluationIDsMatching(EvaluationFilter{Suite: "core", TaskKind: TaskFeature})
+	if err != nil {
+		t.Fatalf("PromotedEvaluationIDsMatching(): %v", err)
+	}
+	if len(featureIDs) == 0 {
+		t.Fatal("feature selection returned no promoted evaluations")
+	}
+	for _, id := range featureIDs {
+		definition, err := LoadPromotedDefinition(id)
+		if err != nil {
+			t.Fatalf("LoadPromotedDefinition(%q): %v", id, err)
+		}
+		if definition.Suite != "core" || definition.TaskKind != TaskFeature {
+			t.Fatalf("selected definition = %#v", definition)
+		}
 	}
 }
 
@@ -76,6 +97,7 @@ func TestDecodeEvaluationManifestRejectsAmbiguity(t *testing.T) {
 		{name: "duplicate field", body: validEvaluationManifest + "id: second\n", wantErr: "mapping key \"id\" already defined"},
 		{name: "anchor", body: strings.Replace(validEvaluationManifest, "summary: Add", "summary: &summary Add", 1), wantErr: "aliases and anchors are not supported"},
 		{name: "unversioned workflow", body: strings.Replace(validEvaluationManifest, "goforj-add-http-route/v1", "goforj-add-http-route", 1), wantErr: "must be a versioned contract ID"},
+		{name: "invalid task kind", body: strings.Replace(validEvaluationManifest, "task_kind: scaffold", "task_kind: vague", 1), wantErr: "task_kind \"vague\" is invalid"},
 		{name: "invalid duration", body: strings.Replace(validEvaluationManifest, "wall_time: 10m", "wall_time: someday", 1), wantErr: "must be a positive duration"},
 		{name: "invalid command budget", body: strings.Replace(validEvaluationManifest, "commands: 80", "commands: 0", 1), wantErr: "limits.commands must be positive"},
 		{name: "network broadening", body: strings.Replace(validEvaluationManifest, "shell_network: off", "shell_network: full", 1), wantErr: "limits.shell_network \"full\" is unsupported"},

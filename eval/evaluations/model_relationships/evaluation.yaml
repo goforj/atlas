@@ -2,6 +2,7 @@ schema_version: 1
 id: model-relationships
 summary: Generate schema-derived models with an explicit relationship contract.
 suite: core
+task_kind: scaffold
 project_scenario: user-post-relationships
 workflow: goforj-model-relationships/v1
 verifier: model-relationships/v1

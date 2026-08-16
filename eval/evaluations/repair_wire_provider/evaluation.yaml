@@ -2,6 +2,7 @@ schema_version: 1
 id: repair-wire-provider
 summary: Diagnose and repair a missing report service provider.
 suite: core
+task_kind: repair
 project_scenario: repair-report-wire-provider
 workflow: goforj-repair-wire-provider/v1
 verifier: repair-wire-provider/v1

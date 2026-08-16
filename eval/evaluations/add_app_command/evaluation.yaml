@@ -2,6 +2,7 @@ schema_version: 1
 id: add-app-command
 summary: Add a context-aware command that invokes existing invoice behavior.
 suite: core
+task_kind: scaffold
 project_scenario: invoice-app-command
 workflow: goforj-add-app-command/v1
 verifier: add-app-command/v1

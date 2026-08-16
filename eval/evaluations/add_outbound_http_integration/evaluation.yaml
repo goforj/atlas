@@ -2,6 +2,7 @@ schema_version: 1
 id: add-outbound-http-integration
 summary: Add a typed context-aware outbound HTTP integration.
 suite: core
+task_kind: feature
 project_scenario: tax-rate-http-integration
 workflow: goforj-add-outbound-http-integration/v1
 verifier: add-outbound-http-integration/v1

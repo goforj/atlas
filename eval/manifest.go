@@ -31,18 +31,32 @@ var promotedEvaluationCatalog struct {
 
 // PromotedEvaluationIDs returns promoted evaluation IDs in stable order, optionally limited to one suite.
 func PromotedEvaluationIDs(suite string) ([]string, error) {
+	return PromotedEvaluationIDsMatching(EvaluationFilter{Suite: suite})
+}
+
+// EvaluationFilter selects promoted evaluations by stable measurement dimensions.
+type EvaluationFilter struct {
+	Suite    string
+	TaskKind EvaluationTaskKind
+}
+
+// PromotedEvaluationIDsMatching returns promoted evaluation IDs matching every non-empty dimension.
+func PromotedEvaluationIDsMatching(filter EvaluationFilter) ([]string, error) {
 	directories, err := promotedEvaluationIndex()
 	if err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, len(directories))
 	for id := range directories {
-		if strings.TrimSpace(suite) != "" {
+		if strings.TrimSpace(filter.Suite) != "" || filter.TaskKind != "" {
 			definition, err := LoadPromotedDefinition(id)
 			if err != nil {
 				return nil, err
 			}
-			if definition.Suite != suite {
+			if strings.TrimSpace(filter.Suite) != "" && definition.Suite != filter.Suite {
+				continue
+			}
+			if filter.TaskKind != "" && definition.TaskKind != filter.TaskKind {
 				continue
 			}
 		}
@@ -63,6 +77,7 @@ type evaluationManifestV1 struct {
 	ID              string             `yaml:"id"`
 	Summary         string             `yaml:"summary"`
 	Suite           string             `yaml:"suite"`
+	TaskKind        EvaluationTaskKind `yaml:"task_kind"`
 	ProjectScenario string             `yaml:"project_scenario"`
 	Workflow        string             `yaml:"workflow"`
 	Verifier        string             `yaml:"verifier"`
@@ -166,6 +181,7 @@ func loadDefinitionContent(body, prompt []byte) (EvaluationDefinition, error) {
 		ID:              manifest.ID,
 		Summary:         manifest.Summary,
 		Suite:           manifest.Suite,
+		TaskKind:        manifest.TaskKind,
 		ProjectScenario: manifest.ProjectScenario,
 		WorkflowID:      manifest.WorkflowID,
 		VerifierID:      manifest.VerifierID,
@@ -205,6 +221,11 @@ func decodeEvaluationManifest(body []byte) (EvaluationDefinition, error) {
 	if !evaluationIDPattern.MatchString(wire.Suite) {
 		return EvaluationDefinition{}, fmt.Errorf("suite %q must be a safe slug", wire.Suite)
 	}
+	switch wire.TaskKind {
+	case TaskScaffold, TaskFeature, TaskRepair, TaskAbstention:
+	default:
+		return EvaluationDefinition{}, fmt.Errorf("task_kind %q is invalid", wire.TaskKind)
+	}
 	if !evaluationIDPattern.MatchString(wire.ProjectScenario) {
 		return EvaluationDefinition{}, fmt.Errorf("project_scenario %q must be a safe slug", wire.ProjectScenario)
 	}
@@ -229,6 +250,7 @@ func decodeEvaluationManifest(body []byte) (EvaluationDefinition, error) {
 		ID:              wire.ID,
 		Summary:         wire.Summary,
 		Suite:           wire.Suite,
+		TaskKind:        wire.TaskKind,
 		ProjectScenario: wire.ProjectScenario,
 		WorkflowID:      wire.Workflow,
 		VerifierID:      wire.Verifier,
