@@ -1,7 +1,6 @@
 package eval
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -21,19 +20,37 @@ const maxArtifactFileSize = 16 << 20
 const maxArtifactTotalSize = 64 << 20
 const maxArtifactManifestSize = 1 << 20
 
+const artifactManifestName = "manifest.json"
+
 var artifactAttemptIDPattern = regexp.MustCompile(`^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$`)
 
-var allowedArtifactFiles = map[string]bool{
-	"run.json":                true,
-	"scorecard.json":          true,
-	"summary.txt":             true,
-	"events.jsonl":            true,
-	"transcript.redacted.txt": true,
-	"commands.jsonl":          true,
-	"diff.patch":              true,
-	"verification.json":       true,
-	"environment.json":        true,
-	"triage.json":             true,
+var allowedArtifactFileNames = [...]string{
+	"run.json",
+	"scorecard.json",
+	"summary.txt",
+	"events.jsonl",
+	"transcript.redacted.txt",
+	"commands.jsonl",
+	"diff.patch",
+	"verification.json",
+	"environment.json",
+	"triage.json",
+}
+
+const maxArtifactDirectoryEntries = len(allowedArtifactFileNames) + 1
+
+var allowedArtifactFiles = func() map[string]bool {
+	files := make(map[string]bool, len(allowedArtifactFileNames))
+	for _, name := range allowedArtifactFileNames {
+		files[name] = true
+	}
+	return files
+}()
+
+// artifactDirectory holds one descriptor-anchored view of an attempt directory and its bounded entries.
+type artifactDirectory struct {
+	root    *os.Root
+	entries map[string]os.FileInfo
 }
 
 // ArtifactStore creates private supervisor-owned attempt directories and manifests with post-run tamper evidence.
@@ -214,10 +231,15 @@ func (artifacts *AttemptArtifacts) Finalize(planDigest, baselineTree, finalTree 
 		return ArtifactManifest{}, fmt.Errorf("close event artifact: %w", err)
 	}
 	artifacts.closed = true
-	if err := artifacts.scanRetainedArtifacts(); err != nil {
+	directory, err := openArtifactDirectory(artifacts.directory)
+	if err != nil {
 		return ArtifactManifest{}, err
 	}
-	files, err := collectArtifactFiles(artifacts.directory)
+	defer directory.close()
+	if _, exists := directory.entries[artifactManifestName]; exists {
+		return ArtifactManifest{}, fmt.Errorf("artifact manifest already exists")
+	}
+	files, err := collectArtifactFiles(directory, artifacts.inspectRetainedArtifact)
 	if err != nil {
 		return ArtifactManifest{}, err
 	}
@@ -242,7 +264,7 @@ func (artifacts *AttemptArtifacts) Finalize(planDigest, baselineTree, finalTree 
 	if err := artifacts.rejectRegisteredSecrets(body); err != nil {
 		return ArtifactManifest{}, err
 	}
-	if err := os.WriteFile(filepath.Join(artifacts.directory, "manifest.json"), body, 0o600); err != nil {
+	if err := writeArtifactManifest(directory.root, body); err != nil {
 		return ArtifactManifest{}, fmt.Errorf("write artifact manifest: %w", err)
 	}
 	return manifest, nil
@@ -253,7 +275,12 @@ func VerifyArtifactManifest(directory string, key []byte) (ArtifactManifest, err
 	if err := validateArtifactAuthenticationKey(key); err != nil {
 		return ArtifactManifest{}, err
 	}
-	body, err := readArtifactManifest(directory)
+	artifactRoot, err := openArtifactDirectory(directory)
+	if err != nil {
+		return ArtifactManifest{}, err
+	}
+	defer artifactRoot.close()
+	body, err := readArtifactManifest(artifactRoot)
 	if err != nil {
 		return ArtifactManifest{}, err
 	}
@@ -287,7 +314,7 @@ func VerifyArtifactManifest(directory string, key []byte) (ArtifactManifest, err
 		return ArtifactManifest{}, fmt.Errorf("artifact manifest signature is invalid")
 	}
 	manifest.Signature = signature
-	actual, err := collectArtifactFiles(directory)
+	actual, err := collectArtifactFiles(artifactRoot, nil)
 	if err != nil {
 		return ArtifactManifest{}, err
 	}
@@ -298,38 +325,14 @@ func VerifyArtifactManifest(directory string, key []byte) (ArtifactManifest, err
 }
 
 // readArtifactManifest bounds and validates the manifest file before parsing attacker-controlled evidence.
-func readArtifactManifest(directory string) ([]byte, error) {
-	directoryInfo, err := os.Lstat(directory)
-	if err != nil {
-		return nil, fmt.Errorf("inspect artifact directory: %w", err)
+func readArtifactManifest(directory *artifactDirectory) ([]byte, error) {
+	pathInfo, exists := directory.entries[artifactManifestName]
+	if !exists {
+		return nil, fmt.Errorf("inspect artifact manifest: %s is missing", artifactManifestName)
 	}
-	if directoryInfo.Mode()&os.ModeSymlink != 0 || !directoryInfo.IsDir() {
-		return nil, fmt.Errorf("artifact directory must be a real directory")
-	}
-	root, err := os.OpenRoot(directory)
-	if err != nil {
-		return nil, fmt.Errorf("open artifact directory: %w", err)
-	}
-	defer root.Close()
-	pathInfo, err := root.Lstat("manifest.json")
+	file, err := openArtifactFile(directory.root, artifactManifestName, pathInfo)
 	if err != nil {
 		return nil, fmt.Errorf("inspect artifact manifest: %w", err)
-	}
-	if pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.Mode().IsRegular() {
-		return nil, fmt.Errorf("artifact manifest must be a regular file")
-	}
-	file, err := root.Open("manifest.json")
-	if err != nil {
-		return nil, fmt.Errorf("open artifact manifest: %w", err)
-	}
-	fileInfo, statErr := file.Stat()
-	if statErr != nil {
-		_ = file.Close()
-		return nil, fmt.Errorf("inspect opened artifact manifest: %w", statErr)
-	}
-	if !fileInfo.Mode().IsRegular() || !os.SameFile(pathInfo, fileInfo) {
-		_ = file.Close()
-		return nil, fmt.Errorf("artifact manifest changed while opening")
 	}
 	body, readErr := io.ReadAll(io.LimitReader(file, maxArtifactManifestSize+1))
 	closeErr := file.Close()
@@ -340,6 +343,105 @@ func readArtifactManifest(directory string) ([]byte, error) {
 		return nil, fmt.Errorf("artifact manifest exceeds %d bytes", maxArtifactManifestSize)
 	}
 	return body, nil
+}
+
+// openArtifactDirectory anchors all later access to one directory descriptor and rejects an unbounded or unsupported surface.
+func openArtifactDirectory(path string) (*artifactDirectory, error) {
+	pathInfo, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("inspect artifact directory: %w", err)
+	}
+	if pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.IsDir() {
+		return nil, fmt.Errorf("artifact directory must be a real directory")
+	}
+	root, err := os.OpenRoot(path)
+	if err != nil {
+		return nil, fmt.Errorf("open artifact directory: %w", err)
+	}
+	rootInfo, err := root.Stat(".")
+	if err != nil {
+		_ = root.Close()
+		return nil, fmt.Errorf("inspect opened artifact directory: %w", err)
+	}
+	if !rootInfo.IsDir() || !os.SameFile(pathInfo, rootInfo) {
+		_ = root.Close()
+		return nil, fmt.Errorf("artifact directory changed while opening")
+	}
+	entries, err := readArtifactDirectoryEntries(root)
+	if err != nil {
+		_ = root.Close()
+		return nil, err
+	}
+	return &artifactDirectory{root: root, entries: entries}, nil
+}
+
+// readArtifactDirectoryEntries reads at most one entry beyond the fixed artifact surface before rejecting it.
+func readArtifactDirectoryEntries(root *os.Root) (map[string]os.FileInfo, error) {
+	directory, err := root.Open(".")
+	if err != nil {
+		return nil, fmt.Errorf("open artifact directory snapshot: %w", err)
+	}
+	entries, readErr := directory.ReadDir(maxArtifactDirectoryEntries + 1)
+	closeErr := directory.Close()
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return nil, fmt.Errorf("read artifact directory: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close artifact directory snapshot: %w", closeErr)
+	}
+	if len(entries) > maxArtifactDirectoryEntries {
+		return nil, fmt.Errorf("artifact directory exceeds %d entries", maxArtifactDirectoryEntries)
+	}
+	result := make(map[string]os.FileInfo, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if name != artifactManifestName && !allowedArtifactFiles[name] {
+			return nil, fmt.Errorf("artifact %q is not in the allowed artifact surface", name)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil, fmt.Errorf("inspect artifact %s: %w", name, err)
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("artifact %s is not a regular file", name)
+		}
+		result[name] = info
+	}
+	return result, nil
+}
+
+// openArtifactFile opens nonblockingly and verifies that the descriptor is the enumerated regular file.
+func openArtifactFile(root *os.Root, name string, pathInfo os.FileInfo) (*os.File, error) {
+	file, err := openArtifactFileDescriptor(root, name)
+	if err != nil {
+		return nil, fmt.Errorf("open artifact %s: %w", name, err)
+	}
+	fileInfo, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("inspect opened artifact %s: %w", name, err)
+	}
+	if !fileInfo.Mode().IsRegular() || !os.SameFile(pathInfo, fileInfo) {
+		_ = file.Close()
+		return nil, fmt.Errorf("artifact %s changed while opening", name)
+	}
+	return file, nil
+}
+
+// writeArtifactManifest creates the final manifest through the anchored root without replacing an unexpected entry.
+func writeArtifactManifest(root *os.Root, body []byte) error {
+	file, err := root.OpenFile(artifactManifestName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	_, writeErr := file.Write(body)
+	closeErr := file.Close()
+	return errors.Join(writeErr, closeErr)
+}
+
+// close releases the descriptor-anchored artifact directory.
+func (directory *artifactDirectory) close() {
+	_ = directory.root.Close()
 }
 
 // requireJSONEnd rejects concatenated values that a single decoder call would otherwise ignore.
@@ -370,43 +472,12 @@ func (artifacts *AttemptArtifacts) rejectRegisteredSecrets(body []byte) error {
 	return nil
 }
 
-// scanRetainedArtifacts fails finalization if a file bypassed normal redacted write paths.
-func (artifacts *AttemptArtifacts) scanRetainedArtifacts() error {
-	entries, err := os.ReadDir(artifacts.directory)
-	if err != nil {
-		return fmt.Errorf("read artifact directory: %w", err)
+// inspectRetainedArtifact fails finalization if a file bypassed normal redacted write paths.
+func (artifacts *AttemptArtifacts) inspectRetainedArtifact(name string, body []byte) error {
+	if artifacts.redactor.containsSecret(name) {
+		return fmt.Errorf("artifact contains a registered secret")
 	}
-	for _, entry := range entries {
-		if entry.Name() == "manifest.json" {
-			continue
-		}
-		if artifacts.redactor.containsSecret(entry.Name()) {
-			return fmt.Errorf("artifact contains a registered secret")
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return fmt.Errorf("inspect artifact %s: %w", entry.Name(), err)
-		}
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("artifact %s is not a regular file", entry.Name())
-		}
-		file, err := os.Open(filepath.Join(artifacts.directory, entry.Name()))
-		if err != nil {
-			return fmt.Errorf("open artifact %s: %w", entry.Name(), err)
-		}
-		body, readErr := io.ReadAll(io.LimitReader(file, maxArtifactFileSize+1))
-		closeErr := file.Close()
-		if err := errors.Join(readErr, closeErr); err != nil {
-			return fmt.Errorf("read artifact %s: %w", entry.Name(), err)
-		}
-		if len(body) > maxArtifactFileSize {
-			return fmt.Errorf("artifact %s exceeds %d bytes", entry.Name(), maxArtifactFileSize)
-		}
-		if err := artifacts.rejectRegisteredSecrets(body); err != nil {
-			return err
-		}
-	}
-	return nil
+	return artifacts.rejectRegisteredSecrets(body)
 }
 
 // validateArtifactName confines writes to the fixed evidence surface.
@@ -420,26 +491,15 @@ func (artifacts *AttemptArtifacts) validateArtifactName(name string) error {
 	return nil
 }
 
-// collectArtifactFiles hashes bounded regular files and rejects links or unsupported entries.
-func collectArtifactFiles(directory string) ([]ArtifactFile, error) {
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		return nil, fmt.Errorf("read artifact directory: %w", err)
-	}
-	files := make([]ArtifactFile, 0, len(entries))
+// collectArtifactFiles hashes bounded regular files and optionally inspects the exact bytes being authenticated.
+func collectArtifactFiles(directory *artifactDirectory, inspect func(string, []byte) error) ([]ArtifactFile, error) {
+	files := make([]ArtifactFile, 0, len(directory.entries))
 	var totalSize int64
-	for _, entry := range entries {
-		if entry.Name() == "manifest.json" {
+	for name, info := range directory.entries {
+		if name == artifactManifestName {
 			continue
 		}
-		info, err := entry.Info()
-		if err != nil {
-			return nil, fmt.Errorf("inspect artifact %s: %w", entry.Name(), err)
-		}
-		if !info.Mode().IsRegular() {
-			return nil, fmt.Errorf("artifact %s is not a regular file", entry.Name())
-		}
-		digest, size, err := digestArtifactFile(filepath.Join(directory, entry.Name()))
+		digest, size, err := digestArtifactFile(directory.root, name, info, inspect)
 		if err != nil {
 			return nil, err
 		}
@@ -447,28 +507,33 @@ func collectArtifactFiles(directory string) ([]ArtifactFile, error) {
 		if totalSize > maxArtifactTotalSize {
 			return nil, fmt.Errorf("artifact set exceeds %d bytes", maxArtifactTotalSize)
 		}
-		files = append(files, ArtifactFile{Path: entry.Name(), Digest: digest, Size: size, Classification: "diagnostic"})
+		files = append(files, ArtifactFile{Path: name, Digest: digest, Size: size, Classification: "diagnostic"})
 	}
 	sort.Slice(files, func(left, right int) bool { return files[left].Path < files[right].Path })
 	return files, nil
 }
 
-// digestArtifactFile hashes a regular file without interpreting its inert contents.
-func digestArtifactFile(path string) (string, int64, error) {
-	file, err := os.Open(path)
+// digestArtifactFile hashes a regular file without executing its inert contents.
+func digestArtifactFile(root *os.Root, name string, pathInfo os.FileInfo, inspect func(string, []byte) error) (string, int64, error) {
+	file, err := openArtifactFile(root, name, pathInfo)
 	if err != nil {
-		return "", 0, fmt.Errorf("open artifact %s: %w", filepath.Base(path), err)
+		return "", 0, err
 	}
-	defer file.Close()
-	hash := sha256.New()
-	size, err := io.Copy(hash, io.LimitReader(bufio.NewReader(file), maxArtifactFileSize+1))
-	if err != nil {
-		return "", 0, fmt.Errorf("digest artifact %s: %w", filepath.Base(path), err)
+	body, readErr := io.ReadAll(io.LimitReader(file, maxArtifactFileSize+1))
+	closeErr := file.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		return "", 0, fmt.Errorf("digest artifact %s: %w", name, err)
 	}
-	if size > maxArtifactFileSize {
-		return "", 0, fmt.Errorf("artifact %s exceeds %d bytes", filepath.Base(path), maxArtifactFileSize)
+	if len(body) > maxArtifactFileSize {
+		return "", 0, fmt.Errorf("artifact %s exceeds %d bytes", name, maxArtifactFileSize)
 	}
-	return fmt.Sprintf("sha256:%x", hash.Sum(nil)), size, nil
+	if inspect != nil {
+		if err := inspect(name, body); err != nil {
+			return "", 0, err
+		}
+	}
+	digest := sha256.Sum256(body)
+	return fmt.Sprintf("sha256:%x", digest), int64(len(body)), nil
 }
 
 // signArtifactManifest authenticates canonical JSON without including the signature field itself.
