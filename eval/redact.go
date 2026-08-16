@@ -57,6 +57,16 @@ func (redactor Redactor) Text(value string) string {
 	}, value)
 }
 
+// containsSecret reports whether value still includes a registered credential.
+func (redactor Redactor) containsSecret(value string) bool {
+	for _, secret := range redactor.secrets {
+		if strings.Contains(value, secret) {
+			return true
+		}
+	}
+	return false
+}
+
 // Event redacts a copy so callers cannot mutate or later reveal the persisted evidence.
 func (redactor Redactor) Event(event Event) Event {
 	redacted := event

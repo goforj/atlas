@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -75,8 +76,8 @@ func NewArtifactStore(root string, key []byte, redactor Redactor) (*ArtifactStor
 	if root == "" {
 		return nil, fmt.Errorf("artifact root is required")
 	}
-	if len(key) < 32 {
-		return nil, fmt.Errorf("artifact authentication key must contain at least 32 bytes")
+	if err := validateArtifactAuthenticationKey(key); err != nil {
+		return nil, err
 	}
 	return &ArtifactStore{root: root, key: append([]byte(nil), key...), redactor: redactor}, nil
 }
@@ -132,6 +133,9 @@ func (artifacts *AttemptArtifacts) AppendEvent(event Event) error {
 		return fmt.Errorf("encode event: %w", err)
 	}
 	body = append(body, '\n')
+	if err := artifacts.rejectRegisteredSecrets(body); err != nil {
+		return err
+	}
 	info, err := artifacts.events.Stat()
 	if err != nil {
 		return fmt.Errorf("inspect event artifact: %w", err)
@@ -155,6 +159,9 @@ func (artifacts *AttemptArtifacts) WriteText(name, content string) error {
 		return err
 	}
 	body := []byte(artifacts.redactor.Text(content))
+	if err := artifacts.rejectRegisteredSecrets(body); err != nil {
+		return err
+	}
 	if len(body) > maxArtifactFileSize {
 		return fmt.Errorf("artifact %s exceeds %d bytes", name, maxArtifactFileSize)
 	}
@@ -179,6 +186,9 @@ func (artifacts *AttemptArtifacts) WriteJSON(name string, value any) error {
 		return fmt.Errorf("redact %s: %w", name, err)
 	}
 	body = append(body, '\n')
+	if err := artifacts.rejectRegisteredSecrets(body); err != nil {
+		return err
+	}
 	if len(body) > maxArtifactFileSize {
 		return fmt.Errorf("artifact %s exceeds %d bytes", name, maxArtifactFileSize)
 	}
@@ -194,6 +204,9 @@ func (artifacts *AttemptArtifacts) Finalize(planDigest, baselineTree, finalTree 
 		return ArtifactManifest{}, fmt.Errorf("close event artifact: %w", err)
 	}
 	artifacts.closed = true
+	if err := artifacts.scanRetainedArtifacts(); err != nil {
+		return ArtifactManifest{}, err
+	}
 	files, err := collectArtifactFiles(artifacts.directory)
 	if err != nil {
 		return ArtifactManifest{}, err
@@ -216,6 +229,9 @@ func (artifacts *AttemptArtifacts) Finalize(planDigest, baselineTree, finalTree 
 		return ArtifactManifest{}, fmt.Errorf("encode artifact manifest: %w", err)
 	}
 	body = append(body, '\n')
+	if err := artifacts.rejectRegisteredSecrets(body); err != nil {
+		return ArtifactManifest{}, err
+	}
 	if err := os.WriteFile(filepath.Join(artifacts.directory, "manifest.json"), body, 0o600); err != nil {
 		return ArtifactManifest{}, fmt.Errorf("write artifact manifest: %w", err)
 	}
@@ -224,6 +240,9 @@ func (artifacts *AttemptArtifacts) Finalize(planDigest, baselineTree, finalTree 
 
 // VerifyArtifactManifest authenticates metadata and every retained file without executing artifact content.
 func VerifyArtifactManifest(directory string, key []byte) (ArtifactManifest, error) {
+	if err := validateArtifactAuthenticationKey(key); err != nil {
+		return ArtifactManifest{}, err
+	}
 	body, err := os.ReadFile(filepath.Join(directory, "manifest.json"))
 	if err != nil {
 		return ArtifactManifest{}, fmt.Errorf("read artifact manifest: %w", err)
@@ -253,6 +272,61 @@ func VerifyArtifactManifest(directory string, key []byte) (ArtifactManifest, err
 		return ArtifactManifest{}, fmt.Errorf("artifact file identities do not match the manifest")
 	}
 	return manifest, nil
+}
+
+// validateArtifactAuthenticationKey rejects keys too weak to authenticate retained evidence.
+func validateArtifactAuthenticationKey(key []byte) error {
+	if len(key) < 32 {
+		return fmt.Errorf("artifact authentication key must contain at least 32 bytes")
+	}
+	return nil
+}
+
+// rejectRegisteredSecrets prevents an incomplete redaction from reaching durable storage.
+func (artifacts *AttemptArtifacts) rejectRegisteredSecrets(body []byte) error {
+	if artifacts.redactor.containsSecret(string(body)) {
+		return fmt.Errorf("artifact contains a registered secret")
+	}
+	return nil
+}
+
+// scanRetainedArtifacts fails finalization if a file bypassed normal redacted write paths.
+func (artifacts *AttemptArtifacts) scanRetainedArtifacts() error {
+	entries, err := os.ReadDir(artifacts.directory)
+	if err != nil {
+		return fmt.Errorf("read artifact directory: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.Name() == "manifest.json" {
+			continue
+		}
+		if artifacts.redactor.containsSecret(entry.Name()) {
+			return fmt.Errorf("artifact contains a registered secret")
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("inspect artifact %s: %w", entry.Name(), err)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("artifact %s is not a regular file", entry.Name())
+		}
+		file, err := os.Open(filepath.Join(artifacts.directory, entry.Name()))
+		if err != nil {
+			return fmt.Errorf("open artifact %s: %w", entry.Name(), err)
+		}
+		body, readErr := io.ReadAll(io.LimitReader(file, maxArtifactFileSize+1))
+		closeErr := file.Close()
+		if err := errors.Join(readErr, closeErr); err != nil {
+			return fmt.Errorf("read artifact %s: %w", entry.Name(), err)
+		}
+		if len(body) > maxArtifactFileSize {
+			return fmt.Errorf("artifact %s exceeds %d bytes", entry.Name(), maxArtifactFileSize)
+		}
+		if err := artifacts.rejectRegisteredSecrets(body); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // validateArtifactName confines writes to the fixed evidence surface.
