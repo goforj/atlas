@@ -106,6 +106,9 @@ func TestClientDropsNotificationsBeyondByteLimit(t *testing.T) {
 	if got := client.NotificationsDropped(); got != 1 {
 		t.Fatalf("notifications dropped = %d, want 1", got)
 	}
+	if got := client.NotificationsDroppedBytes(); got != 6 {
+		t.Fatalf("notification bytes dropped = %d, want 6", got)
+	}
 
 	for _, want := range []string{"1", "2"} {
 		notification := <-client.Notifications()
@@ -236,6 +239,7 @@ func closeClient(t *testing.T, client *Client) {
 func newNotificationTestClient(byteLimit int) *Client {
 	return &Client{
 		notifications:         make(chan Notification),
+		notificationLimit:     defaultNotificationLimit,
 		notificationByteLimit: byteLimit,
 		notificationWake:      make(chan struct{}, 1),
 		notificationCancel:    make(chan struct{}),

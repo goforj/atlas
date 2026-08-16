@@ -75,7 +75,7 @@ func NewLocalGuidanceDiagnostic(options LocalGuidanceDiagnosticOptions) (*LocalG
 	if err != nil {
 		return nil, err
 	}
-	artifacts, err := NewArtifactStore(options.ArtifactRoot, options.ArtifactKey, options.Redactor)
+	artifacts, err := NewArtifactStore(options.ArtifactRoot, options.ArtifactKey, agent.credential.Redactor(options.Redactor))
 	if err != nil {
 		return nil, err
 	}

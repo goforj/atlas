@@ -84,6 +84,19 @@ func (runner Runner) RunGuidanceDiagnostic(ctx context.Context, request Guidance
 		if left.PreparedTree != "" && right.PreparedTree != "" && left.PreparedTree != right.PreparedTree {
 			return result, fmt.Errorf("paired treatments received different prepared trees")
 		}
+		if !samePairedAgentIdentity(left, right) {
+			return result, fmt.Errorf("paired treatments received different agent or provider identities")
+		}
 	}
 	return result, nil
+}
+
+// samePairedAgentIdentity prevents treatment comparisons across different executable, model, provider, version, or authority identities.
+func samePairedAgentIdentity(left, right AttemptResult) bool {
+	return left.Agent == right.Agent &&
+		left.AgentDigest == right.AgentDigest &&
+		left.AgentVersion == right.AgentVersion &&
+		left.Model == right.Model &&
+		left.ModelProvider == right.ModelProvider &&
+		left.ProviderAuthorityDigest == right.ProviderAuthorityDigest
 }

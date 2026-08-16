@@ -292,6 +292,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	result.Agent = preparedAgent.Name
 	result.AgentExecutable = preparedAgent.Executable
 	result.AgentDigest = preparedAgent.ExecutableDigest
+	result.ProviderAuthorityDigest = preparedAgent.AuthorityDigest
 	result.Model = preparedAgent.Model
 	baselineDiff, baselineTree, err = snapshotProjectForDiff(preparedProject.Result().ProjectRoot)
 	if err != nil {
@@ -334,6 +335,9 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.Model = sessionIdentity.Model
 	}
 	result.ModelProvider = sessionIdentity.ModelProvider
+	if sessionIdentity.AuthorityDigest != "" {
+		result.ProviderAuthorityDigest = sessionIdentity.AuthorityDigest
+	}
 	result.Milestones = append(result.Milestones, MilestoneProviderSessionStarted)
 	sessionClosed := false
 	defer func() {
@@ -360,6 +364,12 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	result.Milestones = append(result.Milestones, MilestonePromptDelivered)
 	agentResult, err := session.Wait(runContext)
 	artifactEvents = appendAdapterEvents(artifactEvents, agentResult.Events)
+	result.ProviderTelemetry = cloneProviderTelemetry(agentResult.Telemetry)
+	if request.Intent == IntentDiagnostic && adapterCommandCount(turn.Events, agentResult) > uint64(request.Definition.Limits.Commands) {
+		result.AgentOutcome = AgentAdapterError
+		result.EvaluationStatus = EvaluationDiagnostic
+		return result, fmt.Errorf("adapter telemetry exceeded command limit %d", request.Definition.Limits.Commands)
+	}
 	if err != nil {
 		result.AgentOutcome = classifyOperationError(runContext, err, AgentProviderError)
 		observed, observationErr := backendEnvironment.ObservedEvents(ctx)
@@ -379,11 +389,6 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 			result.EvaluationStatus = EvaluationEvaluatorError
 		}
 		return result, fmt.Errorf("wait for agent: %w", err)
-	}
-	if request.Intent == IntentDiagnostic && countCommandEvents(artifactEvents) > request.Definition.Limits.Commands {
-		result.AgentOutcome = AgentAdapterError
-		result.EvaluationStatus = EvaluationDiagnostic
-		return result, fmt.Errorf("adapter telemetry exceeded command limit %d", request.Definition.Limits.Commands)
 	}
 	supervisorEvents, err = backendEnvironment.ObservedEvents(ctx)
 	if err != nil {
@@ -470,6 +475,24 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	}
 	result.Milestones = append(result.Milestones, MilestoneEvaluationTerminal)
 	return result, nil
+}
+
+// adapterCommandCount uses the adapter's complete observed count when bounded retention omitted result events.
+func adapterCommandCount(turnEvents []Event, result AgentResult) uint64 {
+	count := uint64(countCommandEvents(turnEvents))
+	if result.Telemetry != nil {
+		return count + result.Telemetry.CommandsObserved
+	}
+	return count + uint64(countCommandEvents(result.Events))
+}
+
+// cloneProviderTelemetry keeps result reports independent from adapter-owned mutable storage.
+func cloneProviderTelemetry(telemetry *ProviderTelemetry) *ProviderTelemetry {
+	if telemetry == nil {
+		return nil
+	}
+	cloned := *telemetry
+	return &cloned
 }
 
 // attemptNeedsTriage keeps valid evidence distinct from a successful application or workflow result.

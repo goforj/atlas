@@ -82,12 +82,14 @@ type Client struct {
 	notificationMu        sync.Mutex
 	notificationQueue     []queuedNotification
 	notificationBytes     int
+	notificationLimit     int
 	notificationByteLimit int
 	notificationWake      chan struct{}
 	notificationCancel    chan struct{}
 	notificationsClosed   bool
 	notificationsCanceled bool
 	notificationsDropped  uint64
+	notificationDropBytes uint64
 	readerDone            chan struct{}
 	readerMu              sync.Mutex
 	readerErr             error
@@ -153,6 +155,7 @@ func Start(ctx context.Context, options StartOptions) (*Client, error) {
 		nextID:                1,
 		pending:               map[uint64]chan protocolMessage{},
 		notifications:         make(chan Notification),
+		notificationLimit:     defaultNotificationLimit,
 		notificationByteLimit: defaultNotificationBytes,
 		notificationWake:      make(chan struct{}, 1),
 		notificationCancel:    make(chan struct{}),
@@ -329,6 +332,13 @@ func (client *Client) NotificationsDropped() uint64 {
 	return client.notificationsDropped
 }
 
+// NotificationsDroppedBytes returns the encoded lifecycle bytes discarded by the bounded telemetry queue.
+func (client *Client) NotificationsDroppedBytes() uint64 {
+	client.notificationMu.Lock()
+	defer client.notificationMu.Unlock()
+	return client.notificationDropBytes
+}
+
 // StderrDropped returns the number of stderr bytes omitted from retained diagnostics.
 func (client *Client) StderrDropped() uint64 {
 	if client == nil {
@@ -456,8 +466,9 @@ func (client *Client) deliverNotification(notification Notification) {
 		client.notificationMu.Unlock()
 		return
 	}
-	if len(client.notificationQueue) >= defaultNotificationLimit || bytes > client.notificationByteLimit-client.notificationBytes {
+	if len(client.notificationQueue) >= client.notificationLimit || bytes > client.notificationByteLimit-client.notificationBytes {
 		client.notificationsDropped++
+		client.notificationDropBytes += uint64(bytes)
 		client.notificationMu.Unlock()
 		return
 	}
