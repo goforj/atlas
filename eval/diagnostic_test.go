@@ -30,7 +30,7 @@ func TestRunGuidanceDiagnosticRunsBothIsolatedTreatments(t *testing.T) {
 		t.Fatalf("attempts = %#v", result.Attempts)
 	}
 	for _, attempt := range result.Attempts {
-		if attempt.Error != "" || attempt.Result.LogicalTrialID != result.LogicalTrialID || attempt.Result.EvaluationStatus != EvaluationValid || attempt.Result.GuidanceProfile != attempt.Profile {
+		if attempt.Error != "" || attempt.Result.LogicalTrialID != result.LogicalTrialID || attempt.Result.EvaluationStatus != EvaluationDiagnostic || attempt.Result.GuidanceProfile != attempt.Profile {
 			t.Fatalf("attempt = %#v", attempt)
 		}
 	}

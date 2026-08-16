@@ -124,6 +124,9 @@ func snapshotProjectForDiff(root string) (projectDiffSnapshot, string, error) {
 		}
 		if path != root {
 			paths = append(paths, path)
+			if len(paths) > maxProjectTreeEntries {
+				return fmt.Errorf("Project tree exceeds %d entries", maxProjectTreeEntries)
+			}
 		}
 		return nil
 	}); err != nil {
@@ -133,6 +136,7 @@ func snapshotProjectForDiff(root string) (projectDiffSnapshot, string, error) {
 
 	entries := projectDiffSnapshot{}
 	retainedContentSize := int64(0)
+	totalContentSize := int64(0)
 	treeHash := sha256.New()
 	for _, path := range paths {
 		relative, err := filepath.Rel(root, path)
@@ -158,8 +162,12 @@ func snapshotProjectForDiff(root string) (projectDiffSnapshot, string, error) {
 			fmt.Fprintf(treeHash, "%s\x00", entry.link)
 		case info.Mode().IsRegular():
 			entry.kind = "file"
+			if info.Size() < 0 || info.Size() > maxProjectTreeBytes-totalContentSize {
+				return nil, "", fmt.Errorf("Project tree exceeds %d bytes", maxProjectTreeBytes)
+			}
+			totalContentSize += info.Size()
 			retainContent := info.Size() <= maxDiffSourceFileSize && retainedContentSize+info.Size() <= maxDiffRetainedContentSize
-			entry.content, entry.digest, entry.tooLarge, entry.binary, err = readDiffFile(path, retainContent, treeHash)
+			entry.content, entry.digest, entry.tooLarge, entry.binary, err = readDiffFile(path, retainContent, treeHash, info.Size())
 			if err != nil {
 				return nil, "", err
 			}
@@ -175,7 +183,7 @@ func snapshotProjectForDiff(root string) (projectDiffSnapshot, string, error) {
 }
 
 // readDiffFile hashes all content while retaining only text selected by the snapshot's aggregate budget.
-func readDiffFile(path string, retainContent bool, treeHash io.Writer) ([]byte, string, bool, bool, error) {
+func readDiffFile(path string, retainContent bool, treeHash io.Writer, expectedSize int64) ([]byte, string, bool, bool, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, "", false, false, err
@@ -187,8 +195,12 @@ func readDiffFile(path string, retainContent bool, treeHash io.Writer) ([]byte, 
 	if retainContent {
 		writers = append(writers, &content)
 	}
-	if _, err := io.Copy(io.MultiWriter(writers...), file); err != nil {
+	written, err := io.Copy(io.MultiWriter(writers...), io.LimitReader(file, expectedSize+1))
+	if err != nil {
 		return nil, "", false, false, err
+	}
+	if written != expectedSize {
+		return nil, "", false, false, fmt.Errorf("Project file %q changed size while hashing", path)
 	}
 	body := content.Bytes()
 	binary := retainContent && (bytes.IndexByte(body, 0) >= 0 || !utf8.Valid(body))

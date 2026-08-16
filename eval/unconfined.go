@@ -85,7 +85,7 @@ func (*unconfinedEnvironment) ObservedEvents(context.Context) ([]Event, error) {
 }
 
 // Seal copies the stopped candidate tree into backend-owned verifier input and records its deterministic digest.
-func (environment *unconfinedEnvironment) Seal(_ context.Context) (SealedProject, error) {
+func (environment *unconfinedEnvironment) Seal(ctx context.Context) (SealedProject, error) {
 	if environment == nil {
 		return SealedProject{}, fmt.Errorf("unconfined environment is required")
 	}
@@ -99,7 +99,7 @@ func (environment *unconfinedEnvironment) Seal(_ context.Context) (SealedProject
 	if err != nil {
 		return SealedProject{}, fmt.Errorf("create sealed Project: %w", err)
 	}
-	if err := copyProjectTree(environment.environment.ProjectRoot, root); err != nil {
+	if err := copyProjectTree(ctx, environment.environment.ProjectRoot, root); err != nil {
 		return SealedProject{}, errors.Join(err, os.RemoveAll(root))
 	}
 	digest, err := digestProjectTree(root)

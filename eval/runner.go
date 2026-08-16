@@ -3,10 +3,12 @@ package eval
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -113,6 +115,12 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	if err := runner.validate(); err != nil {
 		return result, err
 	}
+	switch request.Intent {
+	case IntentAuthoritative, IntentDiagnostic:
+	default:
+		result.EvaluationStatus = EvaluationEvaluatorError
+		return result, fmt.Errorf("evaluation intent %q is invalid", request.Intent)
+	}
 	result.Backend = runner.Backend.Name()
 	result.Agent = runner.Agent.Name()
 	if pathsOverlap(runner.Artifacts.root, request.Preparation.DestinationRoot) {
@@ -166,11 +174,9 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	}
 	// Only the backend can attest to candidate actions. Adapter capabilities describe
 	// telemetry support and must never promote provider-originated events to evidence.
-	available := intersectCapabilities(backendCapabilities)
+	available := effectiveBackendCapabilities(backendCapabilities, agentCapabilities.Capabilities)
 	requiredCapabilities := append([]Capability(nil), resolved.Capabilities...)
-	if request.Intent == IntentAuthoritative {
-		requiredCapabilities = append(requiredCapabilities, authoritativeCapabilities...)
-	}
+	requiredCapabilities = append(requiredCapabilities, authoritativeCapabilities...)
 	missing := missingCapabilities(requiredCapabilities, available)
 	result.UnavailableEvidence = append([]Capability(nil), missing...)
 	if len(missing) > 0 && request.Intent != IntentDiagnostic {
@@ -342,15 +348,12 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	result.Milestones = append(result.Milestones, MilestonePromptDelivered)
 	agentResult, err := session.Wait(runContext)
 	artifactEvents = appendAdapterEvents(artifactEvents, agentResult.Events)
-	if len(agentResult.Events) > 0 && !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
-		result.Milestones = append(result.Milestones, MilestoneFirstAgentAction)
-	}
 	if err != nil {
 		result.AgentOutcome = classifyOperationError(runContext, err, AgentProviderError)
 		observed, observationErr := backendEnvironment.ObservedEvents(ctx)
 		if observationErr != nil {
 			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: observationErr.Error()})
-		} else if validationErr := validateSupervisorEvents(observed); validationErr != nil {
+		} else if validationErr := validateSupervisorEvents(observed, requiresSupervisorTerminal(backendCapabilities)); validationErr != nil {
 			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: validationErr.Error()})
 			result.EvaluationStatus = EvaluationEvaluatorError
 		} else {
@@ -370,7 +373,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("collect supervisor events: %w", err)
 	}
-	if err := validateSupervisorEvents(supervisorEvents); err != nil {
+	if err := validateSupervisorEvents(supervisorEvents, requiresSupervisorTerminal(backendCapabilities)); err != nil {
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, err
 	}
@@ -434,7 +437,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	verification.WorkflowConformance = workflow
 	verification.Checks = append(verification.Checks, workflowChecks...)
 	result.Verification = &verification
-	if len(missing) > 0 && request.Intent == IntentDiagnostic {
+	if request.Intent == IntentDiagnostic {
 		verification.FrameworkOutcome = EndpointResult{ID: verification.FrameworkOutcome.ID, Status: EndpointIneligible, Details: "diagnostic backend cannot establish an authoritative framework outcome"}
 		if verification.Contract != nil {
 			verification.Contract = &EndpointResult{ID: verification.Contract.ID, Status: EndpointIneligible, Details: "diagnostic backend cannot establish an authoritative contract outcome"}
@@ -677,6 +680,31 @@ func intersectCapabilities(groups ...[]Capability) []Capability {
 	return intersection
 }
 
+// effectiveBackendCapabilities keeps backend observation authoritative while requiring the adapter to prove properties it can weaken.
+func effectiveBackendCapabilities(backendCapabilities, agentCapabilities []Capability) []Capability {
+	available := intersectCapabilities(backendCapabilities)
+	if capabilityAvailable(agentCapabilities, CapabilityCredentialIsolation) {
+		return available
+	}
+	filtered := available[:0]
+	for _, capability := range available {
+		if capability != CapabilityCredentialIsolation {
+			filtered = append(filtered, capability)
+		}
+	}
+	return filtered
+}
+
+// capabilityAvailable reports whether one component explicitly claims a capability.
+func capabilityAvailable(capabilities []Capability, target Capability) bool {
+	for _, capability := range capabilities {
+		if capability == target {
+			return true
+		}
+	}
+	return false
+}
+
 // missingCapabilities returns the sorted evidence classes unavailable during preflight.
 func missingCapabilities(required, available []Capability) []Capability {
 	availableSet := map[Capability]bool{}
@@ -708,14 +736,70 @@ func classifyOperationError(ctx context.Context, err error, fallback AgentOutcom
 	return fallback
 }
 
-// validateSupervisorEvents rejects adapter telemetry from the evidence channel.
-func validateSupervisorEvents(events []Event) error {
+// validateSupervisorEvents rejects ambiguous or adapter-controlled records before workflow correlation.
+func validateSupervisorEvents(events []Event, requireTerminal bool) error {
+	var lastSequence uint64
+	started := make(map[string]bool)
+	finished := make(map[string]bool)
+	terminalEvents := 0
 	for _, event := range events {
 		if event.Source != EventSourceSupervisor {
 			return fmt.Errorf("event %d does not have supervisor provenance", event.Sequence)
 		}
+		if event.Sequence == 0 || event.Sequence <= lastSequence {
+			return fmt.Errorf("supervisor event sequence %d is not strictly increasing", event.Sequence)
+		}
+		lastSequence = event.Sequence
+		switch event.Kind {
+		case EventCommandStarted:
+			commandID := strings.TrimSpace(event.Fields[EventFieldCommandID])
+			if commandID == "" || started[commandID] {
+				return fmt.Errorf("supervisor command start %d has an empty or duplicate command ID", event.Sequence)
+			}
+			if strings.TrimSpace(event.Fields[EventFieldExecutableDigest]) == "" {
+				return fmt.Errorf("supervisor command start %q has no executable digest", commandID)
+			}
+			var arguments []string
+			if err := json.Unmarshal([]byte(event.Fields[EventFieldArguments]), &arguments); err != nil {
+				return fmt.Errorf("supervisor command start %q has invalid arguments: %w", commandID, err)
+			}
+			started[commandID] = true
+		case EventCommandFinished:
+			commandID := strings.TrimSpace(event.Fields[EventFieldCommandID])
+			if commandID == "" || !started[commandID] || finished[commandID] {
+				return fmt.Errorf("supervisor command finish %d has an unmatched or duplicate command ID", event.Sequence)
+			}
+			if _, err := strconv.Atoi(event.Fields[EventFieldExitCode]); err != nil {
+				return fmt.Errorf("supervisor command finish %q has an invalid exit code", commandID)
+			}
+			finished[commandID] = true
+		case EventRunFinished:
+			terminalEvents++
+			if terminalEvents > 1 || event.Sequence != events[len(events)-1].Sequence {
+				return fmt.Errorf("supervisor run terminal must appear exactly once at the end")
+			}
+		}
+	}
+	for commandID := range started {
+		if !finished[commandID] {
+			return fmt.Errorf("supervisor command %q has no completion", commandID)
+		}
+	}
+	if requireTerminal && terminalEvents != 1 {
+		return fmt.Errorf("supervisor event stream has no unique terminal marker")
 	}
 	return nil
+}
+
+// requiresSupervisorTerminal identifies capabilities whose observations need an explicit complete-stream marker.
+func requiresSupervisorTerminal(capabilities []Capability) bool {
+	for _, capability := range capabilities {
+		switch capability {
+		case CapabilityCommands, CapabilityFileReads, CapabilityFileWrites, CapabilityMCPToolCalls:
+			return true
+		}
+	}
+	return false
 }
 
 // closeEvaluationResource gives teardown a fresh budget and preserves every secondary failure.
