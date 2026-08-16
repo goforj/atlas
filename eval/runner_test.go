@@ -522,8 +522,8 @@ func TestRunnerRejectsUnknownIntent(t *testing.T) {
 	}
 }
 
-// TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence retains useful diagnostics without publishing untrusted top-level outcomes.
-func TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence(t *testing.T) {
+// TestRunnerDiagnosticRejectsAdapterCommandOverflow keeps diagnostic telemetry bounded without treating it as trusted evidence.
+func TestRunnerDiagnosticRejectsAdapterCommandOverflow(t *testing.T) {
 	runner, _, preparer, backend, agent := newFakeRunner(t)
 	agent.capabilities = nil
 	backend.capabilities = nil
@@ -536,10 +536,10 @@ func TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence(t *testing.T) {
 	}
 
 	result, err := runner.Run(context.Background(), request)
-	if err != nil {
-		t.Fatalf("Run(): %v", err)
+	if err == nil || !strings.Contains(err.Error(), "adapter telemetry exceeded command limit 1") {
+		t.Fatalf("Run() = %#v, %v, want diagnostic command budget failure", result, err)
 	}
-	if result.EvaluationStatus != EvaluationDiagnostic || result.Verification == nil || result.Verification.FrameworkOutcome.Status != EndpointIneligible || result.Verification.WorkflowConformance.Status != EndpointIneligible {
+	if result.EvaluationStatus != EvaluationDiagnostic || result.AgentOutcome != AgentAdapterError || result.Verification != nil {
 		t.Fatalf("diagnostic result = %#v", result)
 	}
 	if len(result.UnavailableEvidence) != len(authoritativeCapabilities)+1 || !capabilityAvailable(result.UnavailableEvidence, CapabilityCommands) {
@@ -742,8 +742,8 @@ func TestRunnerPreservesCleanupFailureBesideAgentOutcome(t *testing.T) {
 	runner, _, preparer, _, _ := newFakeRunner(t)
 	preparer.project.closeErr = errors.New("cleanup failed")
 	result, err := runner.Run(context.Background(), fakeAttemptRequest())
-	if err != nil {
-		t.Fatalf("Run(): %v", err)
+	if err == nil || !strings.Contains(err.Error(), "deferred cleanup") {
+		t.Fatalf("Run() = %#v, %v, want deferred cleanup failure", result, err)
 	}
 	if result.AgentOutcome != AgentCompleted || result.EvaluationStatus != EvaluationEvaluatorError {
 		t.Fatalf("attempt result = %#v", result)

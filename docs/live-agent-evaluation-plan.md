@@ -263,10 +263,12 @@ use the local workspace run as the final release-qualified evidence.
 - Run live evaluations only through an explicit command or test tag.
 - Keep authoritative sandbox claims disabled until the container or VM backend
   and negative isolation suite exist.
-- Treat `limits.commands` as post-run diagnostic validation under the local
-  backend. An authoritative backend must enforce the same limit online from
-  its supervisor-owned command stream and terminate the owned job at the
-  boundary; the limit is already passed in `BackendRequest` for that purpose.
+- Treat `limits.commands` as a post-run adapter-telemetry diagnostic under the
+  local backend. An overflow fails the diagnostic attempt, but remains
+  non-authoritative and cannot establish workflow evidence. An authoritative
+  backend must enforce the same limit online from its supervisor-owned command
+  stream and terminate the owned job at the boundary; the limit is already
+  passed in `BackendRequest` for that purpose.
 - Treat failed attempts as artifacts to classify, not flaky tests to rerun
   until green.
 

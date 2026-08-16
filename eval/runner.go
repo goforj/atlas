@@ -110,6 +110,9 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_manifest", Message: err.Error()})
 			result.EvaluationStatus = EvaluationEvaluatorError
 		}
+		if runErr == nil && result.EvaluationStatus == EvaluationEvaluatorError {
+			runErr = fmt.Errorf("evaluation integrity failed during deferred cleanup or artifact finalization")
+		}
 	}()
 
 	if err := runner.validate(); err != nil {
@@ -377,6 +380,11 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		}
 		return result, fmt.Errorf("wait for agent: %w", err)
 	}
+	if request.Intent == IntentDiagnostic && countCommandEvents(artifactEvents) > request.Definition.Limits.Commands {
+		result.AgentOutcome = AgentAdapterError
+		result.EvaluationStatus = EvaluationDiagnostic
+		return result, fmt.Errorf("adapter telemetry exceeded command limit %d", request.Definition.Limits.Commands)
+	}
 	supervisorEvents, err = backendEnvironment.ObservedEvents(ctx)
 	if err != nil {
 		result.EvaluationStatus = EvaluationEvaluatorError
@@ -543,7 +551,7 @@ func digestGuidance(guidance Guidance) string {
 	return fmt.Sprintf("sha256:%x", hash.Sum(nil))
 }
 
-// countCommandEvents verifies the adapter honored its command budget without double-counting completion events.
+// countCommandEvents counts command starts without double-counting completion events.
 func countCommandEvents(events []Event) int {
 	count := 0
 	for _, event := range events {
