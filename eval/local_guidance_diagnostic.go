@@ -61,11 +61,12 @@ func NewLocalGuidanceDiagnostic(options LocalGuidanceDiagnosticOptions) (*LocalG
 	if err := os.MkdirAll(filepath.Join(options.WorkRoot, "backend"), 0o700); err != nil {
 		return nil, fmt.Errorf("create local diagnostic backend work root: %w", err)
 	}
+	verifierEnvironment := append([]string{}, options.VerifierEnvironment...)
 	verifierCommands := VerifierCommands{
 		WorkRoot:       filepath.Join(options.WorkRoot, "verifier"),
 		GoExecutable:   options.GoExecutable,
 		ForjExecutable: options.ForjExecutable,
-		Environment:    append([]string(nil), options.VerifierEnvironment...),
+		Environment:    verifierEnvironment,
 	}
 	registry, err := NewRegistry(PromotedWorkflows(), PromotedVerifiers(verifierCommands))
 	if err != nil {

@@ -34,6 +34,11 @@ func TestNewLocalGuidanceDiagnosticOwnsStandardWiring(t *testing.T) {
 	if redacted := diagnostic.runner.Artifacts.redactor.Text("local-diagnostic-secret"); redacted != redactedValue {
 		t.Fatalf("artifact redactor did not cover frozen authority: %q", redacted)
 	}
+	verifier := diagnostic.runner.Registry.verifiers["add-http-controller/v1"].(*AddHTTPControllerVerifier)
+	commands := verifier.runner.(VerifierCommands)
+	if commands.Environment == nil || len(commands.Environment) != 0 {
+		t.Fatalf("default verifier environment = %#v, want an explicit clean environment", commands.Environment)
+	}
 }
 
 // TestNewLocalGuidanceDiagnosticRejectsMissingHostBoundary prevents an incomplete host command from creating a partly trusted service.
