@@ -13,6 +13,15 @@ import (
 
 const evaluationCleanupTimeout = 10 * time.Second
 
+var authoritativeCapabilities = []Capability{
+	CapabilityProcessCleanup,
+	CapabilityCredentialIsolation,
+	CapabilityHostFilesystemIsolation,
+	CapabilityNetworkEnforcement,
+	CapabilityVerifierIsolation,
+	CapabilityArtifactIsolation,
+}
+
 // Runner coordinates trusted preparation, one agent session, verification, and cleanup.
 type Runner struct {
 	Registry  *Registry
@@ -61,7 +70,8 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	var baselineTree string
 	var finalTree string
 	var baselineDiff projectDiffSnapshot
-	var events []Event
+	var supervisorEvents []Event
+	var artifactEvents []Event
 	var agentCapabilities AgentCapabilities
 	var backendCapabilities []Capability
 	var err error
@@ -70,7 +80,9 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		if artifacts == nil {
 			return
 		}
-		failures := writeAttemptReportArtifacts(artifacts, request, result, events, agentCapabilities.Capabilities, backendCapabilities)
+		normalizedEvents := normalizeArtifactEvents(artifactEvents)
+		recordAttemptEvents(&result, artifacts, normalizedEvents)
+		failures := writeAttemptReportArtifacts(artifacts, request, result, normalizedEvents, agentCapabilities.Capabilities, backendCapabilities)
 		result.SecondaryFailures = append(result.SecondaryFailures, failures...)
 		if len(failures) > 0 {
 			result.EvaluationStatus = EvaluationEvaluatorError
@@ -155,7 +167,11 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	// Only the backend can attest to candidate actions. Adapter capabilities describe
 	// telemetry support and must never promote provider-originated events to evidence.
 	available := intersectCapabilities(backendCapabilities)
-	missing := missingCapabilities(resolved.Capabilities, available)
+	requiredCapabilities := append([]Capability(nil), resolved.Capabilities...)
+	if request.Intent == IntentAuthoritative {
+		requiredCapabilities = append(requiredCapabilities, authoritativeCapabilities...)
+	}
+	missing := missingCapabilities(requiredCapabilities, available)
 	result.UnavailableEvidence = append([]Capability(nil), missing...)
 	if len(missing) > 0 && request.Intent != IntentDiagnostic {
 		result.EvaluationStatus = EvaluationIneligible
@@ -314,6 +330,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	}()
 
 	turn, err := session.Turn(runContext, AgentTurn{Prompt: request.Definition.Prompt, Limits: request.Definition.Limits})
+	artifactEvents = appendAdapterEvents(artifactEvents, turn.Events)
 	if err != nil {
 		result.AgentOutcome = classifyOperationError(runContext, err, AgentAdapterError)
 		return result, fmt.Errorf("deliver prompt: %w", err)
@@ -323,15 +340,14 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		return result, fmt.Errorf("agent did not accept the prompt")
 	}
 	result.Milestones = append(result.Milestones, MilestonePromptDelivered)
-	_ = turn.Events // Adapter telemetry is intentionally excluded from trusted evaluation evidence.
-
 	agentResult, err := session.Wait(runContext)
+	artifactEvents = appendAdapterEvents(artifactEvents, agentResult.Events)
 	if err != nil {
 		result.AgentOutcome = classifyOperationError(runContext, err, AgentProviderError)
 		if observed, observationErr := backendEnvironment.ObservedEvents(ctx); observationErr == nil && validateSupervisorEvents(observed) == nil {
-			events = observed
-			recordAttemptEvents(&result, artifacts, events)
-			if len(events) > 0 {
+			supervisorEvents = observed
+			artifactEvents = appendSupervisorEvents(artifactEvents, observed)
+			if len(supervisorEvents) > 0 {
 				result.Milestones = append(result.Milestones, MilestoneFirstAgentAction)
 			}
 		} else if observationErr != nil {
@@ -342,23 +358,22 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		}
 		return result, fmt.Errorf("wait for agent: %w", err)
 	}
-	_ = agentResult.Events // Adapter telemetry is intentionally excluded from trusted evaluation evidence.
-	events, err = backendEnvironment.ObservedEvents(ctx)
+	supervisorEvents, err = backendEnvironment.ObservedEvents(ctx)
 	if err != nil {
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("collect supervisor events: %w", err)
 	}
-	if err := validateSupervisorEvents(events); err != nil {
+	if err := validateSupervisorEvents(supervisorEvents); err != nil {
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, err
 	}
-	recordAttemptEvents(&result, artifacts, events)
-	if countCommandEvents(events) > request.Definition.Limits.Commands {
+	artifactEvents = appendSupervisorEvents(artifactEvents, supervisorEvents)
+	if countCommandEvents(supervisorEvents) > request.Definition.Limits.Commands {
 		result.AgentOutcome = AgentAdapterError
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("agent exceeded command limit %d", request.Definition.Limits.Commands)
 	}
-	if len(events) > 0 && !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
+	if len(supervisorEvents) > 0 && !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
 		result.Milestones = append(result.Milestones, MilestoneFirstAgentAction)
 	}
 	result.AgentOutcome = agentResult.Outcome
@@ -402,17 +417,22 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		BaselineTree: baselineTree,
 		FinalTree:    sealed.TreeDigest,
 		Changes:      changes,
-		Events:       events,
+		Events:       supervisorEvents,
 	})
 	if err != nil {
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("verify evaluation: %w", err)
 	}
-	workflow, workflowChecks := EvaluateWorkflow(resolved.Workflow, events, preparedProject.Result().ForjDigest, available)
+	workflow, workflowChecks := EvaluateWorkflow(resolved.Workflow, supervisorEvents, preparedProject.Result().ForjDigest, available)
 	verification.WorkflowConformance = workflow
 	verification.Checks = append(verification.Checks, workflowChecks...)
 	result.Verification = &verification
 	if len(missing) > 0 && request.Intent == IntentDiagnostic {
+		verification.FrameworkOutcome = EndpointResult{ID: verification.FrameworkOutcome.ID, Status: EndpointIneligible, Details: "diagnostic backend cannot establish an authoritative framework outcome"}
+		if verification.Contract != nil {
+			verification.Contract = &EndpointResult{ID: verification.Contract.ID, Status: EndpointIneligible, Details: "diagnostic backend cannot establish an authoritative contract outcome"}
+		}
+		result.Verification = &verification
 		result.EvaluationStatus = EvaluationDiagnostic
 	} else if result.EvaluationStatus != EvaluationEvaluatorError {
 		if result.AgentOutcome == AgentAbstained {
@@ -559,6 +579,33 @@ func recordAttemptEvents(result *AttemptResult, artifacts *AttemptArtifacts, eve
 			return
 		}
 	}
+}
+
+// appendAdapterEvents retains provider telemetry for diagnostics without allowing it to impersonate supervisor evidence.
+func appendAdapterEvents(destination []Event, events []Event) []Event {
+	for _, event := range events {
+		event.Source = EventSourceAdapter
+		destination = append(destination, event)
+	}
+	return destination
+}
+
+// appendSupervisorEvents retains validated backend observations with their trusted source classification.
+func appendSupervisorEvents(destination []Event, events []Event) []Event {
+	for _, event := range events {
+		event.Source = EventSourceSupervisor
+		destination = append(destination, event)
+	}
+	return destination
+}
+
+// normalizeArtifactEvents produces one stable sequence while preserving each event's evidence boundary.
+func normalizeArtifactEvents(events []Event) []Event {
+	result := append([]Event(nil), events...)
+	for index := range result {
+		result[index].Sequence = uint64(index + 1)
+	}
+	return result
 }
 
 // validateResolvedPreparation prevents a preparer from swapping the requested scenario or exposing target work.

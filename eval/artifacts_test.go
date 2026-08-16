@@ -10,7 +10,7 @@ import (
 
 // TestArtifactStoreRedactsBeforePersistenceAndAuthenticatesFiles verifies the supervisor evidence boundary end to end.
 func TestArtifactStoreRedactsBeforePersistenceAndAuthenticatesFiles(t *testing.T) {
-	root := t.TempDir()
+	root := filepath.Join(t.TempDir(), "artifacts")
 	key := []byte("0123456789abcdef0123456789abcdef")
 	secret := "provider-secret-canary"
 	store, err := NewArtifactStore(root, key, NewRedactor([]string{secret}))
@@ -76,7 +76,7 @@ func TestArtifactStoreRedactsBeforePersistenceAndAuthenticatesFiles(t *testing.T
 
 // TestArtifactStoreRejectsAgentControlledPaths keeps artifact writes on a fixed supervisor-owned surface.
 func TestArtifactStoreRejectsAgentControlledPaths(t *testing.T) {
-	store, err := NewArtifactStore(t.TempDir(), []byte("0123456789abcdef0123456789abcdef"), NewRedactor(nil))
+	store, err := NewArtifactStore(filepath.Join(t.TempDir(), "artifacts"), []byte("0123456789abcdef0123456789abcdef"), NewRedactor(nil))
 	if err != nil {
 		t.Fatalf("NewArtifactStore(): %v", err)
 	}
@@ -176,7 +176,7 @@ func TestArtifactStoreCreatesPrivateRootOrRejectsUnsafeExistingRoots(t *testing.
 
 // TestAttemptArtifactsRejectsNonMonotonicEvents keeps retained timelines unambiguous.
 func TestAttemptArtifactsRejectsNonMonotonicEvents(t *testing.T) {
-	store, err := NewArtifactStore(t.TempDir(), []byte("0123456789abcdef0123456789abcdef"), NewRedactor(nil))
+	store, err := NewArtifactStore(filepath.Join(t.TempDir(), "artifacts"), []byte("0123456789abcdef0123456789abcdef"), NewRedactor(nil))
 	if err != nil {
 		t.Fatalf("NewArtifactStore(): %v", err)
 	}
@@ -197,7 +197,7 @@ func TestAttemptArtifactsRejectsNonMonotonicEvents(t *testing.T) {
 
 // TestVerifyArtifactManifestDetectsTampering proves retained evidence cannot change silently.
 func TestVerifyArtifactManifestDetectsTampering(t *testing.T) {
-	root := t.TempDir()
+	root := filepath.Join(t.TempDir(), "artifacts")
 	key := []byte("0123456789abcdef0123456789abcdef")
 	store, err := NewArtifactStore(root, key, NewRedactor(nil))
 	if err != nil {
@@ -240,7 +240,7 @@ func TestVerifyArtifactManifestRequiresAuthenticationKey(t *testing.T) {
 
 // TestArtifactStoreCanaryRejectsRegisteredSecretsBeforeFinalization keeps bypassed writes from becoming authenticated evidence.
 func TestArtifactStoreCanaryRejectsRegisteredSecretsBeforeFinalization(t *testing.T) {
-	root := t.TempDir()
+	root := filepath.Join(t.TempDir(), "artifacts")
 	secret := "canary-secret-not-for-artifacts"
 	store, err := NewArtifactStore(root, []byte("0123456789abcdef0123456789abcdef"), NewRedactor([]string{secret}))
 	if err != nil {
@@ -265,7 +265,7 @@ func TestArtifactStoreCanaryRejectsRegisteredSecretsBeforeFinalization(t *testin
 func TestArtifactStoreRedactsQuotedCredentialTokens(t *testing.T) {
 	accessToken := "quoted-access-token-value"
 	token := "quoted-token-value"
-	store, err := NewArtifactStore(t.TempDir(), []byte("0123456789abcdef0123456789abcdef"), NewRedactor([]string{accessToken, token}))
+	store, err := NewArtifactStore(filepath.Join(t.TempDir(), "artifacts"), []byte("0123456789abcdef0123456789abcdef"), NewRedactor([]string{accessToken, token}))
 	if err != nil {
 		t.Fatal(err)
 	}
