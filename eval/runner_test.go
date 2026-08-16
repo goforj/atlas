@@ -756,6 +756,10 @@ func TestValidateSupervisorEventsRejectsAmbiguousCommandCorrelation(t *testing.T
 		{name: "unmatched finish", events: []Event{{Sequence: 1, Source: EventSourceSupervisor, Kind: EventCommandFinished, Fields: map[string]string{EventFieldCommandID: "command-1", EventFieldExitCode: "0"}}}},
 		{name: "unfinished command", events: []Event{validStart}},
 		{name: "invalid arguments", events: []Event{{Sequence: 1, Source: EventSourceSupervisor, Kind: EventCommandStarted, Fields: map[string]string{EventFieldCommandID: "command-1", EventFieldExecutableDigest: "sha256:forj", EventFieldArguments: `{}`}}}},
+		{name: "missing file path", events: []Event{{Sequence: 1, Source: EventSourceSupervisor, Kind: EventFileRead}}},
+		{name: "escaping file path", events: []Event{{Sequence: 1, Source: EventSourceSupervisor, Kind: EventFileWrite, Fields: map[string]string{EventFieldPath: "../outside"}}}},
+		{name: "absolute file path", events: []Event{{Sequence: 1, Source: EventSourceSupervisor, Kind: EventFileRead, Fields: map[string]string{EventFieldPath: "/tmp/outside"}}}},
+		{name: "windows absolute file path", events: []Event{{Sequence: 1, Source: EventSourceSupervisor, Kind: EventFileRead, Fields: map[string]string{EventFieldPath: `C:\outside`}}}},
 		{name: "terminal is not final", events: []Event{{Sequence: 1, Source: EventSourceSupervisor, Kind: EventRunFinished}, {Sequence: 2, Source: EventSourceSupervisor, Kind: EventMessage}}},
 	} {
 		t.Run(test.name, func(t *testing.T) {

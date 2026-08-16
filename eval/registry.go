@@ -2,7 +2,9 @@ package eval
 
 import (
 	"fmt"
+	"path"
 	"sort"
+	"strings"
 )
 
 // Registry owns the promoted workflow and verifier contracts available to manifest resolution.
@@ -34,7 +36,7 @@ func NewRegistry(workflows []WorkflowExpectation, verifiers []Verifier) (*Regist
 		}
 		seenRequirements := map[string]bool{}
 		cloned := workflow
-		cloned.Requirements = append([]WorkflowRequirement(nil), workflow.Requirements...)
+		cloned.Requirements = cloneWorkflowRequirements(workflow.Requirements)
 		cloned.Generators = cloneGeneratorRequirements(workflow.Generators)
 		for _, requirement := range cloned.Requirements {
 			if !evaluationIDPattern.MatchString(requirement.ID) {
@@ -48,6 +50,16 @@ func NewRegistry(workflows []WorkflowExpectation, verifiers []Verifier) (*Regist
 			}
 			if requirement.Capability == "" {
 				return nil, fmt.Errorf("workflow %q requirement %q has no observation capability", workflow.ID, requirement.ID)
+			}
+			for _, pattern := range requirement.Paths {
+				normalized := strings.ReplaceAll(strings.TrimSpace(pattern), "\\", "/")
+				firstSegment := strings.SplitN(normalized, "/", 2)[0]
+				if normalized == "" || normalized != pattern || path.IsAbs(normalized) || strings.Contains(firstSegment, ":") || strings.HasPrefix(path.Clean(normalized), "../") {
+					return nil, fmt.Errorf("workflow %q requirement %q has unsafe Project path pattern %q", workflow.ID, requirement.ID, pattern)
+				}
+				if _, err := path.Match(normalized, "candidate"); err != nil {
+					return nil, fmt.Errorf("workflow %q requirement %q has invalid Project path pattern %q: %w", workflow.ID, requirement.ID, pattern, err)
+				}
 			}
 			seenRequirements[requirement.ID] = true
 		}
@@ -79,6 +91,16 @@ func NewRegistry(workflows []WorkflowExpectation, verifiers []Verifier) (*Regist
 		registry.verifiers[id] = verifier
 	}
 	return registry, nil
+}
+
+// cloneWorkflowRequirements prevents callers from mutating promoted observation paths after registration.
+func cloneWorkflowRequirements(requirements []WorkflowRequirement) []WorkflowRequirement {
+	cloned := make([]WorkflowRequirement, 0, len(requirements))
+	for _, requirement := range requirements {
+		requirement.Paths = append([]string(nil), requirement.Paths...)
+		cloned = append(cloned, requirement)
+	}
+	return cloned
 }
 
 // Resolve binds exact references and computes capabilities without allowing manifest overrides.

@@ -33,7 +33,7 @@ func TestEvaluateWorkflowRequiresSuccessfulTrustedGenerator(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			result, checks := EvaluateWorkflow(workflow, test.events, test.digest, []Capability{CapabilityCommands})
-			if result.Status != test.wantStatus || len(checks) != 1 || checks[0].Status != test.wantStatus {
+			if result.Status != test.wantStatus || len(checks) != 2 || checks[0].Kind != RequirementQuality || checks[0].Status != EndpointIneligible || checks[1].Kind != RequirementWorkflow || checks[1].Status != test.wantStatus {
 				t.Fatalf("EvaluateWorkflow() = %#v, %#v", result, checks)
 			}
 		})
@@ -43,8 +43,36 @@ func TestEvaluateWorkflowRequiresSuccessfulTrustedGenerator(t *testing.T) {
 // TestEvaluateWorkflowMarksUnavailableEvidenceIneligible preserves diagnostic outcome checks without inventing conformance proof.
 func TestEvaluateWorkflowMarksUnavailableEvidenceIneligible(t *testing.T) {
 	result, checks := EvaluateWorkflow(PromotedWorkflows()[0], nil, "sha256:forj", nil)
-	if result.Status != EndpointIneligible || len(checks) != 1 || checks[0].Status != EndpointIneligible {
+	if result.Status != EndpointIneligible || len(checks) != 2 || checks[0].Status != EndpointIneligible || checks[1].Status != EndpointIneligible {
 		t.Fatalf("EvaluateWorkflow() = %#v, %#v", result, checks)
+	}
+}
+
+// TestEvaluateWorkflowReportsScopedInspectionWithoutMakingQualityAConformanceGate proves optional evidence stays visible and correctly ordered.
+func TestEvaluateWorkflowReportsScopedInspectionWithoutMakingQualityAConformanceGate(t *testing.T) {
+	workflow := WorkflowExpectation{
+		ID: "workflow/v1",
+		Requirements: []WorkflowRequirement{{
+			ID: "inspect-service", Kind: RequirementQuality, Capability: CapabilityFileReads, Paths: []string{"internal/invoices/**"},
+		}},
+	}
+	tests := []struct {
+		name       string
+		events     []Event
+		wantStatus EndpointStatus
+	}{
+		{name: "matching read", events: []Event{{Kind: EventFileRead, Fields: map[string]string{EventFieldPath: "internal/invoices/service.go"}}}, wantStatus: EndpointPassed},
+		{name: "unrelated read", events: []Event{{Kind: EventFileRead, Fields: map[string]string{EventFieldPath: "README.md"}}}, wantStatus: EndpointFailed},
+		{name: "absolute Windows read", events: []Event{{Kind: EventFileRead, Fields: map[string]string{EventFieldPath: `C:\internal\invoices\service.go`}}}, wantStatus: EndpointFailed},
+		{name: "read after mutation", events: []Event{{Kind: EventFileWrite, Fields: map[string]string{EventFieldPath: "internal/invoices/controller.go"}}, {Kind: EventFileRead, Fields: map[string]string{EventFieldPath: "internal/invoices/service.go"}}}, wantStatus: EndpointFailed},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result, checks := EvaluateWorkflow(workflow, test.events, "", []Capability{CapabilityFileReads})
+			if result.Status != EndpointPassed || len(checks) != 1 || checks[0].Kind != RequirementQuality || checks[0].Status != test.wantStatus {
+				t.Fatalf("EvaluateWorkflow() = %#v, %#v", result, checks)
+			}
+		})
 	}
 }
 
@@ -52,8 +80,9 @@ func TestEvaluateWorkflowMarksUnavailableEvidenceIneligible(t *testing.T) {
 func TestPromotedWorkflowReturnsCopies(t *testing.T) {
 	first := PromotedWorkflows()
 	first[0].Generators[0].Arguments[1] = "payments"
+	first[0].Requirements[0].Paths[0] = "README.md"
 	second := PromotedWorkflows()
-	if reflect.DeepEqual(first, second) || second[0].Generators[0].Arguments[1] != "invoices" {
+	if reflect.DeepEqual(first, second) || second[0].Generators[0].Arguments[1] != "invoices" || second[0].Requirements[0].Paths[0] != "app/**" {
 		t.Fatalf("promoted workflow was mutated: %#v", second)
 	}
 }

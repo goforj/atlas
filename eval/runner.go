@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -814,6 +815,13 @@ func validateSupervisorEvents(events []Event, requireTerminal bool) error {
 		}
 		lastSequence = event.Sequence
 		switch event.Kind {
+		case EventFileRead, EventFileWrite:
+			observedPath := strings.TrimSpace(strings.ReplaceAll(event.Fields[EventFieldPath], "\\", "/"))
+			cleanedPath := path.Clean(observedPath)
+			firstSegment := strings.SplitN(observedPath, "/", 2)[0]
+			if observedPath == "" || cleanedPath == "." || path.IsAbs(observedPath) || strings.Contains(firstSegment, ":") || strings.HasPrefix(cleanedPath, "../") {
+				return fmt.Errorf("supervisor file event %d has an invalid Project-relative path", event.Sequence)
+			}
 		case EventCommandStarted:
 			commandID := strings.TrimSpace(event.Fields[EventFieldCommandID])
 			if commandID == "" || started[commandID] {

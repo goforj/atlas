@@ -68,7 +68,7 @@ func (verifier *AddHTTPControllerVerifier) Verify(ctx context.Context, input Ver
 	checks := make([]EndpointResult, 0, 10)
 	checks = append(checks, inspectInvoiceController(input.ProjectRoot)...)
 	checks = append(checks, ownershipChecks(input.Changes)...)
-	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "project-tests", []string{"go", "test", "./..."}, ""))
+	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "project-compile", []string{"go", "test", "./..."}, ""))
 	checks = append(checks, runInvoiceBehaviorProbe(ctx, verifier.runner, input.ProjectRoot))
 	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "app-build", []string{"forj", "build"}, ""))
 	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "route-visible", []string{"forj", "route:list"}, "/api/v1/invoices/:id"))

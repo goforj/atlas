@@ -184,6 +184,102 @@ func Transfer(repository Repository) { repository.WithTransaction(func() { repos
 	}
 }
 
+// TestSurfaceVerifierScopesMethodsToTheirOwningReceiver prevents an unrelated type from satisfying a required application boundary.
+func TestSurfaceVerifierScopesMethodsToTheirOwningReceiver(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "service.go")
+	mutant := `package feature
+type Service struct{}
+type Decoy struct{}
+func (Service) Find() {}
+func (Decoy) Run() { Service{}.Find() }
+func (Service) Run() {}
+`
+	if err := os.WriteFile(path, []byte(mutant), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contract := sourceContract{
+		id:    "service-run",
+		paths: []string{"service.go"},
+		declarations: []declarationContract{{
+			name:          "Run",
+			receiver:      "Service",
+			selectorCalls: []string{"Find"},
+		}},
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+		t.Fatalf("mutant result = %#v, want receiver-scoped failure", result)
+	}
+}
+
+// TestSurfaceVerifierRecognizesGenericCalls keeps typed helper APIs visible to declaration-scoped contracts.
+func TestSurfaceVerifierRecognizesGenericCalls(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "repository.go")
+	source := `package feature
+type Cache struct{}
+func Get[T any](Cache, string) (T, bool) { var zero T; return zero, false }
+type Repository struct{ cache Cache }
+func (repository Repository) Find() { _, _ = Get[string](repository.cache, "key") }
+`
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contract := sourceContract{
+		id:           "generic-call",
+		paths:        []string{"repository.go"},
+		declarations: []declarationContract{{name: "Find", receiver: "Repository", selectorCalls: []string{"Get"}}},
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("result = %#v, want generic call recognized", result)
+	}
+}
+
+// TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality keeps authored coverage visible without making candidate code its own oracle.
+func TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "feature", "service.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("package feature\ntype Service struct{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	verifier := newSurfaceVerifier(&fakeCommandRunner{}, surfaceContract{
+		id:                  "quality-test/v1",
+		allowedChanges:      []string{"internal/feature/*.go"},
+		qualityTestPatterns: []string{"internal/feature/*_test.go"},
+		sources:             []sourceContract{{id: "shape", paths: []string{"internal/feature/*.go"}, identifiers: []string{"Service"}}},
+	})
+	result, err := verifier.Verify(context.Background(), VerificationInput{
+		ProjectRoot: root,
+		Changes:     []ProjectChange{{Path: "internal/feature/service.go", After: ProjectPathState{Kind: "file"}}},
+	})
+	if err != nil {
+		t.Fatalf("Verify(): %v", err)
+	}
+	if result.FrameworkOutcome.Status != EndpointPassed {
+		t.Fatalf("framework outcome = %#v, want quality signal to remain non-gating", result.FrameworkOutcome)
+	}
+	if len(result.Checks) < 2 || result.Checks[1].ID != "focused-tests-added" || result.Checks[1].Kind != RequirementQuality || result.Checks[1].Status != EndpointFailed {
+		t.Fatalf("quality check = %#v", result.Checks)
+	}
+
+	result, err = verifier.Verify(context.Background(), VerificationInput{
+		ProjectRoot: root,
+		Changes: []ProjectChange{
+			{Path: "internal/feature/service.go", After: ProjectPathState{Kind: "file"}},
+			{Path: "internal/feature/service_test.go", After: ProjectPathState{Kind: "file"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Verify(with test): %v", err)
+	}
+	if result.Checks[1].Status != EndpointPassed {
+		t.Fatalf("quality check = %#v, want focused test reported", result.Checks[1])
+	}
+}
+
 // TestSurfaceVerifierRelatesRoutesToTheirAssignedGroup rejects a compiling route placed in the public group.
 func TestSurfaceVerifierRelatesRoutesToTheirAssignedGroup(t *testing.T) {
 	root := t.TempDir()

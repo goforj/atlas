@@ -69,3 +69,26 @@ func TestAttemptSummaryListsFailedChecksAndUsesActualBackend(t *testing.T) {
 		t.Fatalf("summary hardcodes backend wording: %q", summary)
 	}
 }
+
+// TestAttemptSummarySeparatesQualitySignals keeps non-gating engineering feedback distinct from correctness failures.
+func TestAttemptSummarySeparatesQualitySignals(t *testing.T) {
+	request := fakeAttemptRequest()
+	result := AttemptResult{
+		EvaluationStatus: EvaluationValid,
+		Verification: &VerificationResult{
+			FrameworkOutcome:    EndpointResult{ID: "framework", Status: EndpointPassed},
+			WorkflowConformance: EndpointResult{ID: "workflow", Status: EndpointPassed},
+			Checks: []EndpointResult{
+				{ID: "focused-tests-added", Kind: RequirementQuality, Status: EndpointFailed, Details: "no focused test changed"},
+				{ID: "build", Status: EndpointPassed},
+			},
+		},
+	}
+	summary := attemptSummary(request, result)
+	if strings.Contains(summary, "Failed checks:") {
+		t.Fatalf("summary treats quality as correctness failure: %q", summary)
+	}
+	if !strings.Contains(summary, "Quality signals: focused-tests-added=failed: no focused test changed") {
+		t.Fatalf("summary omits quality signal: %q", summary)
+	}
+}

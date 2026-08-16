@@ -111,6 +111,9 @@ func attemptSummary(request AttemptRequest, result AttemptResult) string {
 	if failed := failedChecks(result.Verification); len(failed) > 0 {
 		fmt.Fprintf(&summary, "Failed checks: %s\n", strings.Join(failed, "; "))
 	}
+	if quality := qualitySignals(result.Verification); len(quality) > 0 {
+		fmt.Fprintf(&summary, "Quality signals: %s\n", strings.Join(quality, "; "))
+	}
 	if request.Intent == IntentDiagnostic || len(result.UnavailableEvidence) > 0 {
 		fmt.Fprintf(&summary, "\nDiagnostic limitation: backend %q did not provide all required trusted evidence; this result is diagnostic only and cannot support authoritative outcome or workflow claims.\n", result.Backend)
 	}
@@ -131,7 +134,7 @@ func failedChecks(verification *VerificationResult) []string {
 	endpoints = append(endpoints, verification.Checks...)
 	var failed []string
 	for _, endpoint := range endpoints {
-		if endpoint.Status != EndpointFailed {
+		if endpoint.Kind == RequirementQuality || endpoint.Status != EndpointFailed {
 			continue
 		}
 		entry := endpoint.ID
@@ -141,6 +144,25 @@ func failedChecks(verification *VerificationResult) []string {
 		failed = append(failed, entry)
 	}
 	return failed
+}
+
+// qualitySignals renders non-gating observations separately so a failed preference cannot be mistaken for a correctness failure.
+func qualitySignals(verification *VerificationResult) []string {
+	if verification == nil {
+		return nil
+	}
+	var signals []string
+	for _, endpoint := range verification.Checks {
+		if endpoint.Kind != RequirementQuality {
+			continue
+		}
+		entry := endpoint.ID + "=" + string(endpoint.Status)
+		if endpoint.Details != "" {
+			entry += ": " + endpoint.Details
+		}
+		signals = append(signals, entry)
+	}
+	return signals
 }
 
 // attemptTranscript extracts provider messages as inert redacted text in event order.

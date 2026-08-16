@@ -82,6 +82,7 @@ type WorkflowRequirement struct {
 	Kind        RequirementKind
 	Capability  Capability
 	Description string
+	Paths       []string
 }
 
 // GeneratorRequirement defines one exact successful GoForj generator action without coupling it to a shell spelling.
@@ -111,9 +112,10 @@ const (
 
 // EndpointResult describes one framework, conformance, or contract endpoint.
 type EndpointResult struct {
-	ID      string         `json:"id"`
-	Status  EndpointStatus `json:"status"`
-	Details string         `json:"details,omitempty"`
+	ID      string          `json:"id"`
+	Status  EndpointStatus  `json:"status"`
+	Details string          `json:"details,omitempty"`
+	Kind    RequirementKind `json:"kind,omitempty"`
 }
 
 // VerificationInput contains sealed Project and evidence identities, never candidate verifier code.
@@ -407,6 +409,8 @@ const (
 	EventFieldArguments = "arguments"
 	// EventFieldExitCode records the decimal process exit code for a completed command.
 	EventFieldExitCode = "exit_code"
+	// EventFieldPath records one Project-relative observed file path.
+	EventFieldPath = "path"
 )
 
 // AgentOutcome classifies what happened to the provider-side attempt.
