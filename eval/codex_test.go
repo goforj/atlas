@@ -2,6 +2,7 @@ package eval
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 const (
 	fakeCodexAdapterServerEnv = "ATLAS_FAKE_CODEX_ADAPTER_SERVER"
 	fakeCodexAdapterFloodEnv  = "ATLAS_FAKE_CODEX_ADAPTER_FLOOD"
+	fakeCodexAdapterPacedEnv  = "ATLAS_FAKE_CODEX_ADAPTER_PACED"
 )
 
 // TestAdapterRunsFreshAttributedDiagnosticSession exercises guidance attribution and event normalization through the real protocol client.
@@ -102,6 +104,74 @@ func TestAdapterRunsFreshAttributedDiagnosticSession(t *testing.T) {
 	}
 }
 
+// TestAdapterBoundsPacedTelemetryByCount verifies a slow producer cannot evade aggregate retention limits.
+func TestAdapterBoundsPacedTelemetryByCount(t *testing.T) {
+	session := startTelemetryTestSession(t, "count")
+	defer session.Close(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := session.Turn(ctx, AgentTurn{Prompt: "emit paced telemetry"}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := session.Wait(ctx)
+	if err == nil || !strings.Contains(err.Error(), "telemetry overflow") {
+		t.Fatalf("Wait() = %#v, %v, want aggregate overflow", result, err)
+	}
+	if result.Telemetry == nil || result.Telemetry.EventsDropped != 1 || result.Telemetry.NotificationsDropped != 0 || len(result.Events) != defaultProviderEventLimit {
+		t.Fatalf("paced count telemetry = %#v with %d events", result.Telemetry, len(result.Events))
+	}
+	if result.Telemetry.CommandsObserved != defaultProviderEventLimit+1 {
+		t.Fatalf("commands observed = %d, want %d", result.Telemetry.CommandsObserved, defaultProviderEventLimit+1)
+	}
+}
+
+// TestAdapterBoundsPacedTelemetryByBytes verifies individually valid messages cannot accumulate beyond the retained byte budget.
+func TestAdapterBoundsPacedTelemetryByBytes(t *testing.T) {
+	session := startTelemetryTestSession(t, "bytes")
+	defer session.Close(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := session.Turn(ctx, AgentTurn{Prompt: "emit large paced telemetry"}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := session.Wait(ctx)
+	if err == nil || !strings.Contains(err.Error(), "telemetry overflow") {
+		t.Fatalf("Wait() = telemetry %#v, %v, want aggregate overflow", result.Telemetry, err)
+	}
+	if result.Telemetry == nil || result.Telemetry.EventsDropped != 1 || result.Telemetry.BytesDropped == 0 || result.Telemetry.NotificationsDropped != 0 || len(result.Events) != 1 {
+		t.Fatalf("paced byte telemetry = %#v with %d events", result.Telemetry, len(result.Events))
+	}
+}
+
+// startTelemetryTestSession starts the protocol fixture with one paced stream mode.
+func startTelemetryTestSession(t *testing.T, mode string) EvaluationSession {
+	t.Helper()
+	credential, err := NewCodexCredential([]byte(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := NewCodexAgent(CodexOptions{
+		Executable:  os.Args[0],
+		Arguments:   []string{"-test.run=TestFakeCodexAdapterServer"},
+		Model:       "gpt-test",
+		Credential:  credential,
+		Environment: []string{fakeCodexAdapterServerEnv + "=1", fakeCodexAdapterPacedEnv + "=" + mode},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := adapter.Prepare(context.Background(), RunEnvironment{ProjectRoot: t.TempDir(), HomeRoot: t.TempDir()}, Guidance{Profile: "none"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = prepared.Close(context.Background()) })
+	session, err := adapter.Start(context.Background(), prepared.Agent())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return session
+}
+
 // TestAdapterRejectsUnexpectedInstructionSources prevents host guidance from contaminating a treatment.
 func TestAdapterRejectsUnexpectedInstructionSources(t *testing.T) {
 	projectRoot := t.TempDir()
@@ -134,16 +204,56 @@ func TestAdapterRejectsUnexpectedInstructionSources(t *testing.T) {
 // TestAdapterPrepareDoesNotMutateGuidanceOnCredentialFailure keeps native Project treatment ownership outside the provider adapter.
 func TestAdapterPrepareDoesNotMutateGuidanceOnCredentialFailure(t *testing.T) {
 	projectRoot := t.TempDir()
-	adapter, err := NewCodexAgent(CodexOptions{Executable: os.Args[0], Model: "gpt-test", CredentialSource: filepath.Join(t.TempDir(), "missing-auth.json")})
-	if err != nil {
-		t.Fatalf("NewCodexAgent(): %v", err)
-	}
-	_, err = adapter.Prepare(context.Background(), RunEnvironment{ProjectRoot: projectRoot, HomeRoot: t.TempDir()}, Guidance{Files: map[string][]byte{".agent/AGENTS.md": []byte("fixture")}})
+	_, err := NewCodexAgent(CodexOptions{Executable: os.Args[0], Model: "gpt-test", CredentialSource: filepath.Join(t.TempDir(), "missing-auth.json")})
 	if err == nil {
-		t.Fatal("Prepare() succeeded without a credential")
+		t.Fatal("NewCodexAgent() succeeded without a credential")
 	}
 	if _, statErr := os.Stat(filepath.Join(projectRoot, ".agent")); !os.IsNotExist(statErr) {
 		t.Fatalf("provider adapter mutated project guidance: %v", statErr)
+	}
+}
+
+// TestAdapterFreezesCredentialBeforeTreatments prevents a replaced source path from changing paired provider authority.
+func TestAdapterFreezesCredentialBeforeTreatments(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "auth.json")
+	original := []byte(`{"access_token":"first-treatment-secret"}`)
+	replacement := []byte(`{"access_token":"replacement-secret"}`)
+	if err := os.WriteFile(source, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := NewCodexAgent(CodexOptions{Executable: os.Args[0], Model: "gpt-test", CredentialSource: source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, replacement, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var authorityDigest string
+	for range 2 {
+		homeRoot := t.TempDir()
+		prepared, err := adapter.Prepare(context.Background(), RunEnvironment{ProjectRoot: t.TempDir(), HomeRoot: homeRoot}, Guidance{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := os.ReadFile(filepath.Join(homeRoot, "auth.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(body, original) || bytes.Contains(body, replacement) {
+			t.Fatalf("materialized credential = %q, want frozen authority", body)
+		}
+		if authorityDigest == "" {
+			authorityDigest = prepared.Agent().AuthorityDigest
+		} else if prepared.Agent().AuthorityDigest != authorityDigest {
+			t.Fatalf("paired authority digests differ: %q and %q", authorityDigest, prepared.Agent().AuthorityDigest)
+		}
+		if err := prepared.Close(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	redacted := adapter.credential.Redactor(NewRedactor(nil)).Text(string(original) + " " + string(replacement))
+	if strings.Contains(redacted, "first-treatment-secret") || !strings.Contains(redacted, "replacement-secret") {
+		t.Fatalf("frozen redaction did not match frozen authority: %q", redacted)
 	}
 }
 
@@ -237,6 +347,12 @@ func runFakeCodexAdapterServer() {
 				},
 			})
 		case "turn/start":
+			pacedMode := os.Getenv(fakeCodexAdapterPacedEnv)
+			if pacedMode != "" {
+				writeFakeAdapterResponse(*request.ID, map[string]any{"turn": map[string]any{"id": "turn-1"}})
+				emitPacedAdapterTelemetry(pacedMode)
+				continue
+			}
 			if os.Getenv(fakeCodexAdapterFloodEnv) == "1" {
 				for range 1025 {
 					writeFakeAdapterNotification("server/flood", map[string]any{})
@@ -264,6 +380,30 @@ func runFakeCodexAdapterServer() {
 			writeFakeAdapterResponse(*request.ID, map[string]any{})
 		}
 	}
+}
+
+// emitPacedAdapterTelemetry keeps queue occupancy low while exceeding aggregate normalized retention.
+func emitPacedAdapterTelemetry(mode string) {
+	switch mode {
+	case "count":
+		for index := range defaultProviderEventLimit + 1 {
+			writeFakeAdapterNotification("item/started", fakeAdapterItemParams(map[string]any{
+				"id": fmt.Sprintf("command-%d", index), "type": "commandExecution", "command": "true", "cwd": "/project",
+			}))
+			time.Sleep(time.Millisecond)
+		}
+	case "bytes":
+		text := strings.Repeat("x", 5<<20)
+		for index := range 2 {
+			writeFakeAdapterNotification("item/completed", fakeAdapterItemParams(map[string]any{
+				"id": fmt.Sprintf("message-%d", index), "type": "agentMessage", "text": text,
+			}))
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	writeFakeAdapterNotification("turn/completed", map[string]any{
+		"threadId": "thread-1", "turn": map[string]any{"id": "turn-1", "status": "completed"},
+	})
 }
 
 // fakeAdapterItemParams attaches the stable thread and turn identity to one item.

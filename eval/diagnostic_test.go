@@ -3,6 +3,7 @@ package eval
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -86,5 +87,31 @@ func TestRunGuidanceDiagnosticRejectsDifferentPlans(t *testing.T) {
 	})
 	if err == nil || len(result.Attempts) != 2 {
 		t.Fatalf("RunGuidanceDiagnostic() = (%#v, %v), want completed attempts and parity error", result, err)
+	}
+}
+
+// TestRunGuidanceDiagnosticRejectsDifferentPairIdentities prevents comparisons across changed provider authority.
+func TestRunGuidanceDiagnosticRejectsDifferentPairIdentities(t *testing.T) {
+	runner, _, _, _, agent := newFakeRunner(t)
+	agent.sessionIdentities = []AgentSessionIdentity{
+		{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", AuthorityDigest: "sha256:first"},
+		{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", AuthorityDigest: "sha256:second"},
+	}
+	definition, err := LoadPromotedDefinition("add-http-controller")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.RunGuidanceDiagnostic(context.Background(), GuidanceDiagnosticRequest{
+		LogicalTrialID:  "diagnostic-01",
+		Definition:      definition,
+		DestinationRoot: "/private/projects",
+		ForjExecutable:  "/tools/forj",
+		Environments: map[string][]string{
+			GuidanceProfileNone:   os.Environ(),
+			GuidanceProfileAgents: os.Environ(),
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "different agent or provider identities") || len(result.Attempts) != 2 {
+		t.Fatalf("RunGuidanceDiagnostic() = (%#v, %v), want pair identity failure", result, err)
 	}
 }

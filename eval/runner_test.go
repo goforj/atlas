@@ -161,12 +161,14 @@ func (environment *fakeBackendEnvironment) Close(ctx context.Context) error {
 
 // fakeAgent provides one prepared identity and session.
 type fakeAgent struct {
-	capabilities []Capability
-	preparation  *fakeAgentPreparation
-	session      *fakeSession
-	prepareHook  func(RunEnvironment, Guidance) error
-	prepareCalls int
-	startErr     error
+	capabilities      []Capability
+	preparation       *fakeAgentPreparation
+	session           *fakeSession
+	prepareHook       func(RunEnvironment, Guidance) error
+	prepareCalls      int
+	startCalls        int
+	sessionIdentities []AgentSessionIdentity
+	startErr          error
 }
 
 // Name returns the fake adapter identity.
@@ -192,6 +194,10 @@ func (agent *fakeAgent) Prepare(_ context.Context, environment RunEnvironment, g
 
 // Start returns one fresh fake provider session.
 func (agent *fakeAgent) Start(context.Context, PreparedAgent) (EvaluationSession, error) {
+	if agent.startCalls < len(agent.sessionIdentities) {
+		agent.session.identity = agent.sessionIdentities[agent.startCalls]
+	}
+	agent.startCalls++
 	return agent.session, agent.startErr
 }
 
@@ -226,10 +232,14 @@ type fakeSession struct {
 	closeLog       *[]string
 	closeErr       error
 	lastTurn       AgentTurn
+	identity       AgentSessionIdentity
 }
 
 // Identity returns the effective fake provider identity established at session start.
 func (session *fakeSession) Identity() AgentSessionIdentity {
+	if session.identity != (AgentSessionIdentity{}) {
+		return session.identity
+	}
 	return AgentSessionIdentity{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider"}
 }
 
@@ -554,6 +564,28 @@ func TestRunnerDiagnosticRejectsAdapterCommandOverflow(t *testing.T) {
 	}
 	if !bytes.Contains(commands, []byte(`"source":"adapter"`)) {
 		t.Fatalf("diagnostic commands = %s, want adapter telemetry", commands)
+	}
+}
+
+// TestRunnerDiagnosticUsesCompleteCommandTelemetryAfterTruncation avoids undercounting commands omitted by bounded retention.
+func TestRunnerDiagnosticUsesCompleteCommandTelemetryAfterTruncation(t *testing.T) {
+	runner, _, _, backend, agent := newFakeRunner(t)
+	agent.capabilities = nil
+	backend.capabilities = nil
+	request := fakeAttemptRequest()
+	request.Intent = IntentDiagnostic
+	request.Definition.Limits.Commands = 1
+	agent.session.turn.Events = nil
+	agent.session.result.Events = []Event{{Sequence: 1, Kind: EventCommandStarted, Fields: map[string]string{EventFieldCommandID: "retained-command"}}}
+	agent.session.result.Telemetry = &ProviderTelemetry{EventsObserved: 2, EventsDropped: 1, CommandsObserved: 2}
+	agent.session.waitErr = errors.New("provider telemetry truncated")
+
+	result, err := runner.Run(context.Background(), request)
+	if err == nil || !strings.Contains(err.Error(), "adapter telemetry exceeded command limit 1") {
+		t.Fatalf("Run() = %#v, %v, want complete command budget failure", result, err)
+	}
+	if result.ProviderTelemetry == nil || result.ProviderTelemetry.CommandsObserved != 2 || result.AgentOutcome != AgentAdapterError {
+		t.Fatalf("diagnostic telemetry result = %#v", result)
 	}
 }
 

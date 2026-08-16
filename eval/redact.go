@@ -35,6 +35,13 @@ func NewRedactor(secrets []string) Redactor {
 	return redactor
 }
 
+// withSecrets returns a new redactor that also covers values derived from the same frozen authority used by an adapter.
+func (redactor Redactor) withSecrets(secrets []string) Redactor {
+	combined := append([]string(nil), redactor.secrets...)
+	combined = append(combined, secrets...)
+	return NewRedactor(combined)
+}
+
 // Text redacts secrets and removes terminal or directional controls so human renderers receive inert content.
 func (redactor Redactor) Text(value string) string {
 	value = ansiControlPattern.ReplaceAllString(value, "")

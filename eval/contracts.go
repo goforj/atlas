@@ -247,6 +247,7 @@ type PreparedAgent struct {
 	Name             string
 	Executable       string
 	ExecutableDigest string
+	AuthorityDigest  string
 	Model            string
 	Environment      RunEnvironment
 }
@@ -271,16 +272,34 @@ type AgentTurnResult struct {
 
 // AgentResult records provider completion independently from evaluator validity.
 type AgentResult struct {
-	Outcome AgentOutcome
-	Events  []Event
-	Message string
+	Outcome   AgentOutcome
+	Events    []Event
+	Message   string
+	Telemetry *ProviderTelemetry
+}
+
+// ProviderTelemetry describes bounded diagnostic retention without promoting adapter observations to trusted evidence.
+type ProviderTelemetry struct {
+	EventsObserved           uint64 `json:"events_observed"`
+	BytesObserved            uint64 `json:"bytes_observed"`
+	EventsDropped            uint64 `json:"events_dropped,omitempty"`
+	BytesDropped             uint64 `json:"bytes_dropped,omitempty"`
+	NotificationsDropped     uint64 `json:"notifications_dropped,omitempty"`
+	NotificationBytesDropped uint64 `json:"notification_bytes_dropped,omitempty"`
+	CommandsObserved         uint64 `json:"commands_observed"`
+}
+
+// Truncated reports whether any provider-originated evidence was omitted before normalization.
+func (telemetry ProviderTelemetry) Truncated() bool {
+	return telemetry.EventsDropped > 0 || telemetry.NotificationsDropped > 0
 }
 
 // AgentSessionIdentity records effective provider identity established only after a fresh session starts.
 type AgentSessionIdentity struct {
-	Version       string
-	Model         string
-	ModelProvider string
+	Version         string
+	Model           string
+	ModelProvider   string
+	AuthorityDigest string
 }
 
 // EvaluationSession owns one fresh provider session and its complete descendant job.
@@ -473,42 +492,44 @@ type SecondaryFailure struct {
 
 // AttemptResult is the complete lifecycle result for one stochastic attempt.
 type AttemptResult struct {
-	AttemptID           string                 `json:"attempt_id"`
-	LogicalTrialID      string                 `json:"logical_trial_id"`
-	EvaluationID        string                 `json:"evaluation_id"`
-	PromptDigest        string                 `json:"prompt_digest"`
-	GuidanceProfile     string                 `json:"guidance_profile"`
-	GuidanceDigest      string                 `json:"guidance_digest,omitempty"`
-	GuidanceFiles       []GuidanceFileIdentity `json:"guidance_files,omitempty"`
-	ScenarioID          string                 `json:"scenario_id"`
-	ScenarioSchema      int                    `json:"scenario_schema,omitempty"`
-	PlanDigest          string                 `json:"plan_digest,omitempty"`
-	ScenarioPlanDigest  string                 `json:"scenario_plan_digest,omitempty"`
-	CatalogDigest       string                 `json:"catalog_digest,omitempty"`
-	DependencyDigests   map[string]string      `json:"dependency_digests,omitempty"`
-	ProjectConfigDigest string                 `json:"project_config_digest,omitempty"`
-	EnvironmentDigest   string                 `json:"environment_digest,omitempty"`
-	PreparedTree        string                 `json:"prepared_tree,omitempty"`
-	BaselineTree        string                 `json:"baseline_tree,omitempty"`
-	FinalTree           string                 `json:"final_tree,omitempty"`
-	ForjExecutable      string                 `json:"forj_executable,omitempty"`
-	ForjDigest          string                 `json:"forj_digest,omitempty"`
-	Backend             string                 `json:"backend,omitempty"`
-	Agent               string                 `json:"agent,omitempty"`
-	AgentExecutable     string                 `json:"agent_executable,omitempty"`
-	AgentDigest         string                 `json:"agent_digest,omitempty"`
-	AgentVersion        string                 `json:"agent_version,omitempty"`
-	Model               string                 `json:"model,omitempty"`
-	ModelProvider       string                 `json:"model_provider,omitempty"`
-	Runtime             RuntimeIdentity        `json:"runtime"`
-	AgentOutcome        AgentOutcome           `json:"agent_outcome"`
-	EvaluationStatus    EvaluationStatus       `json:"evaluation_status"`
-	Milestones          []Milestone            `json:"milestones"`
-	Verification        *VerificationResult    `json:"verification,omitempty"`
-	SecondaryFailures   []SecondaryFailure     `json:"secondary_failures,omitempty"`
-	UnavailableEvidence []Capability           `json:"unavailable_evidence,omitempty"`
-	StartedAt           time.Time              `json:"started_at"`
-	FinishedAt          time.Time              `json:"finished_at"`
+	AttemptID               string                 `json:"attempt_id"`
+	LogicalTrialID          string                 `json:"logical_trial_id"`
+	EvaluationID            string                 `json:"evaluation_id"`
+	PromptDigest            string                 `json:"prompt_digest"`
+	GuidanceProfile         string                 `json:"guidance_profile"`
+	GuidanceDigest          string                 `json:"guidance_digest,omitempty"`
+	GuidanceFiles           []GuidanceFileIdentity `json:"guidance_files,omitempty"`
+	ScenarioID              string                 `json:"scenario_id"`
+	ScenarioSchema          int                    `json:"scenario_schema,omitempty"`
+	PlanDigest              string                 `json:"plan_digest,omitempty"`
+	ScenarioPlanDigest      string                 `json:"scenario_plan_digest,omitempty"`
+	CatalogDigest           string                 `json:"catalog_digest,omitempty"`
+	DependencyDigests       map[string]string      `json:"dependency_digests,omitempty"`
+	ProjectConfigDigest     string                 `json:"project_config_digest,omitempty"`
+	EnvironmentDigest       string                 `json:"environment_digest,omitempty"`
+	PreparedTree            string                 `json:"prepared_tree,omitempty"`
+	BaselineTree            string                 `json:"baseline_tree,omitempty"`
+	FinalTree               string                 `json:"final_tree,omitempty"`
+	ForjExecutable          string                 `json:"forj_executable,omitempty"`
+	ForjDigest              string                 `json:"forj_digest,omitempty"`
+	Backend                 string                 `json:"backend,omitempty"`
+	Agent                   string                 `json:"agent,omitempty"`
+	AgentExecutable         string                 `json:"agent_executable,omitempty"`
+	AgentDigest             string                 `json:"agent_digest,omitempty"`
+	ProviderAuthorityDigest string                 `json:"provider_authority_digest,omitempty"`
+	ProviderTelemetry       *ProviderTelemetry     `json:"provider_telemetry,omitempty"`
+	AgentVersion            string                 `json:"agent_version,omitempty"`
+	Model                   string                 `json:"model,omitempty"`
+	ModelProvider           string                 `json:"model_provider,omitempty"`
+	Runtime                 RuntimeIdentity        `json:"runtime"`
+	AgentOutcome            AgentOutcome           `json:"agent_outcome"`
+	EvaluationStatus        EvaluationStatus       `json:"evaluation_status"`
+	Milestones              []Milestone            `json:"milestones"`
+	Verification            *VerificationResult    `json:"verification,omitempty"`
+	SecondaryFailures       []SecondaryFailure     `json:"secondary_failures,omitempty"`
+	UnavailableEvidence     []Capability           `json:"unavailable_evidence,omitempty"`
+	StartedAt               time.Time              `json:"started_at"`
+	FinishedAt              time.Time              `json:"finished_at"`
 }
 
 // SoftwareIdentity records a retrievable release or development revision without relying on a temporary executable path.

@@ -20,7 +20,11 @@ import (
 	"github.com/goforj/atlas/internal/codexappserver"
 )
 
-const adapterCleanupTimeout = 5 * time.Second
+const (
+	adapterCleanupTimeout         = 5 * time.Second
+	defaultProviderEventLimit     = 1024
+	defaultProviderEventByteLimit = 8 << 20
+)
 
 // CodexOptions pins the Codex executable, model, provider state, and process environment used by diagnostic sessions.
 type CodexOptions struct {
@@ -28,21 +32,31 @@ type CodexOptions struct {
 	Arguments        []string
 	Model            string
 	ModelProvider    string
+	Credential       CodexCredential
 	CredentialSource string
 	Environment      []string
 }
 
+// CodexCredential is an immutable credential snapshot shared by every treatment in one logical trial.
+type CodexCredential struct {
+	body             []byte
+	digest           string
+	redactionSecrets []string
+}
+
 // CodexAgent starts fresh Codex sessions and keeps preparation state private from generic runner contracts.
 type CodexAgent struct {
-	options CodexOptions
-	mu      sync.Mutex
-	states  map[string]preparedState
+	options    CodexOptions
+	credential CodexCredential
+	mu         sync.Mutex
+	states     map[string]preparedState
 }
 
 // preparedState contains adapter-private inputs keyed by the runner-owned private home.
 type preparedState struct {
 	executable       string
 	executableDigest string
+	authorityDigest  string
 	environment      RunEnvironment
 	guidance         Guidance
 }
@@ -56,18 +70,22 @@ type preparation struct {
 
 // session owns one app-server client, fresh thread, and at most one turn.
 type session struct {
-	client    *codexappserver.Client
-	thread    codexappserver.Thread
-	identity  AgentSessionIdentity
-	turn      codexappserver.Turn
-	mu        sync.Mutex
-	started   bool
-	finished  bool
-	sequence  uint64
-	events    []Event
-	message   string
-	closeOnce sync.Once
-	closeErr  error
+	client         *codexappserver.Client
+	thread         codexappserver.Thread
+	identity       AgentSessionIdentity
+	turn           codexappserver.Turn
+	mu             sync.Mutex
+	started        bool
+	finished       bool
+	sequence       uint64
+	events         []Event
+	eventLimit     int
+	eventByteLimit int
+	eventBytes     int
+	telemetry      ProviderTelemetry
+	message        string
+	closeOnce      sync.Once
+	closeErr       error
 }
 
 // NewCodexAgent creates a diagnostic Codex agent without claiming authoritative observation capabilities.
@@ -78,7 +96,60 @@ func NewCodexAgent(options CodexOptions) (*CodexAgent, error) {
 	if strings.TrimSpace(options.Model) == "" {
 		return nil, fmt.Errorf("Codex model is required")
 	}
-	return &CodexAgent{options: options, states: map[string]preparedState{}}, nil
+	credential := options.Credential.clone()
+	if len(credential.body) == 0 {
+		var err error
+		credential, err = LoadCodexCredential(options.CredentialSource)
+		if err != nil {
+			return nil, err
+		}
+	}
+	options.Credential = CodexCredential{}
+	options.CredentialSource = ""
+	return &CodexAgent{options: options, credential: credential, states: map[string]preparedState{}}, nil
+}
+
+// LoadCodexCredential freezes one auth document before any treatment can begin.
+func LoadCodexCredential(source string) (CodexCredential, error) {
+	if strings.TrimSpace(source) == "" {
+		return CodexCredential{}, fmt.Errorf("Codex credential source is required")
+	}
+	body, err := os.ReadFile(source)
+	if err != nil {
+		return CodexCredential{}, fmt.Errorf("read Codex credential: %w", err)
+	}
+	return NewCodexCredential(body)
+}
+
+// NewCodexCredential freezes credential bytes supplied by a host-owned read boundary.
+func NewCodexCredential(body []byte) (CodexCredential, error) {
+	if len(body) == 0 {
+		return CodexCredential{}, fmt.Errorf("Codex credential is required")
+	}
+	var decoded any
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return CodexCredential{}, fmt.Errorf("decode Codex credential: %w", err)
+	}
+	hash := sha256.Sum256(body)
+	return CodexCredential{
+		body:             append([]byte(nil), body...),
+		digest:           fmt.Sprintf("sha256:%x", hash[:]),
+		redactionSecrets: codexCredentialSecrets(decoded, string(body)),
+	}, nil
+}
+
+// Redactor returns a copy that covers the exact frozen authority used by Codex sessions.
+func (credential CodexCredential) Redactor(redactor Redactor) Redactor {
+	return redactor.withSecrets(credential.redactionSecrets)
+}
+
+// clone prevents caller-owned slices from changing authority or redaction after construction.
+func (credential CodexCredential) clone() CodexCredential {
+	return CodexCredential{
+		body:             append([]byte(nil), credential.body...),
+		digest:           credential.digest,
+		redactionSecrets: append([]string(nil), credential.redactionSecrets...),
+	}
 }
 
 // Name returns the adapter identity recorded by evaluation reports.
@@ -120,12 +191,13 @@ func (adapter *CodexAgent) Prepare(_ context.Context, environment RunEnvironment
 		delete(adapter.states, key)
 		adapter.mu.Unlock()
 	}()
-	if err := materializeCredential(environment.HomeRoot, adapter.options.CredentialSource); err != nil {
+	if err := materializeCredential(environment.HomeRoot, adapter.credential.body); err != nil {
 		return nil, err
 	}
 	state := preparedState{
 		executable:       executable,
 		executableDigest: digest,
+		authorityDigest:  adapter.credential.digest,
 		environment:      environment,
 		guidance:         cloneGuidance(guidance),
 	}
@@ -139,6 +211,7 @@ func (adapter *CodexAgent) Prepare(_ context.Context, environment RunEnvironment
 			Name:             adapter.Name(),
 			Executable:       executable,
 			ExecutableDigest: digest,
+			AuthorityDigest:  adapter.credential.digest,
 			Model:            adapter.options.Model,
 			Environment:      environment,
 		},
@@ -155,6 +228,9 @@ func (adapter *CodexAgent) Start(ctx context.Context, agent PreparedAgent) (Eval
 	adapter.mu.Unlock()
 	if !ok {
 		return nil, fmt.Errorf("Codex preparation is unavailable for %q", agent.Environment.HomeRoot)
+	}
+	if agent.Name != adapter.Name() || agent.Executable != state.executable || agent.ExecutableDigest != state.executableDigest || agent.AuthorityDigest != state.authorityDigest || agent.Model != adapter.options.Model || agent.Environment.ProjectRoot != state.environment.ProjectRoot || agent.Environment.HomeRoot != state.environment.HomeRoot {
+		return nil, fmt.Errorf("Codex prepared identity differs from adapter state")
 	}
 	processEnvironment := privateProcessEnvironment(mergeProcessEnvironment(adapter.options.Environment, state.environment.Environment), state.environment.HomeRoot)
 	client, err := codexappserver.Start(ctx, codexappserver.StartOptions{
@@ -190,10 +266,13 @@ func (adapter *CodexAgent) Start(ctx context.Context, agent PreparedAgent) (Eval
 		client: client,
 		thread: thread,
 		identity: AgentSessionIdentity{
-			Version:       client.UserAgent(),
-			Model:         thread.Model,
-			ModelProvider: thread.ModelProvider,
+			Version:         client.UserAgent(),
+			Model:           thread.Model,
+			ModelProvider:   thread.ModelProvider,
+			AuthorityDigest: state.authorityDigest,
 		},
+		eventLimit:     defaultProviderEventLimit,
+		eventByteLimit: defaultProviderEventByteLimit,
 	}, nil
 }
 
@@ -250,8 +329,8 @@ func (session *session) Wait(ctx context.Context) (AgentResult, error) {
 	session.mu.Unlock()
 
 	for {
-		if dropped := session.client.NotificationsDropped(); dropped > 0 {
-			return session.snapshotResult(AgentProviderError), fmt.Errorf("Codex telemetry overflow: discarded %d lifecycle notifications", dropped)
+		if err := session.telemetryOverflowError(); err != nil {
+			return session.snapshotResult(AgentProviderError), err
 		}
 		select {
 		case notification, ok := <-session.client.Notifications():
@@ -260,6 +339,9 @@ func (session *session) Wait(ctx context.Context) (AgentResult, error) {
 			}
 			terminal, outcome, err := session.consume(notification)
 			if err != nil {
+				return session.snapshotResult(AgentProviderError), err
+			}
+			if err := session.telemetryOverflowError(); err != nil {
 				return session.snapshotResult(AgentProviderError), err
 			}
 			if terminal {
@@ -278,7 +360,24 @@ func (session *session) Wait(ctx context.Context) (AgentResult, error) {
 func (session *session) snapshotResult(outcome AgentOutcome) AgentResult {
 	session.mu.Lock()
 	defer session.mu.Unlock()
-	return AgentResult{Outcome: outcome, Events: append([]Event(nil), session.events...), Message: session.message}
+	telemetry := session.telemetry
+	telemetry.NotificationsDropped = session.client.NotificationsDropped()
+	telemetry.NotificationBytesDropped = session.client.NotificationsDroppedBytes()
+	return AgentResult{Outcome: outcome, Events: append([]Event(nil), session.events...), Message: session.message, Telemetry: &telemetry}
+}
+
+// telemetryOverflowError makes omitted provider evidence a deterministic terminal failure instead of a successful partial transcript.
+func (session *session) telemetryOverflowError() error {
+	session.mu.Lock()
+	droppedEvents := session.telemetry.EventsDropped
+	droppedEventBytes := session.telemetry.BytesDropped
+	session.mu.Unlock()
+	droppedNotifications := session.client.NotificationsDropped()
+	droppedNotificationBytes := session.client.NotificationsDroppedBytes()
+	if droppedEvents == 0 && droppedNotifications == 0 {
+		return nil
+	}
+	return fmt.Errorf("Codex telemetry overflow: discarded %d retained events (%d bytes) and %d lifecycle notifications (%d bytes)", droppedEvents, droppedEventBytes, droppedNotifications, droppedNotificationBytes)
 }
 
 // Close interrupts an active turn before terminating the complete supervised app-server job.
@@ -389,10 +488,11 @@ func (session *session) consumeItem(method string, raw json.RawMessage) error {
 		}
 	case "agentMessage":
 		if completed {
-			session.mu.Lock()
-			session.message = item.Text
-			session.mu.Unlock()
-			session.appendEvent(EventMessage, map[string]string{"text": item.Text})
+			if session.appendEvent(EventMessage, map[string]string{"text": item.Text}) {
+				session.mu.Lock()
+				session.message = item.Text
+				session.mu.Unlock()
+			}
 		}
 	}
 	return nil
@@ -418,11 +518,26 @@ func normalizeFileChangeKind(raw json.RawMessage) string {
 }
 
 // appendEvent assigns one adapter-local sequence while preserving app-server notification order.
-func (session *session) appendEvent(kind EventKind, fields map[string]string) {
+func (session *session) appendEvent(kind EventKind, fields map[string]string) bool {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	session.sequence++
-	session.events = append(session.events, Event{Sequence: session.sequence, Kind: kind, Source: EventSourceAdapter, Time: time.Now().UTC(), Fields: fields})
+	event := Event{Sequence: session.sequence, Kind: kind, Source: EventSourceAdapter, Time: time.Now().UTC(), Fields: fields}
+	body, _ := json.Marshal(event)
+	retainedBytes := len(body)
+	session.telemetry.EventsObserved++
+	session.telemetry.BytesObserved += uint64(retainedBytes)
+	if kind == EventCommandStarted {
+		session.telemetry.CommandsObserved++
+	}
+	if len(session.events) >= session.eventLimit || retainedBytes > session.eventByteLimit-session.eventBytes {
+		session.telemetry.EventsDropped++
+		session.telemetry.BytesDropped += uint64(retainedBytes)
+		return false
+	}
+	session.events = append(session.events, event)
+	session.eventBytes += retainedBytes
+	return true
 }
 
 // resolveExecutable records the exact Codex binary rather than trusting later PATH lookup.
@@ -490,14 +605,10 @@ func removeGuidance(root string, paths []string) {
 	}
 }
 
-// materializeCredential copies the existing login into private state without inheriting normal user configuration.
-func materializeCredential(homeRoot, source string) error {
-	if strings.TrimSpace(source) == "" {
-		return fmt.Errorf("Codex credential source is required")
-	}
-	body, err := os.ReadFile(source)
-	if err != nil {
-		return fmt.Errorf("read Codex credential: %w", err)
+// materializeCredential copies frozen authority into private state without inheriting normal user configuration.
+func materializeCredential(homeRoot string, body []byte) error {
+	if len(body) == 0 {
+		return fmt.Errorf("Codex credential is required")
 	}
 	if err := os.MkdirAll(homeRoot, 0o700); err != nil {
 		return err
@@ -508,6 +619,42 @@ func materializeCredential(homeRoot, source string) error {
 		return err
 	}
 	return nil
+}
+
+// codexCredentialSecrets collects secret-bearing string values and the exact serialized authority for report redaction.
+func codexCredentialSecrets(value any, serialized string) []string {
+	secrets := []string{serialized}
+	seen := map[string]bool{serialized: true}
+	var visit func(any)
+	visit = func(current any) {
+		switch typed := current.(type) {
+		case []any:
+			for _, item := range typed {
+				visit(item)
+			}
+		case map[string]any:
+			for key, item := range typed {
+				if secret, ok := item.(string); ok && secret != "" && codexCredentialSecretField(key) && !seen[secret] {
+					seen[secret] = true
+					secrets = append(secrets, secret)
+				}
+				visit(item)
+			}
+		}
+	}
+	visit(value)
+	return secrets
+}
+
+// codexCredentialSecretField recognizes authority values supported by Codex auth documents and provider extensions.
+func codexCredentialSecretField(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	switch normalized {
+	case "access_token", "token", "id_token", "refresh_token", "api_key", "client_secret", "password", "secret":
+		return true
+	default:
+		return strings.HasSuffix(normalized, "_api_key") || strings.HasSuffix(normalized, "_access_token") || strings.HasSuffix(normalized, "_refresh_token")
+	}
 }
 
 // privateProcessEnvironment isolates home and Codex configuration while retaining an explicit caller allowlist.
