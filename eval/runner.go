@@ -215,6 +215,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		Project:      preparedProject,
 		ShellNetwork: request.Definition.Limits.ShellNetwork,
 		Environment:  append([]string(nil), request.Preparation.Environment...),
+		CommandLimit: request.Definition.Limits.Commands,
 	})
 	if err != nil {
 		result.EvaluationStatus = EvaluationEvaluatorError

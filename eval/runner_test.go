@@ -313,7 +313,7 @@ func TestRunnerCompletesLifecycleAndCleansInReverseOrder(t *testing.T) {
 	if preparer.resolveCalls != 1 || preparer.prepareCalls != 1 || backend.openCalls != 1 || agent.prepareCalls != 1 {
 		t.Fatalf("lifecycle calls = resolve:%d prepare:%d open:%d agent:%d", preparer.resolveCalls, preparer.prepareCalls, backend.openCalls, agent.prepareCalls)
 	}
-	if backend.lastRequest.Project != preparer.project || backend.lastRequest.ShellNetwork != "off" {
+	if backend.lastRequest.Project != preparer.project || backend.lastRequest.ShellNetwork != "off" || backend.lastRequest.CommandLimit != fakeAttemptRequest().Definition.Limits.Commands {
 		t.Fatalf("backend request = %#v", backend.lastRequest)
 	}
 	if agent.session.lastTurn.Prompt != fakeAttemptRequest().Definition.Prompt || !reflect.DeepEqual(agent.session.lastTurn.Limits, fakeAttemptRequest().Definition.Limits) {
