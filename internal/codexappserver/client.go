@@ -84,7 +84,9 @@ type Client struct {
 	notificationBytes     int
 	notificationByteLimit int
 	notificationWake      chan struct{}
+	notificationCancel    chan struct{}
 	notificationsClosed   bool
+	notificationsCanceled bool
 	notificationsDropped  uint64
 	readerDone            chan struct{}
 	readerMu              sync.Mutex
@@ -153,6 +155,7 @@ func Start(ctx context.Context, options StartOptions) (*Client, error) {
 		notifications:         make(chan Notification),
 		notificationByteLimit: defaultNotificationBytes,
 		notificationWake:      make(chan struct{}, 1),
+		notificationCancel:    make(chan struct{}),
 		stderr:                lockedBuffer{limit: defaultStderrLimit},
 		readerDone:            make(chan struct{}),
 		closeDone:             make(chan struct{}),
@@ -170,7 +173,7 @@ func Start(ctx context.Context, options StartOptions) (*Client, error) {
 	if err != nil {
 		_ = stdinWrite.Close()
 		_ = stdoutRead.Close()
-		client.closeNotifications()
+		client.cancelNotificationDelivery()
 		return nil, err
 	}
 	client.process = process
@@ -340,6 +343,7 @@ func (client *Client) Close(ctx context.Context) error {
 		return nil
 	}
 	client.closeOnce.Do(func() {
+		client.cancelNotificationDelivery()
 		go func() {
 			_ = client.stdin.Close()
 			client.closeErr = client.process.Terminate(ctx)
@@ -448,6 +452,10 @@ func (client *Client) read(stdout *os.File) {
 func (client *Client) deliverNotification(notification Notification) {
 	bytes := len(notification.Method) + len(notification.Params)
 	client.notificationMu.Lock()
+	if client.notificationsCanceled {
+		client.notificationMu.Unlock()
+		return
+	}
 	if len(client.notificationQueue) >= defaultNotificationLimit || bytes > client.notificationByteLimit-client.notificationBytes {
 		client.notificationsDropped++
 		client.notificationMu.Unlock()
@@ -467,8 +475,12 @@ func (client *Client) deliverNotifications() {
 		if !ok {
 			return
 		}
-		client.notifications <- notification
-		client.removeDeliveredNotification()
+		select {
+		case client.notifications <- notification:
+			client.removeDeliveredNotification()
+		case <-client.notificationCancel:
+			return
+		}
 	}
 }
 
@@ -486,13 +498,21 @@ func (client *Client) nextNotification() (Notification, bool) {
 			return Notification{}, false
 		}
 		client.notificationMu.Unlock()
-		<-client.notificationWake
+		select {
+		case <-client.notificationWake:
+		case <-client.notificationCancel:
+			return Notification{}, false
+		}
 	}
 }
 
 // removeDeliveredNotification releases the aggregate byte budget after delivery.
 func (client *Client) removeDeliveredNotification() {
 	client.notificationMu.Lock()
+	if client.notificationsCanceled || len(client.notificationQueue) == 0 {
+		client.notificationMu.Unlock()
+		return
+	}
 	deferred := client.notificationQueue[0]
 	client.notificationQueue[0] = queuedNotification{}
 	client.notificationQueue = client.notificationQueue[1:]
@@ -506,6 +526,24 @@ func (client *Client) closeNotifications() {
 	client.notificationsClosed = true
 	client.notificationMu.Unlock()
 	client.wakeNotificationDelivery()
+}
+
+// cancelNotificationDelivery releases retained telemetry when the client closes because no receiver can be required to drain it.
+func (client *Client) cancelNotificationDelivery() {
+	client.notificationMu.Lock()
+	if client.notificationsCanceled {
+		client.notificationMu.Unlock()
+		return
+	}
+	client.notificationsCanceled = true
+	client.notificationsClosed = true
+	for index := range client.notificationQueue {
+		client.notificationQueue[index] = queuedNotification{}
+	}
+	client.notificationQueue = nil
+	client.notificationBytes = 0
+	close(client.notificationCancel)
+	client.notificationMu.Unlock()
 }
 
 // wakeNotificationDelivery coalesces queue state changes for the delivery loop.
