@@ -74,8 +74,8 @@ func promotedSurfaceContracts() []surfaceContract {
 			sources: []sourceContract{
 				{id: "named-queue-config", paths: []string{".env"}, text: []string{"QUEUE_REPORTS_NAME=reports", "QUEUE_REPORTS_WORKERS=2"}},
 				{id: "named-queue-accessor", paths: []string{"internal/queues/*_gen.go"}, identifiers: []string{"Reports"}},
-				{id: "named-queue-injection", paths: []string{"internal/invoices/report_dispatcher.go", "internal/reports/*.go"}, identifiers: []string{"ReportDispatcher", "Manager"}, selectorCalls: []string{"Reports"}},
-				{id: "named-queue-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewReportDispatcher"}},
+				{id: "named-queue-injection", paths: []string{"internal/invoices/report_dispatcher.go", "internal/reports/*.go"}, identifiers: []string{"Manager"}, identifierChoices: [][]string{{"ReportDispatcher", "Dispatcher"}}, selectorCalls: []string{"Reports"}},
+				{id: "named-queue-registration", paths: []string{"app/wire/inject_services_app.go"}, identifierChoices: [][]string{{"NewReportDispatcher", "NewDispatcher"}}},
 			},
 			commands: standardSurfaceCommands(),
 		},
@@ -85,8 +85,8 @@ func promotedSurfaceContracts() []surfaceContract {
 			sources: []sourceContract{
 				{id: "named-cache-config", paths: []string{".env"}, text: []string{"CACHE_PROFILES_DRIVER=memory"}},
 				{id: "named-cache-accessor", paths: []string{"internal/caches/*_gen.go"}, identifiers: []string{"Profiles"}},
-				{id: "named-cache-injection", paths: []string{"internal/invoices/profile_cache.go", "internal/profiles/*.go"}, identifiers: []string{"ProfileCache", "Manager"}, selectorCalls: []string{"Profiles"}},
-				{id: "named-cache-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewProfileCache"}},
+				{id: "named-cache-injection", paths: []string{"internal/invoices/profile_cache.go", "internal/profiles/*.go"}, identifiers: []string{"Manager"}, identifierChoices: [][]string{{"ProfileCache", "Cache"}}, selectorCalls: []string{"Profiles"}},
+				{id: "named-cache-registration", paths: []string{"app/wire/inject_services_app.go"}, identifierChoices: [][]string{{"NewProfileCache", "NewCache"}}},
 			},
 			commands: standardSurfaceCommands(),
 		},
@@ -96,8 +96,8 @@ func promotedSurfaceContracts() []surfaceContract {
 			sources: []sourceContract{
 				{id: "named-storage-config", paths: []string{".env"}, text: []string{"STORAGE_AVATARS_DRIVER=local", "STORAGE_AVATARS_ROOT=storage/app/avatars"}},
 				{id: "named-storage-accessor", paths: []string{"internal/storages/*_gen.go"}, identifiers: []string{"Avatars"}},
-				{id: "named-storage-injection", paths: []string{"internal/invoices/avatar_storage.go", "internal/avatars/*.go"}, identifiers: []string{"AvatarStorage", "Manager"}, selectorCalls: []string{"Avatars"}},
-				{id: "named-storage-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewAvatarStorage"}},
+				{id: "named-storage-injection", paths: []string{"internal/invoices/avatar_storage.go", "internal/avatars/*.go"}, identifiers: []string{"Manager"}, identifierChoices: [][]string{{"AvatarStorage", "Storage"}}, selectorCalls: []string{"Avatars"}},
+				{id: "named-storage-registration", paths: []string{"app/wire/inject_services_app.go"}, identifierChoices: [][]string{{"NewAvatarStorage", "NewStorage"}}},
 			},
 			commands: standardSurfaceCommands(),
 		},
