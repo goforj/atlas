@@ -49,27 +49,7 @@ func (runner Runner) RunGuidanceDiagnostic(ctx context.Context, request Guidance
 	}
 	result := GuidanceDiagnosticResult{LogicalTrialID: request.LogicalTrialID}
 	for _, profile := range profiles {
-		environment := request.Environments[profile]
-		attemptID := request.LogicalTrialID + "-" + profile
-		attempt, err := runner.Run(ctx, AttemptRequest{
-			AttemptID:      attemptID,
-			LogicalTrialID: request.LogicalTrialID,
-			Intent:         IntentDiagnostic,
-			Definition:     request.Definition,
-			Preparation: PreparationRequest{
-				ScenarioID:      request.Definition.ProjectScenario,
-				DestinationRoot: request.DestinationRoot,
-				ForjExecutable:  request.ForjExecutable,
-				OrchestrationID: attemptID,
-				Environment:     append([]string(nil), environment...),
-			},
-			GuidanceProfile: profile,
-			Runtime:         request.Runtime,
-		})
-		record := GuidanceDiagnosticAttempt{Profile: profile, Result: attempt}
-		if err != nil {
-			record.Error = err.Error()
-		}
+		record, _ := runner.runGuidanceDiagnosticAttempt(ctx, request, profile)
 		result.Attempts = append(result.Attempts, record)
 		if err := ctx.Err(); err != nil {
 			return result, err
@@ -89,6 +69,31 @@ func (runner Runner) RunGuidanceDiagnostic(ctx context.Context, request Guidance
 		}
 	}
 	return result, nil
+}
+
+// runGuidanceDiagnosticAttempt keeps single and paired diagnostic treatments on one request path.
+func (runner Runner) runGuidanceDiagnosticAttempt(ctx context.Context, request GuidanceDiagnosticRequest, profile string) (GuidanceDiagnosticAttempt, error) {
+	attemptID := request.LogicalTrialID + "-" + profile
+	attempt, err := runner.Run(ctx, AttemptRequest{
+		AttemptID:      attemptID,
+		LogicalTrialID: request.LogicalTrialID,
+		Intent:         IntentDiagnostic,
+		Definition:     request.Definition,
+		Preparation: PreparationRequest{
+			ScenarioID:      request.Definition.ProjectScenario,
+			DestinationRoot: request.DestinationRoot,
+			ForjExecutable:  request.ForjExecutable,
+			OrchestrationID: attemptID,
+			Environment:     append([]string(nil), request.Environments[profile]...),
+		},
+		GuidanceProfile: profile,
+		Runtime:         request.Runtime,
+	})
+	record := GuidanceDiagnosticAttempt{Profile: profile, Result: attempt}
+	if err != nil {
+		record.Error = err.Error()
+	}
+	return record, err
 }
 
 // samePairedAgentIdentity prevents treatment comparisons across different executable, model, provider, version, or authority identities.

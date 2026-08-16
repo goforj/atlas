@@ -288,6 +288,44 @@ func VerifyArtifactManifest(directory string, key []byte) (ArtifactManifest, err
 		return ArtifactManifest{}, err
 	}
 	defer artifactRoot.close()
+	return verifyArtifactManifest(artifactRoot, key)
+}
+
+// ReadVerifiedAttemptSummary authenticates the complete attempt before returning its inert human report.
+func ReadVerifiedAttemptSummary(directory string, key []byte) (string, ArtifactManifest, error) {
+	if err := validateArtifactAuthenticationKey(key); err != nil {
+		return "", ArtifactManifest{}, err
+	}
+	artifactRoot, err := openArtifactDirectory(directory)
+	if err != nil {
+		return "", ArtifactManifest{}, err
+	}
+	defer artifactRoot.close()
+	manifest, err := verifyArtifactManifest(artifactRoot, key)
+	if err != nil {
+		return "", ArtifactManifest{}, err
+	}
+	info, ok := artifactRoot.entries["summary.txt"]
+	if !ok {
+		return "", ArtifactManifest{}, fmt.Errorf("attempt summary is missing")
+	}
+	file, err := openArtifactFile(artifactRoot.root, "summary.txt", info)
+	if err != nil {
+		return "", ArtifactManifest{}, err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(file, maxArtifactFileSize+1))
+	closeErr := file.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		return "", ArtifactManifest{}, fmt.Errorf("read attempt summary: %w", err)
+	}
+	if len(body) > maxArtifactFileSize {
+		return "", ArtifactManifest{}, fmt.Errorf("attempt summary exceeds %d bytes", maxArtifactFileSize)
+	}
+	return string(body), manifest, nil
+}
+
+// verifyArtifactManifest authenticates one already anchored artifact directory.
+func verifyArtifactManifest(artifactRoot *artifactDirectory, key []byte) (ArtifactManifest, error) {
 	body, err := readArtifactManifest(artifactRoot)
 	if err != nil {
 		return ArtifactManifest{}, err

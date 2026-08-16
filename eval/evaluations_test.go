@@ -48,6 +48,7 @@ func TestPromotedMajorSurfaceEvaluationsResolve(t *testing.T) {
 		"add-event-subscriber",
 		"add-http-controller",
 		"add-job",
+		"add-migration",
 		"add-named-app-route",
 		"add-named-cache",
 		"add-named-resource",
@@ -79,7 +80,7 @@ func TestPromotedEvaluationIDsReturnsStableSuiteCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PromotedEvaluationIDs(): %v", err)
 	}
-	if len(ids) != 12 || ids[0] != "add-app-command" || ids[len(ids)-1] != "unknown-framework-shape" {
+	if len(ids) != 13 || ids[0] != "add-app-command" || ids[len(ids)-1] != "unknown-framework-shape" {
 		t.Fatalf("ids = %v", ids)
 	}
 }
