@@ -32,7 +32,7 @@ type Options struct {
 	MCPSelection *bool
 }
 
-// Result describes the files and agents touched during install.
+// Result describes Atlas-owned files plus the native guidance intent returned to the host.
 type Result struct {
 	Agents   []string
 	Files    []string
@@ -49,7 +49,7 @@ type GuidanceReconciliation struct {
 // GuidanceReconciliationVersion identifies the current host reconciliation contract.
 const GuidanceReconciliationVersion = 1
 
-// Installer installs Atlas project guidance and agent configuration.
+// Installer coordinates Atlas integration state while leaving native guidance projection to the host.
 type Installer struct {
 	Agents []agents.Agent
 }
@@ -62,7 +62,7 @@ func NewInstaller(adapters ...agents.Agent) Installer {
 	return Installer{Agents: adapters}
 }
 
-// Install writes Atlas guidance, MCP config, and project config.
+// Install returns native guidance intent and writes selected Atlas-owned skills, MCP config, and project state.
 func (i Installer) Install(ctx context.Context, opts Options) (Result, error) {
 	opts = normalizeOptions(opts)
 	var prior *config.Config
