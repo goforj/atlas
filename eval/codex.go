@@ -91,7 +91,7 @@ func (*CodexAgent) Properties(context.Context) (AgentProperties, error) {
 	return AgentProperties{}, nil
 }
 
-// Prepare fingerprints Codex, materializes the selected native guidance, and copies only the credential needed by the private app-server home.
+// Prepare fingerprints Codex and copies only the credential needed by the private app-server home.
 func (adapter *CodexAgent) Prepare(_ context.Context, environment RunEnvironment, guidance Guidance) (AgentPreparation, error) {
 	if adapter == nil {
 		return nil, fmt.Errorf("Codex adapter is required")
@@ -120,12 +120,7 @@ func (adapter *CodexAgent) Prepare(_ context.Context, environment RunEnvironment
 		delete(adapter.states, key)
 		adapter.mu.Unlock()
 	}()
-	createdGuidance, err := materializeGuidance(environment.ProjectRoot, guidance.Files)
-	if err != nil {
-		return nil, err
-	}
 	if err := materializeCredential(environment.HomeRoot, adapter.options.CredentialSource); err != nil {
-		removeGuidance(environment.ProjectRoot, createdGuidance)
 		return nil, err
 	}
 	state := preparedState{

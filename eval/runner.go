@@ -230,6 +230,15 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.EvaluationStatus = EvaluationFixtureError
 		return result, fmt.Errorf("resolved guidance profile %q does not match requested profile %q", resolvedGuidance.Profile, request.GuidanceProfile)
 	}
+	resolvedGuidance, err = runner.Preparer.MaterializeGuidance(ctx, preparedProject, resolvedGuidance)
+	if err != nil {
+		result.EvaluationStatus = EvaluationFixtureError
+		return result, fmt.Errorf("materialize guidance: %w", err)
+	}
+	if resolvedGuidance.Profile != request.GuidanceProfile {
+		result.EvaluationStatus = EvaluationFixtureError
+		return result, fmt.Errorf("materialized guidance profile %q does not match requested profile %q", resolvedGuidance.Profile, request.GuidanceProfile)
+	}
 	result.GuidanceDigest = digestGuidance(resolvedGuidance)
 	result.GuidanceFiles = guidanceFileIdentities(resolvedGuidance.Files)
 
