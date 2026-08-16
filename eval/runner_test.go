@@ -693,6 +693,20 @@ func TestRunnerClassifiesPostActionProviderFailureAsEvaluatorError(t *testing.T)
 	}
 }
 
+// TestRunnerRejectsInvalidSupervisorEvidenceAfterProviderFailure prevents a failed session from bypassing provenance validation.
+func TestRunnerRejectsInvalidSupervisorEvidenceAfterProviderFailure(t *testing.T) {
+	runner, _, _, backend, agent := newFakeRunner(t)
+	agent.session.waitErr = errors.New("provider disconnected")
+	backend.environment.events[0].Source = EventSourceAdapter
+	result, err := runner.Run(context.Background(), fakeAttemptRequest())
+	if err == nil || result.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("Run() = %#v, %v", result, err)
+	}
+	if len(result.SecondaryFailures) == 0 || result.SecondaryFailures[0].Phase != "event_capture" || !strings.Contains(result.SecondaryFailures[0].Message, "supervisor provenance") {
+		t.Fatalf("secondary failures = %#v", result.SecondaryFailures)
+	}
+}
+
 // TestRunnerClassifiesTimeoutAfterFirstActionAndUsesFreshCleanup verifies budgets do not poison teardown contexts.
 func TestRunnerClassifiesTimeoutAfterFirstActionAndUsesFreshCleanup(t *testing.T) {
 	runner, closeLog, _, _, agent := newFakeRunner(t)
