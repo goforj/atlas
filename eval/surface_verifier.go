@@ -135,7 +135,9 @@ func verifySurfaceOwnership(changes []ProjectChange, patterns []string) Endpoint
 		}
 		allowed := false
 		for _, pattern := range patterns {
-			if matched, _ := filepath.Match(pattern, path); matched || strings.HasSuffix(pattern, "/**") && strings.HasPrefix(path, strings.TrimSuffix(pattern, "**")) {
+			matched, _ := filepath.Match(pattern, path)
+			ownsDescendant := (change.After.Kind == "directory" || change.Before.Kind == "directory") && strings.HasPrefix(pattern, path+"/")
+			if matched || ownsDescendant || strings.HasSuffix(pattern, "/**") && strings.HasPrefix(path, strings.TrimSuffix(pattern, "**")) {
 				allowed = true
 				break
 			}
@@ -153,6 +155,9 @@ func verifySurfaceOwnership(changes []ProjectChange, patterns []string) Endpoint
 // derivedSurfaceChange identifies framework and Go tool outputs that are verified through isolated commands rather than authored ownership.
 func derivedSurfaceChange(path string) bool {
 	if path == "go.sum" || filepath.Base(path) == "wire_gen.go" {
+		return true
+	}
+	if path == "_data" || strings.Contains(path, "/_data/") || strings.HasSuffix(path, "/_data") {
 		return true
 	}
 	return path == "bin" || path == "build" || strings.HasPrefix(path, "bin/") || strings.HasPrefix(path, "build/")
