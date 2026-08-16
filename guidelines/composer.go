@@ -26,6 +26,7 @@ func Compose(p project.Project) string {
 	out.WriteString("- Inspect `.goforj.yml`, the owning App, nearby packages, and `forj` command help before changing framework structure.\n")
 	out.WriteString("- Before hand-writing a controller, command, job, schedule, event, subscriber, model, migration, or named queue, use the matching `forj make:*` generator when the artifact should participate in App registration.\n")
 	out.WriteString("- The default App uses `forj make:<artifact> <name>`. An additional App uses `forj <app> make:<artifact> <name>`, for example `forj admin make:controller reports`.\n")
+	out.WriteString("- When an existing cohesive package owns the behavior, use a grouped generator name so the artifact lands with its owner, for example `forj make:job invoices:receipt`; do not create category packages such as `internal/jobs` around it.\n")
 	out.WriteString("- After generation, inspect the generated file and every registration or Wire file changed by the command before adding behavior. Never edit `wire_gen.go`; regenerate Wire through GoForj.\n")
 	out.WriteString("- If an artifact intentionally should not be registered, inspect generator help and local conventions first, then use a manual implementation only when that ownership choice is clear.\n\n")
 
@@ -33,12 +34,14 @@ func Compose(p project.Project) string {
 	out.WriteString("- Keep `app/` focused on App composition and transport registration. Put shared implementation and domain behavior in focused packages under `internal/`.\n")
 	out.WriteString("- Keep packages as flat, self-contained, and portable as practical. Start with one cohesive package for a responsibility and add files within it. Create a subpackage only when it has a cohesive API and can stand on its own; avoid Java/PHP-style category nesting such as `services`, `handlers`, `models`, `types`, or `utils` merely to sort code.\n")
 	out.WriteString("- Keep controllers, commands, jobs, and schedules thin; invoke services for application behavior.\n")
+	out.WriteString("- Register application service constructors in the owning App's `wire/inject_services_app.go`; keep controller, command, job, and subscriber Wire sets focused on those adapter providers.\n")
 	out.WriteString("- Keep database access behind repositories or equivalent domain ports, and propagate cancellation through connection-backed work.\n")
 	out.WriteString("- Treat generated registration points as in-use framework code: preserve the generated integration unless the requested design deliberately replaces it.\n\n")
 
 	out.WriteString("## Evidence And Validation\n\n")
 	out.WriteString("- Prefer local configuration, generated source, CLI inspection commands, and focused tests as evidence for how this Project works.\n")
 	out.WriteString("- Use Atlas project inspection and version-aware documentation when available. Otherwise consult the documentation matching the Project's GoForj version at `https://goforj.dev`; ask before inventing a convention when local and documented evidence are insufficient.\n")
+	out.WriteString("- If the requested execution primitive, owning App, or package boundary remains ambiguous, inspect read-only evidence and ask the user before running generators, builds, or other commands that mutate Project state.\n")
 	out.WriteString("- Run focused tests for changed packages, then the Project's relevant GoForj build or broader test command.\n")
 	out.WriteString("- Keep MCP and Atlas operations read-only unless an explicit write feature is added later.\n")
 	out.WriteString("- For GoForj framework validation renders, use `/tmp`, never the GoForj repo directory.\n\n")

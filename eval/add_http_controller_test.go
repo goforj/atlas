@@ -293,6 +293,18 @@ func TestOwnershipChecksAllowsDerivedWireOutput(t *testing.T) {
 	}
 }
 
+// TestOwnershipChecksAllowsDerivedBuildOutputs keeps controller ownership aligned with the shared framework verifier policy.
+func TestOwnershipChecksAllowsDerivedBuildOutputs(t *testing.T) {
+	checks := ownershipChecks([]ProjectChange{
+		{Path: "go.sum"},
+		{Path: "bin/.app.ready"},
+		{Path: "build/api_index.json"},
+	})
+	if !checkHasStatus(checks, "change-ownership", EndpointPassed) {
+		t.Fatalf("ownership checks = %#v", checks)
+	}
+}
+
 // TestOwnershipChecksAllowsFocusedControllerTests permits candidate tests that exercise the controller without expanding the domain change budget.
 func TestOwnershipChecksAllowsFocusedControllerTests(t *testing.T) {
 	for _, path := range []string{

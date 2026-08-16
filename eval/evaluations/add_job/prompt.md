@@ -1,1 +1,1 @@
-Add background receipt work for invoices. Dispatch a typed payload containing an invoice ID, then reload current invoice state through the existing application behavior when the job runs. Keep queue mechanics in the job and leave the Project working.
+Add an `invoices:receipt` background job. Dispatch a typed payload containing an invoice ID, then reload current invoice state through the existing invoice application behavior when the job runs. Keep queue mechanics in the job and leave the Project working.

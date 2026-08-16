@@ -122,7 +122,7 @@ func ownershipChecks(changes []ProjectChange) []EndpointResult {
 	}
 	for _, change := range changes {
 		path := filepath.ToSlash(change.Path)
-		if filepath.Base(path) == "wire_gen.go" {
+		if derivedSurfaceChange(path) {
 			continue
 		}
 		if !isAllowedControllerChange(path) {
