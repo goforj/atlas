@@ -229,12 +229,10 @@ func runFakeCodexAdapterServer() {
 				sources = append(sources, filepath.Join(os.Getenv("HOME"), "AGENTS.md"))
 			}
 			writeFakeAdapterResponse(*request.ID, map[string]any{
-				"model": "gpt-test", "modelProvider": "openai", "instructionSources": sources,
+				"model": "gpt-test", "modelProvider": "openai", "approvalPolicy": params.ApprovalPolicy, "sandbox": params.Sandbox, "instructionSources": sources,
 				"thread": map[string]any{
-					"id":             "thread-1",
-					"ephemeral":      true,
-					"approvalPolicy": params.ApprovalPolicy,
-					"sandbox":        params.Sandbox,
+					"id":        "thread-1",
+					"ephemeral": true,
 				},
 			})
 		case "turn/start":

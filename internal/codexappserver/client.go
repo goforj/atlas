@@ -206,12 +206,12 @@ func (client *Client) StartThread(ctx context.Context, options ThreadOptions) (T
 	var response struct {
 		Model              string   `json:"model"`
 		ModelProvider      string   `json:"modelProvider"`
+		ApprovalPolicy     string   `json:"approvalPolicy"`
+		Sandbox            string   `json:"sandbox"`
 		InstructionSources []string `json:"instructionSources"`
 		Thread             struct {
-			ID             string `json:"id"`
-			Ephemeral      bool   `json:"ephemeral"`
-			ApprovalPolicy string `json:"approvalPolicy"`
-			Sandbox        string `json:"sandbox"`
+			ID        string `json:"id"`
+			Ephemeral bool   `json:"ephemeral"`
 		} `json:"thread"`
 	}
 	if err := client.request(ctx, "thread/start", params, &response); err != nil {
@@ -220,15 +220,15 @@ func (client *Client) StartThread(ctx context.Context, options ThreadOptions) (T
 	if response.Thread.ID == "" {
 		return Thread{}, fmt.Errorf("Codex thread/start returned no thread id")
 	}
-	if response.Thread.ApprovalPolicy != options.ApprovalPolicy || response.Thread.Sandbox != options.Sandbox {
-		return Thread{}, fmt.Errorf("Codex thread/start effective policy = approvalPolicy %q, sandbox %q; want approvalPolicy %q, sandbox %q", response.Thread.ApprovalPolicy, response.Thread.Sandbox, options.ApprovalPolicy, options.Sandbox)
+	if response.ApprovalPolicy != options.ApprovalPolicy || response.Sandbox != options.Sandbox {
+		return Thread{}, fmt.Errorf("Codex thread/start effective policy = approvalPolicy %q, sandbox %q; want approvalPolicy %q, sandbox %q", response.ApprovalPolicy, response.Sandbox, options.ApprovalPolicy, options.Sandbox)
 	}
 	return Thread{
 		ID:                 response.Thread.ID,
 		Model:              response.Model,
 		ModelProvider:      response.ModelProvider,
-		ApprovalPolicy:     response.Thread.ApprovalPolicy,
-		Sandbox:            response.Thread.Sandbox,
+		ApprovalPolicy:     response.ApprovalPolicy,
+		Sandbox:            response.Sandbox,
 		InstructionSources: append([]string(nil), response.InstructionSources...),
 		Ephemeral:          response.Thread.Ephemeral,
 	}, nil

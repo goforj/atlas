@@ -66,6 +66,25 @@ forj make:controller users
 forj marketplace make:job sync-catalog
 ```
 
+## Live Agent Evaluation
+
+Atlas includes an experimental diagnostic harness for measuring how coding
+agents work in disposable GoForj Projects. The first promoted comparison runs
+the same controller task once without Project guidance and once with the
+canonical `AGENTS.md` guidance:
+
+```bash
+forj atlas:eval compare add-http-controller --model <model>
+```
+
+The command retains redacted, authenticated evidence and verifies the final
+Project independently from the agent session. Its current local backend is
+diagnostic only: missing supervisor-grade command and filesystem observation
+is reported as ineligible evidence rather than promoted to an authoritative
+workflow claim. See [the implementation plan](docs/live-agent-evaluation-plan.md)
+and [Codex adapter qualification](docs/codex-adapter-feasibility.md) for the
+boundary and release sequence.
+
 ## Development
 
 ```bash
