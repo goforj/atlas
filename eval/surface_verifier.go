@@ -30,13 +30,14 @@ type textExclusion struct {
 
 // sourceContract requires syntax-bearing facts from one or more candidate-owned files.
 type sourceContract struct {
-	id             string
-	paths          []string
-	identifiers    []string
-	selectorCalls  []string
-	forbiddenCalls []string
-	stringLiterals []string
-	text           []string
+	id                string
+	paths             []string
+	identifiers       []string
+	identifierChoices [][]string
+	selectorCalls     []string
+	forbiddenCalls    []string
+	stringLiterals    []string
+	text              []string
 }
 
 // commandContract defines one supervisor-owned executable check.
@@ -189,6 +190,18 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 	for _, identifier := range contract.identifiers {
 		if !facts.identifiers[identifier] {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required identifier %q is absent", identifier)}
+		}
+	}
+	for _, choices := range contract.identifierChoices {
+		matched := false
+		for _, identifier := range choices {
+			if facts.identifiers[identifier] {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("one of the required identifiers %q is absent", choices)}
 		}
 	}
 	for _, selector := range contract.selectorCalls {

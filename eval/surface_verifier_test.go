@@ -108,3 +108,23 @@ func TestSurfaceVerifierAllowsOwnedPackageDirectories(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 }
+
+// TestSurfaceVerifierAcceptsReviewedIdentifierFamilies keeps cohesive package naming flexible without weakening required structure.
+func TestSurfaceVerifierAcceptsReviewedIdentifierFamilies(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "profiles", "cache.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("package profiles\ntype Cache struct{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	contract := sourceContract{id: "profile-cache", paths: []string{"internal/profiles/*.go"}, identifierChoices: [][]string{{"ProfileCache", "Cache"}}}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("cohesive family result = %#v", result)
+	}
+	contract.identifierChoices = [][]string{{"ProfileCache", "Store"}}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+		t.Fatalf("unknown family result = %#v", result)
+	}
+}
