@@ -34,7 +34,7 @@ var allowedArtifactFiles = map[string]bool{
 	"triage.json":             true,
 }
 
-// ArtifactStore creates private supervisor-owned attempt directories and authenticated manifests.
+// ArtifactStore creates private supervisor-owned attempt directories and manifests with post-run tamper evidence.
 type ArtifactStore struct {
 	root     string
 	key      []byte
@@ -90,18 +90,8 @@ func (store *ArtifactStore) Begin(attemptID string) (*AttemptArtifacts, error) {
 	if !artifactAttemptIDPattern.MatchString(attemptID) {
 		return nil, fmt.Errorf("attempt ID %q must be a safe slug", attemptID)
 	}
-	if err := os.MkdirAll(store.root, 0o700); err != nil {
-		return nil, fmt.Errorf("create artifact root: %w", err)
-	}
-	if err := os.Chmod(store.root, 0o700); err != nil {
-		return nil, fmt.Errorf("secure artifact root: %w", err)
-	}
-	rootInfo, err := os.Lstat(store.root)
-	if err != nil {
-		return nil, fmt.Errorf("inspect artifact root: %w", err)
-	}
-	if rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
-		return nil, fmt.Errorf("artifact root must be a real directory")
+	if err := prepareArtifactRoot(store.root); err != nil {
+		return nil, err
 	}
 	directory := filepath.Join(store.root, attemptID)
 	if err := os.Mkdir(directory, 0o700); err != nil {
@@ -118,6 +108,24 @@ func (store *ArtifactStore) Begin(attemptID string) (*AttemptArtifacts, error) {
 		redactor:  store.redactor,
 		events:    events,
 	}, nil
+}
+
+// prepareArtifactRoot creates a private root or verifies that an existing root is already safe to trust.
+func prepareArtifactRoot(root string) error {
+	if err := os.Mkdir(root, 0o700); err != nil && !os.IsExist(err) {
+		return fmt.Errorf("create artifact root: %w", err)
+	}
+	rootInfo, err := os.Lstat(root)
+	if err != nil {
+		return fmt.Errorf("inspect artifact root: %w", err)
+	}
+	if rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
+		return fmt.Errorf("artifact root must be a real directory")
+	}
+	if rootInfo.Mode().Perm() != 0o700 {
+		return fmt.Errorf("artifact root permissions must be 0700")
+	}
+	return nil
 }
 
 // AppendEvent redacts and persists one event before accepting the next sequence item.

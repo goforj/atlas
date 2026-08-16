@@ -95,6 +95,85 @@ func TestArtifactStoreRejectsAgentControlledPaths(t *testing.T) {
 	}
 }
 
+// TestArtifactStoreCreatesPrivateRootOrRejectsUnsafeExistingRoots keeps evidence outside agent-controlled locations.
+func TestArtifactStoreCreatesPrivateRootOrRejectsUnsafeExistingRoots(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	t.Run("creates absent root privately", func(t *testing.T) {
+		root := filepath.Join(t.TempDir(), "artifacts")
+		store, err := NewArtifactStore(root, key, NewRedactor(nil))
+		if err != nil {
+			t.Fatalf("NewArtifactStore(): %v", err)
+		}
+		artifacts, err := store.Begin("attempt-07")
+		if err != nil {
+			t.Fatalf("Begin(): %v", err)
+		}
+		if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+			t.Fatalf("Finalize(): %v", err)
+		}
+		info, err := os.Stat(root)
+		if err != nil {
+			t.Fatalf("stat artifact root: %v", err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("artifact root permissions = %o, want 700", info.Mode().Perm())
+		}
+	})
+
+	for _, test := range []struct {
+		name  string
+		setup func(t *testing.T, root string)
+	}{
+		{
+			name: "symlink",
+			setup: func(t *testing.T, root string) {
+				target := filepath.Join(t.TempDir(), "target")
+				if err := os.Mkdir(target, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(target, root); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "non-directory",
+			setup: func(t *testing.T, root string) {
+				if err := os.WriteFile(root, []byte("not a directory"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "insecure permissions",
+			setup: func(t *testing.T, root string) {
+				if err := os.Mkdir(root, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	} {
+		t.Run("rejects "+test.name, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "artifacts")
+			test.setup(t, root)
+			store, err := NewArtifactStore(root, key, NewRedactor(nil))
+			if err != nil {
+				t.Fatalf("NewArtifactStore(): %v", err)
+			}
+			if _, err := store.Begin("attempt-08"); err == nil {
+				t.Fatal("Begin() accepted an unsafe existing artifact root")
+			}
+			info, err := os.Lstat(root)
+			if err != nil {
+				t.Fatalf("lstat artifact root: %v", err)
+			}
+			if test.name == "insecure permissions" && info.Mode().Perm() != 0o755 {
+				t.Fatalf("artifact root permissions = %o, want unchanged 755", info.Mode().Perm())
+			}
+		})
+	}
+}
+
 // TestAttemptArtifactsRejectsNonMonotonicEvents keeps retained timelines unambiguous.
 func TestAttemptArtifactsRejectsNonMonotonicEvents(t *testing.T) {
 	store, err := NewArtifactStore(t.TempDir(), []byte("0123456789abcdef0123456789abcdef"), NewRedactor(nil))
