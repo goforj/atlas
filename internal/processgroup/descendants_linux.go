@@ -10,6 +10,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 const descendantPollInterval = 25 * time.Millisecond
@@ -174,26 +176,30 @@ func killDescendants(targets processTargets) error {
 	return signalLinuxTargets(targets, syscall.SIGKILL)
 }
 
-// signalLinuxTargets validates creation identity and recorded groups before group signaling so PID reuse cannot target unrelated processes.
+// signalLinuxTargets binds every signal to a pidfd before validating creation identity so PID reuse cannot redirect cleanup.
 func signalLinuxTargets(targets processTargets, signal syscall.Signal) error {
-	groups := map[int]bool{}
 	var result error
 	for _, identity := range targets.Processes {
+		pidfd, err := unix.PidfdOpen(identity.PID, 0)
+		if errors.Is(err, syscall.ESRCH) {
+			continue
+		}
+		if err != nil {
+			result = errors.Join(result, err)
+			continue
+		}
 		current, ok := readLinuxProcess(identity.PID)
 		if !ok || current.StartTime != identity.StartTime {
+			_ = unix.Close(pidfd)
 			continue
 		}
-		if current.GroupID == identity.GroupID && current.GroupID > 0 && current.GroupID != syscall.Getpgrp() {
-			groups[current.GroupID] = true
-			continue
+		signalErr := unix.PidfdSendSignal(pidfd, signal, nil, 0)
+		closeErr := unix.Close(pidfd)
+		if signalErr != nil && !errors.Is(signalErr, syscall.ESRCH) {
+			result = errors.Join(result, signalErr)
 		}
-		if err := syscall.Kill(identity.PID, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
-			result = errors.Join(result, err)
-		}
-	}
-	for groupID := range groups {
-		if err := syscall.Kill(-groupID, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
-			result = errors.Join(result, err)
+		if closeErr != nil {
+			result = errors.Join(result, closeErr)
 		}
 	}
 	return result
