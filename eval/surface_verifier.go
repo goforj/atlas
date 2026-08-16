@@ -129,7 +129,7 @@ func verifySurfaceTextAbsent(root string, exclusion textExclusion) EndpointResul
 func verifySurfaceOwnership(changes []ProjectChange, patterns []string) EndpointResult {
 	for _, change := range changes {
 		path := filepath.ToSlash(change.Path)
-		if filepath.Base(path) == "wire_gen.go" {
+		if derivedSurfaceChange(path) {
 			continue
 		}
 		allowed := false
@@ -144,6 +144,14 @@ func verifySurfaceOwnership(changes []ProjectChange, patterns []string) Endpoint
 		}
 	}
 	return EndpointResult{ID: "change-ownership", Status: EndpointPassed}
+}
+
+// derivedSurfaceChange identifies framework and Go tool outputs that are verified through isolated commands rather than authored ownership.
+func derivedSurfaceChange(path string) bool {
+	if path == "go.sum" || filepath.Base(path) == "wire_gen.go" {
+		return true
+	}
+	return strings.HasPrefix(path, "bin/") || strings.HasPrefix(path, "build/")
 }
 
 // verifySurfaceSource finds syntax-bearing facts without counting comments as implementation evidence.
