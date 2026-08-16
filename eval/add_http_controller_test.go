@@ -56,16 +56,6 @@ func (runner *fakeCommandRunner) Run(_ context.Context, command []string) (strin
 	return "ok", nil
 }
 
-// RunTestBinary records the isolated test execution without trusting candidate-formatted output.
-func (runner *fakeCommandRunner) RunTestBinary(_ context.Context, packagePath, testName string, _ int) (string, error) {
-	command := []string{"go", "test-binary", packagePath, testName}
-	runner.commands = append(runner.commands, command)
-	if runner.failContains != "" && strings.Contains(strings.Join(command, "\x00"), runner.failContains) {
-		return "", errors.New("command failed")
-	}
-	return "ok", nil
-}
-
 // Close releases no resources because the fake session owns no filesystem state.
 func (*fakeCommandRunner) Close(context.Context) error {
 	return nil
@@ -88,7 +78,7 @@ func TestAddHTTPControllerVerifierAcceptsIndependentBoundaryShapes(t *testing.T)
 			if err != nil {
 				t.Fatalf("Verify(): %v", err)
 			}
-			if result.FrameworkOutcome.Status != EndpointPassed {
+			if result.FrameworkOutcome.Status != EndpointIneligible {
 				t.Fatalf("framework outcome = %#v; checks = %#v", result.FrameworkOutcome, result.Checks)
 			}
 			if len(runner.commands) != 4 || runner.opens != 4 {
@@ -137,7 +127,7 @@ func TestAddHTTPControllerVerifierBuildsProbeForBothPackageFamilies(t *testing.T
 			if err != nil {
 				t.Fatalf("Verify(): %v", err)
 			}
-			if result.FrameworkOutcome.Status != EndpointPassed {
+			if result.FrameworkOutcome.Status != EndpointIneligible {
 				t.Fatalf("framework outcome = %#v; checks = %#v", result.FrameworkOutcome, result.Checks)
 			}
 			body, exists := runner.files[filepath.FromSlash(test.wantPath)]
@@ -168,7 +158,7 @@ func TestAddHTTPControllerVerifierAcceptsIndependentPackagePlacement(t *testing.
 	if err != nil {
 		t.Fatalf("Verify(): %v", err)
 	}
-	if result.FrameworkOutcome.Status != EndpointPassed {
+	if result.FrameworkOutcome.Status != EndpointIneligible {
 		t.Fatalf("framework outcome = %#v; checks = %#v", result.FrameworkOutcome, result.Checks)
 	}
 }
@@ -194,7 +184,7 @@ var appHTTPControllerSet = wire.NewSet(http.NewInvoiceController)
 	if err != nil {
 		t.Fatalf("Verify(): %v", err)
 	}
-	if result.FrameworkOutcome.Status != EndpointPassed {
+	if result.FrameworkOutcome.Status != EndpointIneligible {
 		t.Fatalf("framework outcome = %#v; checks = %#v", result.FrameworkOutcome, result.Checks)
 	}
 }

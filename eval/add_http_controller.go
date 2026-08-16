@@ -26,8 +26,6 @@ type CommandSession interface {
 	WriteFile(string, []byte) error
 	// Run executes one allowlisted verifier command.
 	Run(context.Context, []string) (string, error)
-	// RunTestBinary compiles and executes a supervisor-authored test with an exit status that candidate stdout cannot forge.
-	RunTestBinary(context.Context, string, string, int) (string, error)
 	// Close destroys the disposable Project and any supervisor-owned input.
 	Close(context.Context) error
 }
@@ -71,15 +69,22 @@ func (verifier *AddHTTPControllerVerifier) Verify(ctx context.Context, input Ver
 	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "route-visible", []string{"forj", "route:list"}, "/api/v1/invoices/:id"))
 
 	failed := 0
+	ineligible := 0
 	for _, check := range checks {
-		if check.Status != EndpointPassed {
+		switch check.Status {
+		case EndpointFailed:
 			failed++
+		case EndpointIneligible:
+			ineligible++
 		}
 	}
 	framework := EndpointResult{ID: verifier.ID(), Status: EndpointPassed}
 	if failed > 0 {
 		framework.Status = EndpointFailed
 		framework.Details = fmt.Sprintf("%d of %d framework checks failed", failed, len(checks))
+	} else if ineligible > 0 {
+		framework.Status = EndpointIneligible
+		framework.Details = fmt.Sprintf("%d of %d framework checks lack authoritative evidence", ineligible, len(checks))
 	}
 	result := VerificationResult{
 		FrameworkOutcome:    framework,

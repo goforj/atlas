@@ -106,8 +106,8 @@ func verifierEnvironmentValues(environment []string) map[string]string {
 	return values
 }
 
-// TestInvoiceBehaviorProbeRejectsFramedOutputForgery proves candidate-emitted test2json framing cannot impersonate the hidden test.
-func TestInvoiceBehaviorProbeRejectsFramedOutputForgery(t *testing.T) {
+// TestInvoiceBehaviorProbeDowngradesFramedOutputForgery proves forged test2json success cannot become an authoritative pass.
+func TestInvoiceBehaviorProbeDowngradesFramedOutputForgery(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.test/framedoutput\n\ngo 1.25.0\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -128,72 +128,54 @@ func init() {
 	if err := os.WriteFile(filepath.Join(root, "production.go"), []byte(maliciousSource), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), root)
+	if err != nil {
+		t.Fatalf("Open(): %v", err)
+	}
+	defer session.Close(context.Background())
+	oracle := "package framedoutput\n\nimport \"testing\"\n\nfunc TestAtlasInvoiceHTTPBehavior(t *testing.T) {}\n"
+	if err := session.WriteFile("atlas_eval_invoice_behavior_test.go", []byte(oracle)); err != nil {
+		t.Fatalf("WriteFile(): %v", err)
+	}
+	_, err = session.Run(context.Background(), []string{"go", "test", "-json", ".", "-run", "^TestAtlasInvoiceHTTPBehavior$", "-count=1"})
+	if err != nil {
+		t.Fatalf("framed forgery precondition did not reproduce: %v", err)
+	}
+	if result := invoiceBehaviorExecutionResult(err); result.Status != EndpointIneligible {
+		t.Fatalf("framed output forgery result = %#v", result)
+	}
+}
+
+// TestInvoiceBehaviorProbeRejectsReservedExitForgery proves candidate init cannot impersonate the former completion status.
+func TestInvoiceBehaviorProbeRejectsReservedExitForgery(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.test/reservedexit\n\ngo 1.25.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	maliciousSource := `package reservedexit
+
+import "os"
+
+func init() {
+	os.Exit(86)
+}
+`
+	if err := os.WriteFile(filepath.Join(root, "production.go"), []byte(maliciousSource), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	runner := VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: os.Environ()}
 	session, err := runner.Open(context.Background(), root)
 	if err != nil {
 		t.Fatalf("Open(): %v", err)
 	}
 	defer session.Close(context.Background())
-	oracle := fmt.Sprintf(`package framedoutput
-
-import (
-	"os"
-	"testing"
-)
-
-func TestMain(m *testing.M) {
-	if m.Run() == 0 {
-		os.Exit(%d)
-	}
-	os.Exit(1)
-}
-
-func TestAtlasInvoiceHTTPBehavior(t *testing.T) {}
-`, invoiceBehaviorSuccessExitCode)
+	oracle := "package reservedexit\n\nimport \"testing\"\n\nfunc TestAtlasInvoiceHTTPBehavior(t *testing.T) {}\n"
 	if err := session.WriteFile("atlas_eval_invoice_behavior_test.go", []byte(oracle)); err != nil {
 		t.Fatalf("WriteFile(): %v", err)
 	}
-	output, err := session.RunTestBinary(context.Background(), ".", "TestAtlasInvoiceHTTPBehavior", invoiceBehaviorSuccessExitCode)
-	if err == nil || !strings.Contains(err.Error(), "process exit code 0, want 86") {
-		t.Fatalf("framed output forgery was accepted: %v; output = %q", err, output)
-	}
-}
-
-// TestVerifierCommandsAcceptsReservedTestCompletion proves the reserved status is emitted after the supervisor test passes.
-func TestVerifierCommandsAcceptsReservedTestCompletion(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.test/authenticatedtest\n\ngo 1.25.0\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "production.go"), []byte("package authenticatedtest\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), root)
-	if err != nil {
-		t.Fatalf("Open(): %v", err)
-	}
-	defer session.Close(context.Background())
-	oracle := fmt.Sprintf(`package authenticatedtest
-
-import (
-	"os"
-	"testing"
-)
-
-func TestMain(m *testing.M) {
-	if m.Run() == 0 {
-		os.Exit(%d)
-	}
-	os.Exit(1)
-}
-
-func TestAtlasInvoiceHTTPBehavior(t *testing.T) {}
-`, invoiceBehaviorSuccessExitCode)
-	if err := session.WriteFile("atlas_eval_invoice_behavior_test.go", []byte(oracle)); err != nil {
-		t.Fatalf("WriteFile(): %v", err)
-	}
-	if output, err := session.RunTestBinary(context.Background(), ".", "TestAtlasInvoiceHTTPBehavior", invoiceBehaviorSuccessExitCode); err != nil {
-		t.Fatalf("RunTestBinary(): %v; output = %q", err, output)
+	output, err := session.Run(context.Background(), []string{"go", "test", ".", "-run", "^TestAtlasInvoiceHTTPBehavior$", "-count=1"})
+	if err == nil {
+		t.Fatalf("reserved exit forgery was accepted; output = %q", output)
 	}
 }
 

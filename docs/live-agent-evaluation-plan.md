@@ -35,12 +35,14 @@ The diagnostic vertical slice is implemented locally across Atlas and GoForj:
 - the `invoice-http-route` scenario and `add-http-controller` evaluation run as
   paired `none` and `agents` treatments; and
 - a fresh live paired run completed from the same guidance-neutral prepared
-  tree, passed the current verifier and supervisor-owned behavior oracle in
-  both treatments, and correctly reported workflow conformance as ineligible
+  tree, exercised the verifier and supervisor-owned behavior oracle in both
+  treatments, and correctly reported workflow conformance as ineligible
   without trusted command evidence; and
 - the current verifier is calibrated locally against two compiled, behaviorally
-  valid implementation families plus a compilable response mutant, without
-  treating candidate-authored tests as its behavior oracle.
+  valid implementation families plus a compilable response mutant. A successful
+  same-process behavior probe is explicitly ineligible because candidate
+  production initialization can terminate the oracle process and manufacture
+  any process-local completion signal.
 
 The remaining integration gate is release ordered. Atlas must be published
 with the new evaluation packages before GoForj can update its module pin and
@@ -60,7 +62,7 @@ gate:
 | GoForj preparation | Scenario decoder, plan, preparation, clone, tree, and documentation-parity tests cover strict v2 YAML, unchanged v1 behavior, dependency ordering, target omission, symlink rejection, independent writable copies, and lexical tree identities. The tagged `TestInvoiceHTTPRouteScenarioIntegration` exercises the complete golden path. |
 | Atlas evaluation core | Runner, artifact, manifest, diff, report, diagnostic, workflow, and isolation tests cover capability preflight, baseline timing, cancellation, timeout, cleanup, sealing before verification, redaction, and HMAC-backed post-run tamper evidence for artifacts, plus separate outcome and conformance endpoints. This HMAC evidence is not adversarial authentication when an unconfined candidate and the supervisor share a UID, because that candidate can read the signing key or replace retained files. |
 | Guidance ownership | Guidance reconciliation tests cover every native target, managed-block ownership, stable target selection, and legacy inference. Tagged `TestBaselineGuidanceSurvivesProjectLifecycle` proves baseline guidance survives render, build, and a representative generator workflow. |
-| Diagnostic slice | The promoted manifest, workflow, and verifier tests bind the three versioned contracts. The verifier injects a supervisor-owned 200/404 behavior oracle only after the agent stops and only into its disposable clone; tagged integration coverage proves both the generated-package and independently structured transport-package implementations pass while a compilable response mutant fails independently of candidate-authored tests. Tagged preparer tests also prove the invoice starting state and same-base paired treatments. Trial `trial-20260816t003503-7707b4c6a6b2` passed the current verifier in both live treatments; its complete artifact sets authenticate successfully and record the same prepared tree, scenario plan, environment, executable, model, and prompt identities. |
+| Diagnostic slice | The promoted manifest, workflow, and verifier tests bind the three versioned contracts. The verifier injects a supervisor-owned 200/404 behavior oracle only after the agent stops and only into its disposable clone. The oracle can expose failures, but a successful run is ineligible for an authoritative framework pass because candidate production and the oracle share a process. Tagged preparer tests also prove the invoice starting state and same-base paired treatments. Trial `trial-20260816t003503-7707b4c6a6b2` completed both live treatments and retained complete artifact sets with the same prepared tree, scenario plan, environment, executable, model, and prompt identities; its historical pass statuses are diagnostic rather than authoritative. |
 
 A prior unassisted live attempt produced a valid transport-package
 implementation using `InvoiceController`, `NewInvoiceController`, and an
@@ -72,13 +74,14 @@ from the candidate AST, accepts both implementation families, and still
 rejects direct and qualified repository dependencies, wrong routes, missing
 registration, missing context propagation, and build failures.
 
-The current local pair passed all framework checks, including the hidden invoice
-behavior probe, while correctly leaving generator conformance ineligible on the
-unconfined backend. Provider telemetry showed both candidates used the
-generator, but the report did not promote that untrusted observation into a
-workflow claim. The release-qualified paired run below must reproduce these
-properties with retrievable release identities instead of local `(devel)`
-builds.
+The recorded local pair reported passes under the earlier same-process behavior
+proof. Those pass statuses are no longer considered authoritative: ordinary
+candidate initialization could emit the accepted output or exit status without
+running the hidden test. Current code reports otherwise-successful framework
+behavior as ineligible until the oracle can execute across a boundary where
+candidate code cannot manufacture its completion evidence. Provider telemetry
+showed both candidates used the generator, but the report did not promote that
+untrusted observation into a workflow claim.
 
 Both treatments passed this single local pair, so it demonstrates the harness
 and current verifier rather than an effect from baseline guidance. Guidance
@@ -121,7 +124,8 @@ released-module and released-binary checks below.
 - Guidance profiles and canonical guidance composition.
 - Agent adapter contracts, lifecycle orchestration, evidence capture, and
   artifact retention.
-- Independent behavioral, ownership, and conformance verification.
+- One-sided behavior diagnostics plus independent ownership and conformance
+  verification.
 - Diagnostic reports, comparison semantics, and fake-agent test support.
 
 ### Shared Boundary
@@ -195,11 +199,13 @@ update, custom, minimal, and skip modes.
 
 1. Add the `invoice-http-route` GoForj scenario.
 2. Add `goforj-add-http-route/v1` typed workflow requirements.
-3. Add the independent `add-http-controller/v1` verifier with calibrated
-   positive fixtures and mutants. Install its hidden behavior probe only in
-   the verifier-owned clone after the candidate tree is sealed, so candidate
-   tests cannot define the behavioral oracle and the oracle cannot leak into
-   measured changes.
+3. Add the `add-http-controller/v1` verifier with calibrated positive fixtures
+   and mutants. Install its hidden behavior probe only in the verifier-owned
+   clone after the candidate tree is sealed, so candidate tests cannot define
+   the behavioral oracle and the oracle cannot leak into measured changes.
+   Treat successful same-process execution as ineligible until a separate
+   execution boundary can provide completion evidence unavailable to candidate
+   production code.
 4. Add the natural prompt adjacent to its evaluation manifest.
 5. Connect the diagnostic Codex adapter.
 6. Add the thin `forj atlas:eval` wrapper.
