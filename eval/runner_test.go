@@ -109,6 +109,8 @@ func (backend *fakeBackend) Open(_ context.Context, request BackendRequest) (Bac
 // fakeBackendEnvironment owns one private agent namespace.
 type fakeBackendEnvironment struct {
 	environment RunEnvironment
+	baseline    BaselineSnapshot
+	events      []Event
 	sealed      SealedProject
 	closeLog    *[]string
 	closeErr    error
@@ -127,6 +129,16 @@ func (environment *fakeBackendEnvironment) Environment() RunEnvironment {
 	return environment.environment
 }
 
+// Baseline returns the supervisor-owned treatment baseline configured by the test.
+func (environment *fakeBackendEnvironment) Baseline(context.Context) (BaselineSnapshot, error) {
+	return environment.baseline, nil
+}
+
+// ObservedEvents returns backend-owned observations rather than adapter telemetry.
+func (environment *fakeBackendEnvironment) ObservedEvents(context.Context) ([]Event, error) {
+	return append([]Event(nil), environment.events...), nil
+}
+
 // Close records fresh-context backend destruction.
 func (environment *fakeBackendEnvironment) Close(ctx context.Context) error {
 	if ctx.Err() != nil {
@@ -143,6 +155,7 @@ type fakeAgent struct {
 	session      *fakeSession
 	prepareHook  func(RunEnvironment, Guidance) error
 	prepareCalls int
+	startErr     error
 }
 
 // Name returns the fake adapter identity.
@@ -168,7 +181,7 @@ func (agent *fakeAgent) Prepare(_ context.Context, environment RunEnvironment, g
 
 // Start returns one fresh fake provider session.
 func (agent *fakeAgent) Start(context.Context, PreparedAgent) (EvaluationSession, error) {
-	return agent.session, nil
+	return agent.session, agent.startErr
 }
 
 // fakeAgentPreparation owns the private adapter home.
@@ -283,7 +296,7 @@ func TestRunnerCompletesLifecycleAndCleansInReverseOrder(t *testing.T) {
 		}
 	}
 	summary, err := os.ReadFile(filepath.Join(runner.Artifacts.root, result.AttemptID, "summary.txt"))
-	if err != nil || !strings.Contains(string(summary), "Diagnostic limitation:") || !strings.Contains(string(summary), "Result verified") {
+	if err != nil || strings.Contains(string(summary), "Diagnostic limitation:") || !strings.Contains(string(summary), "Result verified") {
 		t.Fatalf("summary = %q, %v", summary, err)
 	}
 	environment, err := os.ReadFile(filepath.Join(runner.Artifacts.root, result.AttemptID, "environment.json"))
@@ -312,6 +325,7 @@ func TestRunnerCompletesLifecycleAndCleansInReverseOrder(t *testing.T) {
 func TestRunnerCapturesBaselineAfterGuidanceMaterialization(t *testing.T) {
 	runner, _, preparer, backend, agent := newFakeRunner(t)
 	backend.environment.sealed.Root = preparer.project.result.ProjectRoot
+	backend.environment.baseline.TreeDigest = ""
 	agent.prepareHook = func(environment RunEnvironment, _ Guidance) error {
 		return os.WriteFile(filepath.Join(environment.ProjectRoot, "AGENTS.md"), []byte("Use GoForj generators.\n"), 0o644)
 	}
@@ -390,16 +404,64 @@ func TestRunnerClosesAgentBeforeVerifyingSealedTree(t *testing.T) {
 	if verifier.input.ProjectRoot != backend.environment.sealed.Root || verifier.input.FinalTree != "sha256:final-tree" || verifier.input.BaselineTree != result.BaselineTree {
 		t.Fatalf("verification input = %#v", verifier.input)
 	}
+	if len(verifier.input.Changes) != 0 {
+		t.Fatalf("unchanged Project changes = %#v", verifier.input.Changes)
+	}
+}
+
+// TestRunnerPassesSupervisorComputedChanges gives verifiers structured ownership evidence instead of a display patch.
+func TestRunnerPassesSupervisorComputedChanges(t *testing.T) {
+	runner, _, _, backend, _ := newFakeRunner(t)
+	if err := os.WriteFile(filepath.Join(backend.environment.sealed.Root, "wire_gen.go"), []byte("generated"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	verifier := &capturingVerifier{}
+	registry, err := NewRegistry(PromotedWorkflows(), []Verifier{verifier})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.Registry = registry
+	if _, err := runner.Run(context.Background(), fakeAttemptRequest()); err != nil {
+		t.Fatalf("Run(): %v", err)
+	}
+	if len(verifier.input.Changes) != 1 || verifier.input.Changes[0].Path != "wire_gen.go" || verifier.input.Changes[0].Before.Kind != "" || verifier.input.Changes[0].After.Kind != "file" || verifier.input.Changes[0].After.Digest == "" {
+		t.Fatalf("changes = %#v", verifier.input.Changes)
+	}
+}
+
+// TestRunnerClassifiesTypedStartAndTurnFailures keeps provider faults distinct from adapter faults.
+func TestRunnerClassifiesTypedStartAndTurnFailures(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		setup func(*fakeAgent)
+		want  AgentOutcome
+	}{
+		{name: "start provider", setup: func(agent *fakeAgent) {
+			agent.startErr = &AgentFailure{Outcome: AgentProviderError, Err: errors.New("provider unavailable")}
+		}, want: AgentProviderError},
+		{name: "turn provider", setup: func(agent *fakeAgent) {
+			agent.session.turnErr = &AgentFailure{Outcome: AgentProviderError, Err: errors.New("provider rejected prompt")}
+		}, want: AgentProviderError},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runner, _, _, _, agent := newFakeRunner(t)
+			test.setup(agent)
+			result, err := runner.Run(context.Background(), fakeAttemptRequest())
+			if err == nil || result.AgentOutcome != test.want {
+				t.Fatalf("Run() = %#v, %v", result, err)
+			}
+		})
+	}
 }
 
 // TestRunnerRejectsCommandBudgetOverrun verifies provider adapters cannot silently exceed manifest policy.
 func TestRunnerRejectsCommandBudgetOverrun(t *testing.T) {
-	runner, _, _, _, agent := newFakeRunner(t)
+	runner, _, _, backend, _ := newFakeRunner(t)
 	request := fakeAttemptRequest()
 	request.Definition.Limits.Commands = 1
-	agent.session.result.Events = []Event{
-		{Sequence: 2, Kind: EventCommandStarted},
-		{Sequence: 3, Kind: EventRunFinished},
+	backend.environment.events = []Event{
+		{Sequence: 1, Source: EventSourceSupervisor, Kind: EventCommandStarted},
+		{Sequence: 2, Source: EventSourceSupervisor, Kind: EventCommandStarted},
 	}
 
 	result, err := runner.Run(context.Background(), request)
@@ -414,7 +476,7 @@ func TestRunnerRejectsCommandBudgetOverrun(t *testing.T) {
 // TestRunnerRejectsMissingCapabilityBeforeMutation keeps diagnostic gaps out of behavioral denominators.
 func TestRunnerRejectsMissingCapabilityBeforeMutation(t *testing.T) {
 	runner, closeLog, preparer, backend, agent := newFakeRunner(t)
-	agent.capabilities = nil
+	backend.capabilities = nil
 	result, err := runner.Run(context.Background(), fakeAttemptRequest())
 	if err != nil {
 		t.Fatalf("Run(): %v", err)
@@ -439,7 +501,7 @@ func TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(): %v", err)
 	}
-	if result.EvaluationStatus != EvaluationValid || result.Verification == nil || result.Verification.FrameworkOutcome.Status != EndpointPassed || result.Verification.WorkflowConformance.Status != EndpointIneligible {
+	if result.EvaluationStatus != EvaluationDiagnostic || result.Verification == nil || result.Verification.FrameworkOutcome.Status != EndpointPassed || result.Verification.WorkflowConformance.Status != EndpointIneligible {
 		t.Fatalf("diagnostic result = %#v", result)
 	}
 	if !reflect.DeepEqual(result.UnavailableEvidence, []Capability{CapabilityCommands}) {
@@ -447,6 +509,28 @@ func TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence(t *testing.T) {
 	}
 	if preparer.prepareCalls != 1 || backend.openCalls != 1 || agent.prepareCalls != 1 {
 		t.Fatalf("diagnostic lifecycle calls = prepare:%d open:%d agent:%d", preparer.prepareCalls, backend.openCalls, agent.prepareCalls)
+	}
+}
+
+// TestRunnerAuthoritativeRequiresCompleteSupervisorBaseline prevents an incomplete snapshot from entering a valid denominator.
+func TestRunnerAuthoritativeRequiresCompleteSupervisorBaseline(t *testing.T) {
+	runner, _, _, backend, agent := newFakeRunner(t)
+	backend.environment.baseline = BaselineSnapshot{}
+	request := fakeAttemptRequest()
+	request.Intent = IntentAuthoritative
+	result, err := runner.Run(context.Background(), request)
+	if err != nil || result.EvaluationStatus != EvaluationIneligible || agent.session.lastTurn.Prompt != "" {
+		t.Fatalf("Run() = %#v, %v", result, err)
+	}
+}
+
+// TestRunnerRejectsAdapterProvenanceInSupervisorEvidence ensures an adapter cannot self-attest a behavioral event.
+func TestRunnerRejectsAdapterProvenanceInSupervisorEvidence(t *testing.T) {
+	runner, _, _, backend, _ := newFakeRunner(t)
+	backend.environment.events[0].Source = EventSourceAdapter
+	result, err := runner.Run(context.Background(), fakeAttemptRequest())
+	if err == nil || result.EvaluationStatus != EvaluationEvaluatorError || !strings.Contains(err.Error(), "supervisor provenance") {
+		t.Fatalf("Run() = %#v, %v", result, err)
 	}
 }
 
@@ -502,6 +586,17 @@ func TestAttemptNeedsTriageCoversTerminalResults(t *testing.T) {
 				t.Fatalf("attemptNeedsTriage() = %v, want %v", got, test.want)
 			}
 		})
+	}
+}
+
+// TestNewTriageReviewDefersHumanDispositionOutsideImmutableArtifacts preserves the original authenticated evidence set.
+func TestNewTriageReviewDefersHumanDispositionOutsideImmutableArtifacts(t *testing.T) {
+	review, err := NewTriageReview("attempt-01", TriageDisposition("guidance_discoverability"), "reviewer", time.Unix(1, 0))
+	if err != nil || review.AttemptID != "attempt-01" || review.ReviewedAt.Location() != time.UTC {
+		t.Fatalf("NewTriageReview() = %#v, %v", review, err)
+	}
+	if _, err := NewTriageReview("", TriageDisposition("guidance_discoverability"), "reviewer", time.Time{}); err == nil {
+		t.Fatal("NewTriageReview() accepted incomplete review")
 	}
 }
 
@@ -644,8 +739,14 @@ func newFakeRunner(t *testing.T) (Runner, *[]string, *fakePreparer, *fakeBackend
 		capabilities: []Capability{CapabilityCommands},
 		environment: &fakeBackendEnvironment{
 			environment: RunEnvironment{ProjectRoot: projectRoot, Capabilities: []Capability{CapabilityCommands}},
-			sealed:      SealedProject{Root: sealedRoot, TreeDigest: "sha256:final-tree"},
-			closeLog:    closeLog,
+			baseline:    BaselineSnapshot{TreeDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", Complete: true},
+			events: []Event{
+				{Sequence: 1, Source: EventSourceSupervisor, Kind: EventCommandStarted, Fields: map[string]string{EventFieldCommandID: "command-1", EventFieldExecutableDigest: "sha256:forj", EventFieldArguments: `["make:controller","invoices"]`}},
+				{Sequence: 2, Source: EventSourceSupervisor, Kind: EventCommandFinished, Fields: map[string]string{EventFieldCommandID: "command-1", EventFieldExitCode: "0"}},
+				{Sequence: 3, Source: EventSourceSupervisor, Kind: EventRunFinished},
+			},
+			sealed:   SealedProject{Root: sealedRoot, TreeDigest: "sha256:final-tree"},
+			closeLog: closeLog,
 		},
 	}
 	agent := &fakeAgent{

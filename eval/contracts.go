@@ -3,6 +3,7 @@ package eval
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -108,7 +109,23 @@ type VerificationInput struct {
 	ProjectRoot  string
 	BaselineTree string
 	FinalTree    string
-	Events       []Event
+	// Changes is the supervisor-computed, path-level projection of the sealed Project delta.
+	Changes []ProjectChange
+	Events  []Event
+}
+
+// ProjectPathState identifies one Project path at a sealed snapshot. A zero value means the path was absent.
+type ProjectPathState struct {
+	Kind   string `json:"kind,omitempty"`
+	Digest string `json:"digest,omitempty"`
+	Mode   uint32 `json:"mode,omitempty"`
+}
+
+// ProjectChange records one supervisor-computed path change between the treatment baseline and sealed Project.
+type ProjectChange struct {
+	Path   string           `json:"path"`
+	Before ProjectPathState `json:"before"`
+	After  ProjectPathState `json:"after"`
 }
 
 // VerificationResult separates framework behavior from workflow conformance.
@@ -276,8 +293,16 @@ type EvaluationAgent interface {
 // BackendEnvironment owns the isolation resources that enclose one agent attempt.
 type BackendEnvironment interface {
 	Environment() RunEnvironment
+	Baseline(context.Context) (BaselineSnapshot, error)
+	ObservedEvents(context.Context) ([]Event, error)
 	Seal(context.Context) (SealedProject, error)
 	Close(context.Context) error
+}
+
+// BaselineSnapshot is the backend/supervisor-owned baseline captured after treatment setup and before the session starts.
+type BaselineSnapshot struct {
+	TreeDigest string
+	Complete   bool
 }
 
 // SealedProject is the immutable verifier input captured after every agent descendant has stopped.
@@ -324,9 +349,20 @@ const (
 type Event struct {
 	Sequence uint64            `json:"sequence"`
 	Kind     EventKind         `json:"kind"`
+	Source   EventSource       `json:"source"`
 	Time     time.Time         `json:"time"`
 	Fields   map[string]string `json:"fields,omitempty"`
 }
+
+// EventSource identifies the observation boundary that produced an event.
+type EventSource string
+
+const (
+	// EventSourceSupervisor identifies evidence observed by the execution backend or supervisor.
+	EventSourceSupervisor EventSource = "supervisor"
+	// EventSourceAdapter identifies diagnostic-only telemetry reported by an agent adapter.
+	EventSourceAdapter EventSource = "adapter"
+)
 
 const (
 	// EventFieldCommandID correlates one trusted command start with its completion.
@@ -359,6 +395,28 @@ const (
 	AgentCancelled AgentOutcome = "cancelled"
 )
 
+// AgentFailure classifies a failed adapter operation without conflating provider availability with adapter defects.
+type AgentFailure struct {
+	Outcome AgentOutcome
+	Err     error
+}
+
+// Error returns the wrapped operation failure.
+func (failure *AgentFailure) Error() string {
+	if failure == nil || failure.Err == nil {
+		return "agent operation failed"
+	}
+	return failure.Err.Error()
+}
+
+// Unwrap exposes the original operation failure.
+func (failure *AgentFailure) Unwrap() error {
+	if failure == nil {
+		return nil
+	}
+	return failure.Err
+}
+
 // EvaluationStatus classifies whether trusted verification produced a valid result.
 type EvaluationStatus string
 
@@ -371,6 +429,8 @@ const (
 	EvaluationNotEvaluated EvaluationStatus = "not_evaluated"
 	// EvaluationIneligible indicates a required capability was unavailable at preflight.
 	EvaluationIneligible EvaluationStatus = "ineligible"
+	// EvaluationDiagnostic indicates diagnostic artifacts were collected without the evidence required for a valid evaluation.
+	EvaluationDiagnostic EvaluationStatus = "diagnostic"
 	// EvaluationFixtureError indicates Project preparation or starting-state verification failed.
 	EvaluationFixtureError EvaluationStatus = "fixture_error"
 	// EvaluationEvaluatorError indicates capture, verification, or cleanup became unreliable.
@@ -480,4 +540,23 @@ type TriageRecord struct {
 	SuspectedCause string      `json:"suspected_cause,omitempty"`
 	Confidence     string      `json:"confidence,omitempty"`
 	EvidenceNeeded []string    `json:"evidence_needed,omitempty"`
+}
+
+// TriageDisposition is a human-confirmed product cause kept outside immutable attempt artifacts.
+type TriageDisposition string
+
+// TriageReview associates a later human disposition with an authenticated attempt without rewriting its artifacts.
+type TriageReview struct {
+	AttemptID   string            `json:"attempt_id"`
+	Disposition TriageDisposition `json:"disposition"`
+	Reviewer    string            `json:"reviewer"`
+	ReviewedAt  time.Time         `json:"reviewed_at"`
+}
+
+// NewTriageReview creates an external review record; callers must store it in their review system rather than mutating signed attempt artifacts.
+func NewTriageReview(attemptID string, disposition TriageDisposition, reviewer string, reviewedAt time.Time) (TriageReview, error) {
+	if attemptID == "" || disposition == "" || reviewer == "" || reviewedAt.IsZero() {
+		return TriageReview{}, fmt.Errorf("triage review requires an attempt ID, disposition, reviewer, and timestamp")
+	}
+	return TriageReview{AttemptID: attemptID, Disposition: disposition, Reviewer: reviewer, ReviewedAt: reviewedAt.UTC()}, nil
 }

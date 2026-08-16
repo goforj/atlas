@@ -108,10 +108,39 @@ func attemptSummary(request AttemptRequest, result AttemptResult) string {
 	if len(result.UnavailableEvidence) > 0 {
 		fmt.Fprintf(&summary, "Unavailable trusted evidence: %s\n", joinCapabilities(result.UnavailableEvidence))
 	}
-	summary.WriteString("\nDiagnostic limitation: this unconfined local run can validate the resulting Project, but it cannot make authoritative isolation or workflow-observation claims.\n")
+	if failed := failedChecks(result.Verification); len(failed) > 0 {
+		fmt.Fprintf(&summary, "Failed checks: %s\n", strings.Join(failed, "; "))
+	}
+	if request.Intent == IntentDiagnostic || len(result.UnavailableEvidence) > 0 {
+		fmt.Fprintf(&summary, "\nDiagnostic limitation: backend %q did not provide all required trusted evidence; this result is diagnostic only and cannot support authoritative outcome or workflow claims.\n", result.Backend)
+	}
 	summary.WriteString("Reproduction: retained evidence supports diagnosis only. No sealed Project bundle is retained for verifier replay; a new live run is a fresh stochastic attempt, not a replay.\n")
 	summary.WriteString("Next action: inspect verification.json, commands.jsonl, transcript.redacted.txt, and diff.patch when present.\n")
 	return summary.String()
+}
+
+// failedChecks renders every failed endpoint so humans need not infer failure from a compact status.
+func failedChecks(verification *VerificationResult) []string {
+	if verification == nil {
+		return nil
+	}
+	endpoints := []EndpointResult{verification.FrameworkOutcome, verification.WorkflowConformance}
+	if verification.Contract != nil {
+		endpoints = append(endpoints, *verification.Contract)
+	}
+	endpoints = append(endpoints, verification.Checks...)
+	var failed []string
+	for _, endpoint := range endpoints {
+		if endpoint.Status != EndpointFailed {
+			continue
+		}
+		entry := endpoint.ID
+		if endpoint.Details != "" {
+			entry += ": " + endpoint.Details
+		}
+		failed = append(failed, entry)
+	}
+	return failed
 }
 
 // attemptTranscript extracts provider messages as inert redacted text in event order.
@@ -210,6 +239,8 @@ func humanEvaluationStatus(status EvaluationStatus) string {
 		return "Abstention verified"
 	case EvaluationIneligible:
 		return "Could not evaluate safely"
+	case EvaluationDiagnostic:
+		return "Diagnostic result only"
 	case EvaluationFixtureError:
 		return "Project preparation failed"
 	case EvaluationEvaluatorError:
