@@ -108,22 +108,15 @@ func (process *Process) Terminate(ctx context.Context) error {
 // terminate performs the single signal and escalation sequence shared by every cleanup caller.
 func (process *Process) terminate(ctx context.Context) error {
 	targets := process.descendants.Stop()
+	termErr := errors.Join(
+		terminateProcessGroup(process.command),
+		terminateDescendants(targets),
+	)
+
 	ticker := time.NewTicker(terminationPollInterval)
 	defer ticker.Stop()
-	leaderDone := process.done
 	leaderExited := false
-	select {
-	case <-leaderDone:
-		leaderExited = true
-		leaderDone = nil
-	default:
-	}
-
-	var leaderTermErr error
-	if !leaderExited {
-		leaderTermErr = terminateProcessGroup(process.command)
-	}
-	termErr := errors.Join(leaderTermErr, terminateDescendants(targets))
+	leaderDone := process.done
 	for {
 		if leaderExited && descendantsTerminated(targets) {
 			return ignoreMissingProcess(termErr)
@@ -133,11 +126,10 @@ func (process *Process) terminate(ctx context.Context) error {
 			leaderExited = true
 			leaderDone = nil
 		case <-ctx.Done():
-			var leaderKillErr error
-			if !leaderExited {
-				leaderKillErr = killProcessGroup(process.command)
-			}
-			killErr := errors.Join(leaderKillErr, killDescendants(targets))
+			killErr := errors.Join(
+				killProcessGroup(process.command),
+				killDescendants(targets),
+			)
 			return errors.Join(ignoreMissingProcess(termErr), ignoreMissingProcess(killErr), ctx.Err())
 		case <-ticker.C:
 		}
