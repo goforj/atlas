@@ -118,8 +118,8 @@ func TestAtlasInvoiceHTTPBehavior(t *testing.T) {
 }
 `
 
-// runInvoiceBehaviorProbe installs a hidden black-box oracle after the agent has stopped and runs it only in the disposable verifier clone.
-func runInvoiceBehaviorProbe(ctx context.Context, session CommandSession, root string) EndpointResult {
+// runInvoiceBehaviorProbe installs a hidden black-box oracle in a dedicated verifier clone after the agent has stopped.
+func runInvoiceBehaviorProbe(ctx context.Context, runner CommandRunner, root string) (result EndpointResult) {
 	probe, err := resolveInvoiceBehaviorProbe(root)
 	if err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
@@ -128,6 +128,17 @@ func runInvoiceBehaviorProbe(ctx context.Context, session CommandSession, root s
 	if err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
 	}
+	session, err := runner.Open(ctx, root)
+	if err != nil {
+		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: fmt.Sprintf("open isolated verifier session: %v", err)}
+	}
+	defer func() {
+		cleanupContext, cancel := context.WithTimeout(context.Background(), verifierCleanupTimeout)
+		defer cancel()
+		if closeErr := session.Close(cleanupContext); closeErr != nil && result.Status == EndpointPassed {
+			result = EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: fmt.Sprintf("close isolated verifier session: %v", closeErr)}
+		}
+	}()
 	relativePath := filepath.Join(probe.relativeDirectory, "atlas_eval_invoice_behavior_test.go")
 	if err := session.WriteFile(relativePath, body); err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}

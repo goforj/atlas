@@ -2,10 +2,12 @@ package eval
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestVerifierCommandsUsesPrivateCloneAndAllowlistedTools proves candidate evidence remains unchanged by executable checks.
@@ -39,6 +41,59 @@ func TestVerifierCommandsUsesPrivateCloneAndAllowlistedTools(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(source, "oracle_test.go")); !os.IsNotExist(err) {
 		t.Fatalf("supervisor oracle leaked into source evidence: %v", err)
+	}
+}
+
+// TestVerifierCommandsBoundsCandidateProcesses proves a noisy or stalled candidate cannot retain verifier resources.
+func TestVerifierCommandsBoundsCandidateProcesses(t *testing.T) {
+	if os.Getenv("ATLAS_VERIFIER_HELPER") == "1" {
+		if os.Getenv("ATLAS_VERIFIER_HELPER_MODE") == "noisy" {
+			_, _ = fmt.Fprint(os.Stdout, strings.Repeat("x", maxVerifierOutput+1))
+			return
+		}
+		time.Sleep(5 * time.Second)
+		return
+	}
+	source := t.TempDir()
+	for _, test := range []struct {
+		name string
+		mode string
+		want string
+	}{
+		{name: "output", mode: "noisy", want: "output exceeds"},
+		{name: "deadline", mode: "stalled", want: "deadline exceeded"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runner := VerifierCommands{WorkRoot: t.TempDir(), GoExecutable: os.Args[0], ForjExecutable: os.Args[0], Environment: append(os.Environ(), "ATLAS_VERIFIER_HELPER=1", "ATLAS_VERIFIER_HELPER_MODE="+test.mode)}
+			session, err := runner.Open(context.Background(), source)
+			if err != nil {
+				t.Fatalf("Open(): %v", err)
+			}
+			defer session.Close(context.Background())
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			_, err = session.Run(ctx, []string{"go", "-test.run=TestVerifierCommandsBoundsCandidateProcesses"})
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Run() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+// TestVerifierCommandsExcludesCandidateTests prevents candidate TestMain from intercepting supervisor test execution.
+func TestVerifierCommandsExcludesCandidateTests(t *testing.T) {
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "candidate_test.go"), []byte("package fixture\nfunc TestMain() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), source)
+	if err != nil {
+		t.Fatalf("Open(): %v", err)
+	}
+	defer session.Close(context.Background())
+	concrete := session.(*verifierCommandSession)
+	if _, err := os.Stat(filepath.Join(concrete.root, "candidate_test.go")); !os.IsNotExist(err) {
+		t.Fatalf("candidate test copied into verifier clone: %v", err)
 	}
 }
 
