@@ -2,7 +2,6 @@ package install
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"slices"
@@ -49,15 +48,6 @@ type GuidanceReconciliation struct {
 
 // GuidanceReconciliationVersion identifies the current host reconciliation contract.
 const GuidanceReconciliationVersion = 1
-
-// GuidanceIntent returns the versioned host reconciliation payload for this install result.
-func (r Result) GuidanceIntent() []byte {
-	content, err := json.Marshal(r.Guidance)
-	if err != nil {
-		return nil
-	}
-	return content
-}
 
 // Installer installs Atlas project guidance and agent configuration.
 type Installer struct {
