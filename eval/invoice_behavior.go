@@ -210,7 +210,7 @@ func invoiceRouteOwner(file *ast.File) (string, string) {
 				return true
 			}
 			selector, ok := call.Args[2].(*ast.SelectorExpr)
-			if ok {
+			if ok && routeHandlerSelectorUsesReceiver(function, selector) {
 				handlerName = selector.Sel.Name
 			}
 			return false
@@ -220,6 +220,15 @@ func invoiceRouteOwner(file *ast.File) (string, string) {
 		}
 	}
 	return "", ""
+}
+
+// routeHandlerSelectorUsesReceiver reports whether a route handler selector is bound to the Routes method receiver.
+func routeHandlerSelectorUsesReceiver(function *ast.FuncDecl, selector *ast.SelectorExpr) bool {
+	if function.Recv == nil || len(function.Recv.List) != 1 || len(function.Recv.List[0].Names) != 1 {
+		return false
+	}
+	receiver, ok := selector.X.(*ast.Ident)
+	return ok && receiver.Name == function.Recv.List[0].Names[0].Name
 }
 
 // isInvoiceGETRoute recognizes the contract route without depending on the router constructor's imported name.
