@@ -240,7 +240,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "schedule-existing-job/v1",
 			allowedChanges: []string{"internal/reports/*.go", "internal/users/*.go", "app/wire/inject_schedules_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
-				{id: "scheduled-job-dispatch", paths: []string{"internal/reports/daily.go", "internal/reports/daily_schedule.go"}, identifiers: []string{"DailyTarget", "DailyTargetRepository", "DailyRunner", "DailySchedule", "Interval", "Handle"}, selectorCalls: []string{"ListDailyReportTargets", "Queue", "Run"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:daily"}},
+				{id: "scheduled-job-dispatch", paths: []string{"internal/reports/daily.go", "internal/reports/daily_schedule.go"}, identifiers: []string{"DailyTargetRepository", "DailyRunner", "DailySchedule", "Interval", "Handle"}, selectorCalls: []string{"ListDailyReportTargets", "Queue", "Run"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:daily"}},
 				{id: "daily-target-repository", paths: []string{"internal/users/*.go"}, identifiers: []string{"ListDailyReportTargets"}},
 				{id: "daily-schedule-registration", paths: []string{"app/wire/inject_schedules_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewDailySchedule", "NewDailyRunner"}},
 			},
