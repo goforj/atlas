@@ -19,7 +19,14 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "typed-job", paths: []string{"internal/invoices/*_job.go"}, identifiers: []string{"ReceiptJob", "ReceiptJobPayload", "Service"}, forbiddenCalls: []string{"TODO"}, stringLiterals: []string{"invoices:receipt"}, declarations: []declarationContract{{name: "ReceiptJobPayload", identifiers: []string{"InvoiceID"}}, {name: "Queue", receiver: "ReceiptJob", identifiers: []string{"ctx"}, selectorCalls: []string{"Dispatch"}, forbiddenCalls: []string{"Background"}}, {name: "HandleTask", receiver: "ReceiptJob", identifiers: []string{"ctx", "InvoiceID"}, selectorCalls: []string{"Bind", "Find"}, forbiddenCalls: []string{"Background"}}}},
 				{id: "job-registration", paths: []string{"app/wire/inject_jobs_app.go"}, identifiers: []string{"NewReceiptJob", "ReceiptJobTypeName", "HandleTask"}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:        "receipt-job-behavior",
+				arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasReceiptJobBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{
+					path: "internal/invoices/atlas_eval_receipt_job_test.go",
+					body: receiptJobBehaviorProbe,
+				}},
+			}),
 		},
 		{
 			id:             "add-migration/v1",
@@ -37,7 +44,14 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "schedule-shape", paths: []string{"internal/invoices/*_schedule.go"}, identifiers: []string{"ReconcileSchedule", "Interval", "Service"}, forbiddenCalls: []string{"TODO"}, stringLiterals: []string{"invoices:reconcile"}, declarations: []declarationContract{{name: "Handle", receiver: "ReconcileSchedule", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
 				{id: "schedule-registration", paths: []string{"app/wire/inject_schedules_app.go", "app/schedules.go"}, identifiers: []string{"NewReconcileSchedule"}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:        "reconcile-schedule-behavior",
+				arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasReconcileScheduleBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{
+					path: "internal/invoices/atlas_eval_reconcile_schedule_test.go",
+					body: reconcileScheduleBehaviorProbe,
+				}},
+			}),
 		},
 		{
 			id:             "add-event-subscriber/v1",
@@ -47,7 +61,14 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "subscriber-boundary", paths: []string{"internal/invoices/*_subscriber.go"}, identifiers: []string{"PaidSubscriber", "Service"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Handle", receiver: "PaidSubscriber", identifiers: []string{"ctx", "InvoiceID"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
 				{id: "subscriber-registration", paths: []string{"app/wire/inject_subscribers_app.go"}, identifiers: []string{"NewPaidSubscriber", "Handle"}, selectorCalls: []string{"Named", "Subscribe"}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:        "paid-subscriber-behavior",
+				arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasPaidSubscriberBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{
+					path: "internal/invoices/atlas_eval_paid_subscriber_test.go",
+					body: paidSubscriberBehaviorProbe,
+				}},
+			}),
 		},
 		{
 			id:             "create-model/v1",
