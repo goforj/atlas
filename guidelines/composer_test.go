@@ -28,6 +28,7 @@ func TestComposeCarriesTheBaselineFrameworkContract(t *testing.T) {
 		"avoid Java/PHP-style category nesting",
 		"Keep controllers, commands, jobs, and schedules thin",
 		"`wire/inject_services_app.go`",
+		"inject the resource manager",
 		"database access behind repositories",
 		"documentation matching the Project's GoForj version",
 		"ask before inventing a convention",
