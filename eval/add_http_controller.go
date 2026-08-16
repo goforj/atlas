@@ -110,7 +110,7 @@ func (verifier *AddHTTPControllerVerifier) runIsolatedCheck(ctx context.Context,
 	return runCheck(ctx, session, id, command, contains)
 }
 
-// ownershipChecks enforces protected generated-file and semantic change-budget rules from a supervisor-owned baseline projection.
+// ownershipChecks enforces semantic change-budget rules while leaving derived Wire output to isolated build checks.
 func ownershipChecks(changes []ProjectChange) []EndpointResult {
 	if len(changes) == 0 {
 		return []EndpointResult{{ID: "change-ownership", Status: EndpointPassed}}
@@ -118,7 +118,7 @@ func ownershipChecks(changes []ProjectChange) []EndpointResult {
 	for _, change := range changes {
 		path := filepath.ToSlash(change.Path)
 		if filepath.Base(path) == "wire_gen.go" {
-			return []EndpointResult{{ID: "generated-file-ownership", Status: EndpointFailed, Details: fmt.Sprintf("candidate changed protected generated file %q", path)}}
+			continue
 		}
 		if !isAllowedControllerChange(path) {
 			return []EndpointResult{{ID: "change-ownership", Status: EndpointFailed, Details: fmt.Sprintf("candidate changed unrelated path %q", path)}}
@@ -376,13 +376,25 @@ func findCallUsesRequestContext(function *ast.FuncDecl) bool {
 		if !ok || contextSelector.Sel.Name != "Context" {
 			return true
 		}
-		request, ok := contextSelector.X.(*ast.Ident)
-		if ok && parameters[request.Name] {
+		if expressionUsesRequestParameter(contextSelector.X, parameters) {
 			usesRequestContext = true
 		}
 		return true
 	})
 	return usesRequestContext
+}
+
+// expressionUsesRequestParameter accepts direct framework contexts and standard-library requests derived from the handler parameter.
+func expressionUsesRequestParameter(expression ast.Expr, parameters map[string]bool) bool {
+	switch typed := expression.(type) {
+	case *ast.Ident:
+		return parameters[typed.Name]
+	case *ast.CallExpr:
+		selector, ok := typed.Fun.(*ast.SelectorExpr)
+		return ok && selector.Sel.Name == "Request" && expressionUsesRequestParameter(selector.X, parameters)
+	default:
+		return false
+	}
 }
 
 // selectorRegistrationCheck verifies an App-owned registration point references the discovered controller shape.

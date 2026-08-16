@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -91,6 +92,33 @@ func TestVerifierCommandsUsesPrivatePhaseState(t *testing.T) {
 		if _, err := os.Stat(state); !os.IsNotExist(err) {
 			t.Fatalf("private verifier state remains at %q: %v", state, err)
 		}
+	}
+}
+
+// TestVerifierCommandsCloseRemovesReadOnlyModuleCache verifies downloaded module permissions cannot turn a passing check into a cleanup failure.
+func TestVerifierCommandsCloseRemovesReadOnlyModuleCache(t *testing.T) {
+	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: os.Environ()}).Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatalf("Open(): %v", err)
+	}
+	concrete := session.(*verifierCommandSession)
+	module := filepath.Join(concrete.stateRoot, "go-mod-cache", "example.com", "module@v1.0.0")
+	if err := os.MkdirAll(module, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(module, "go.mod"), []byte("module example.com/module\n"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(module, 0o555); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := session.Close(context.Background()); err != nil {
+		t.Fatalf("Close(): %v", err)
+	}
+	if _, err := os.Stat(concrete.stateRoot); !os.IsNotExist(err) {
+		t.Fatalf("private verifier state survived cleanup: %v", err)
 	}
 }
 
