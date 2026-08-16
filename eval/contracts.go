@@ -316,6 +316,7 @@ type BackendRequest struct {
 	Project      PreparedProject
 	ShellNetwork string
 	Environment  []string
+	CommandLimit int
 }
 
 // ExecutionBackend creates one private execution boundary and reports what it can prove.

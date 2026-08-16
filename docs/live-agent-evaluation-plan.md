@@ -263,6 +263,10 @@ use the local workspace run as the final release-qualified evidence.
 - Run live evaluations only through an explicit command or test tag.
 - Keep authoritative sandbox claims disabled until the container or VM backend
   and negative isolation suite exist.
+- Treat `limits.commands` as post-run diagnostic validation under the local
+  backend. An authoritative backend must enforce the same limit online from
+  its supervisor-owned command stream and terminate the owned job at the
+  boundary; the limit is already passed in `BackendRequest` for that purpose.
 - Treat failed attempts as artifacts to classify, not flaky tests to rerun
   until green.
 
@@ -275,6 +279,17 @@ ephemeral base copied into each trial. Persistent content-addressed caching is
 promoted only after representative preparation measurements justify its
 security and maintenance cost.
 
+The promoted `goforj-add-http-route/v1` workflow records only an exact,
+successful GoForj generator invocation. That is sufficient to keep the local
+diagnostic honest because its backend cannot supply trusted command evidence
+and reports conformance as ineligible. It is not the authoritative generator
+contract described by the design. Before an authoritative backend is enabled,
+promote a new workflow version whose typed predicates include normalized App
+and resource identity, generated and protected paths, command ancestry,
+write attribution, permitted post-generation edits, and continued use of the
+generated registration outputs. Calibrate each predicate independently; do
+not reinterpret the existing `/v1` result as that stronger claim.
+
 ## Completion Checkpoint
 
 The design is ready for broader scenario work when:
@@ -284,8 +299,11 @@ The design is ready for broader scenario work when:
 - the Atlas fake runner proves lifecycle and artifact invariants;
 - baseline guidance is durable and attributable;
 - the controller verifier rejects known incorrect mutants; and
-- a paired diagnostic run can be reproduced from retained metadata without
-  relying on a maintainer's normal home, conversation, or Project tree.
+- a fresh paired diagnostic can be reconstructed from retained identities
+  without relying on a maintainer's normal home, conversation, or Project
+  tree. The first slice does not retain a sealed Project bundle, so it promises
+  provenance-guided diagnosis and a fresh stochastic rerun, not deterministic
+  verifier replay of the original candidate tree.
 
 The first five conditions are complete locally. The final condition becomes a
 release-qualified claim only after the Atlas publication, GoForj pin update,
