@@ -206,12 +206,12 @@ func runFakeAppServer() {
 			result = map[string]any{
 				"model":              "gpt-test",
 				"modelProvider":      "openai",
+				"approvalPolicy":     params.ApprovalPolicy,
+				"sandbox":            params.Sandbox,
 				"instructionSources": []string{"/project/AGENTS.md"},
 				"thread": map[string]any{
-					"id":             fmt.Sprintf("thread-%d", threadNumber),
-					"ephemeral":      true,
-					"approvalPolicy": params.ApprovalPolicy,
-					"sandbox":        params.Sandbox,
+					"id":        fmt.Sprintf("thread-%d", threadNumber),
+					"ephemeral": true,
 				},
 			}
 		case "turn/start":

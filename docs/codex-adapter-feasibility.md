@@ -43,12 +43,11 @@ Those fields remove guesswork from guidance attribution and model identity.
 They also support later scripted clarification without resuming an unrelated
 session.
 
-The published app-server reference does not guarantee that `thread/start`
-echoes the effective approval policy or sandbox. Atlas therefore requires a
-versioned schema that supplies both fields in the returned thread: it rejects a
-missing or mismatched value before accepting a session. Until a pinned CLI
-schema proves that contract, the local Codex adapter fails closed rather than
-claiming its requested startup policy took effect.
+The published app-server reference does not fully describe the `thread/start`
+response. The generated `0.146.0` protocol schema requires root-level
+`approvalPolicy` and `sandbox` fields, so Atlas decodes and verifies those exact
+fields before accepting a session. A missing or mismatched value fails closed
+instead of treating requested policy as effective policy.
 
 ## Adapter Decision
 

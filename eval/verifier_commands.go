@@ -99,7 +99,7 @@ func (runner VerifierCommands) Open(_ context.Context, sourceRoot string) (Comma
 	}, nil
 }
 
-// Run executes one deadline- and output-bounded allowlisted process group, then kills any descendants before returning.
+// Run executes one deadline- and output-bounded allowlisted process group, then cleans up its group and any descendants observed on supported hosts.
 func (session *verifierCommandSession) Run(ctx context.Context, command []string) (string, error) {
 	if len(command) == 0 {
 		return "", fmt.Errorf("verifier command is required")
