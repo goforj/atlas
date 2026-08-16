@@ -9,7 +9,7 @@ import (
 	"syscall"
 )
 
-// configureProcessGroup prevents supervisor cancellation from signaling its own process group.
+// configureProcessGroup isolates the child from supervisor signals while qualified trackers retain descendant ownership.
 func configureProcessGroup(command *exec.Cmd) {
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
