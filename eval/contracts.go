@@ -156,7 +156,6 @@ type Verifier interface {
 // PreparationCapabilities describe the schemas and controls a Project preparer supports.
 type PreparationCapabilities struct {
 	ScenarioSchemaVersions []int
-	Capabilities           []Capability
 }
 
 // PreparationRequest identifies trusted scenario inputs without carrying reusable authority.
@@ -230,17 +229,16 @@ type GuidanceResolver interface {
 	Resolve(context.Context, string, PreparationResult) (Guidance, error)
 }
 
-// AgentCapabilities declares the provider-neutral evidence an adapter can expose.
-type AgentCapabilities struct {
-	Capabilities []Capability
+// AgentProperties declares provider-neutral safety properties enforced by an adapter.
+type AgentProperties struct {
+	Properties []Capability
 }
 
 // RunEnvironment is the backend-owned namespace presented to an agent adapter.
 type RunEnvironment struct {
-	ProjectRoot  string
-	HomeRoot     string
-	Environment  []string
-	Capabilities []Capability
+	ProjectRoot string
+	HomeRoot    string
+	Environment []string
 }
 
 // PreparedAgent records attributable agent identity and private configuration.
@@ -295,7 +293,7 @@ type EvaluationSession interface {
 // EvaluationAgent prepares and starts fresh non-interactive evaluation sessions.
 type EvaluationAgent interface {
 	Name() string
-	Capabilities(context.Context) (AgentCapabilities, error)
+	Properties(context.Context) (AgentProperties, error)
 	Prepare(context.Context, RunEnvironment, Guidance) (AgentPreparation, error)
 	Start(context.Context, PreparedAgent) (EvaluationSession, error)
 }

@@ -22,14 +22,14 @@ type AttemptEnvironment struct {
 	Backend               string          `json:"backend"`
 	RequestedShellNetwork string          `json:"requested_shell_network"`
 	EnvironmentKeys       []string        `json:"environment_keys"`
-	AgentCapabilities     []Capability    `json:"agent_capabilities,omitempty"`
+	AgentProperties       []Capability    `json:"agent_properties,omitempty"`
 	BackendCapabilities   []Capability    `json:"backend_capabilities,omitempty"`
 	UnavailableEvidence   []Capability    `json:"unavailable_evidence,omitempty"`
 	Runtime               RuntimeIdentity `json:"runtime"`
 }
 
 // writeAttemptReportArtifacts retains the human, diagnostic, and compact machine layers for every started attempt.
-func writeAttemptReportArtifacts(artifacts *AttemptArtifacts, request AttemptRequest, result AttemptResult, events []Event, agentCapabilities, backendCapabilities []Capability) []SecondaryFailure {
+func writeAttemptReportArtifacts(artifacts *AttemptArtifacts, request AttemptRequest, result AttemptResult, events []Event, agentProperties, backendCapabilities []Capability) []SecondaryFailure {
 	var failures []SecondaryFailure
 	writeText := func(name, phase, content string) {
 		if err := artifacts.WriteText(name, content); err != nil {
@@ -50,7 +50,7 @@ func writeAttemptReportArtifacts(artifacts *AttemptArtifacts, request AttemptReq
 		Backend:               result.Backend,
 		RequestedShellNetwork: request.Definition.Limits.ShellNetwork,
 		EnvironmentKeys:       environmentKeys(request.Preparation.Environment),
-		AgentCapabilities:     sortedCapabilities(agentCapabilities),
+		AgentProperties:       sortedCapabilities(agentProperties),
 		BackendCapabilities:   sortedCapabilities(backendCapabilities),
 		UnavailableEvidence:   append([]Capability(nil), result.UnavailableEvidence...),
 		Runtime:               result.Runtime,

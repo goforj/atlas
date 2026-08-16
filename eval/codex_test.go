@@ -36,9 +36,9 @@ func TestAdapterRunsFreshAttributedDiagnosticSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewCodexAgent(): %v", err)
 	}
-	capabilities, err := adapter.Capabilities(context.Background())
-	if err != nil || len(capabilities.Capabilities) != 0 {
-		t.Fatalf("Capabilities() = %#v, %v", capabilities, err)
+	capabilities, err := adapter.Properties(context.Background())
+	if err != nil || len(capabilities.Properties) != 0 {
+		t.Fatalf("Properties() = %#v, %v", capabilities, err)
 	}
 	prepared, err := adapter.Prepare(context.Background(), RunEnvironment{ProjectRoot: projectRoot, HomeRoot: homeRoot}, Guidance{
 		Profile: "agents",

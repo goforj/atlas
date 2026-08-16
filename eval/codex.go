@@ -86,9 +86,9 @@ func (*CodexAgent) Name() string {
 	return "codex"
 }
 
-// Capabilities returns no trusted action evidence because app-server notifications are provider telemetry, not supervisor interposition.
-func (*CodexAgent) Capabilities(context.Context) (AgentCapabilities, error) {
-	return AgentCapabilities{}, nil
+// Properties returns no isolation guarantees because this diagnostic adapter shares the caller's operating-system identity.
+func (*CodexAgent) Properties(context.Context) (AgentProperties, error) {
+	return AgentProperties{}, nil
 }
 
 // Prepare fingerprints Codex, materializes the selected native guidance, and copies only the credential needed by the private app-server home.
