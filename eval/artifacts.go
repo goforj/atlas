@@ -2,6 +2,7 @@ package eval
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/json"
@@ -18,6 +19,7 @@ const artifactManifestSchemaVersion = 1
 
 const maxArtifactFileSize = 16 << 20
 const maxArtifactTotalSize = 64 << 20
+const maxArtifactManifestSize = 1 << 20
 
 var artifactAttemptIDPattern = regexp.MustCompile(`^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$`)
 
@@ -251,13 +253,26 @@ func VerifyArtifactManifest(directory string, key []byte) (ArtifactManifest, err
 	if err := validateArtifactAuthenticationKey(key); err != nil {
 		return ArtifactManifest{}, err
 	}
-	body, err := os.ReadFile(filepath.Join(directory, "manifest.json"))
+	body, err := readArtifactManifest(directory)
 	if err != nil {
-		return ArtifactManifest{}, fmt.Errorf("read artifact manifest: %w", err)
+		return ArtifactManifest{}, err
 	}
 	var manifest ArtifactManifest
-	if err := json.Unmarshal(body, &manifest); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&manifest); err != nil {
 		return ArtifactManifest{}, fmt.Errorf("decode artifact manifest: %w", err)
+	}
+	if err := requireJSONEnd(decoder); err != nil {
+		return ArtifactManifest{}, fmt.Errorf("decode artifact manifest: %w", err)
+	}
+	canonical, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return ArtifactManifest{}, fmt.Errorf("encode canonical artifact manifest: %w", err)
+	}
+	canonical = append(canonical, '\n')
+	if !bytes.Equal(body, canonical) {
+		return ArtifactManifest{}, fmt.Errorf("artifact manifest is not in canonical form")
 	}
 	if manifest.SchemaVersion != artifactManifestSchemaVersion {
 		return ArtifactManifest{}, fmt.Errorf("unsupported artifact manifest schema %d", manifest.SchemaVersion)
@@ -280,6 +295,63 @@ func VerifyArtifactManifest(directory string, key []byte) (ArtifactManifest, err
 		return ArtifactManifest{}, fmt.Errorf("artifact file identities do not match the manifest")
 	}
 	return manifest, nil
+}
+
+// readArtifactManifest bounds and validates the manifest file before parsing attacker-controlled evidence.
+func readArtifactManifest(directory string) ([]byte, error) {
+	directoryInfo, err := os.Lstat(directory)
+	if err != nil {
+		return nil, fmt.Errorf("inspect artifact directory: %w", err)
+	}
+	if directoryInfo.Mode()&os.ModeSymlink != 0 || !directoryInfo.IsDir() {
+		return nil, fmt.Errorf("artifact directory must be a real directory")
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return nil, fmt.Errorf("open artifact directory: %w", err)
+	}
+	defer root.Close()
+	pathInfo, err := root.Lstat("manifest.json")
+	if err != nil {
+		return nil, fmt.Errorf("inspect artifact manifest: %w", err)
+	}
+	if pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.Mode().IsRegular() {
+		return nil, fmt.Errorf("artifact manifest must be a regular file")
+	}
+	file, err := root.Open("manifest.json")
+	if err != nil {
+		return nil, fmt.Errorf("open artifact manifest: %w", err)
+	}
+	fileInfo, statErr := file.Stat()
+	if statErr != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("inspect opened artifact manifest: %w", statErr)
+	}
+	if !fileInfo.Mode().IsRegular() || !os.SameFile(pathInfo, fileInfo) {
+		_ = file.Close()
+		return nil, fmt.Errorf("artifact manifest changed while opening")
+	}
+	body, readErr := io.ReadAll(io.LimitReader(file, maxArtifactManifestSize+1))
+	closeErr := file.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		return nil, fmt.Errorf("read artifact manifest: %w", err)
+	}
+	if len(body) > maxArtifactManifestSize {
+		return nil, fmt.Errorf("artifact manifest exceeds %d bytes", maxArtifactManifestSize)
+	}
+	return body, nil
+}
+
+// requireJSONEnd rejects concatenated values that a single decoder call would otherwise ignore.
+func requireJSONEnd(decoder *json.Decoder) error {
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return fmt.Errorf("multiple JSON values are not allowed")
+		}
+		return err
+	}
+	return nil
 }
 
 // validateArtifactAuthenticationKey rejects keys too weak to authenticate retained evidence.
