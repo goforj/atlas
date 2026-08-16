@@ -296,3 +296,11 @@ func TestArtifactStoreRedactsQuotedCredentialTokens(t *testing.T) {
 		}
 	}
 }
+
+// TestRedactorRemovesProviderPrefixedAssignments keeps environment-style credential names from bypassing generic redaction.
+func TestRedactorRemovesProviderPrefixedAssignments(t *testing.T) {
+	redacted := NewRedactor(nil).Text("OPENAI_API_KEY=provider-secret")
+	if strings.Contains(redacted, "provider-secret") || !strings.Contains(redacted, redactedValue) {
+		t.Fatalf("prefixed credential assignment survived redaction: %q", redacted)
+	}
+}

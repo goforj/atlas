@@ -9,7 +9,7 @@ import (
 const redactedValue = "[REDACTED]"
 
 var bearerSecretPattern = regexp.MustCompile(`(?i)\bbearer\s+[a-z0-9._~+/-]+=*`)
-var assignmentSecretPattern = regexp.MustCompile(`(?i)\b(password|passwd|secret|token|authorization|cookie|api[_-]?key|client[_-]?secret)\s*[:=]\s*[^\s,;]+`)
+var assignmentSecretPattern = regexp.MustCompile(`(?i)\b(?:[a-z0-9]+[_-])*(password|passwd|secret|token|authorization|cookie|api[_-]?key|client[_-]?secret)\s*[:=]\s*[^\s,;]+`)
 var ansiControlPattern = regexp.MustCompile(`\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))`)
 
 // Redactor removes known credentials and common secret-bearing values before persistence.
