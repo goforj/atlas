@@ -44,6 +44,44 @@ func TestTerminateStopsLeaderAndDescendant(t *testing.T) {
 	}
 }
 
+// TestTerminateEscalatesAfterLeaderExit proves tracked, separately grouped descendants cannot outlive a SIGTERM-resistant leader exit.
+func TestTerminateEscalatesAfterLeaderExit(t *testing.T) {
+	root := t.TempDir()
+	childPIDPath := filepath.Join(root, "child.pid")
+	command := "setsid \"$1\" -c 'trap \"\" TERM; printf \"%s\" \"$$\" > \"$1\"; exec sleep 300' atlas-child \"$2\" & while [ ! -s \"$2\" ]; do sleep 0.01; done; sleep 0.15; exit"
+	process, err := Start("/bin/sh", []string{"-c", command, "atlas-process-group", "/bin/sh", childPIDPath}, Options{
+		Dir: root,
+		Env: []string{"PATH=/usr/bin:/bin"},
+	})
+	if err != nil {
+		t.Fatalf("start process group: %v", err)
+	}
+
+	childPID := waitForChildPID(t, childPIDPath)
+	waitCtx, cancelWait := context.WithTimeout(context.Background(), time.Second)
+	defer cancelWait()
+	if err := process.Wait(waitCtx); err != nil {
+		t.Fatalf("wait for leader exit: %v", err)
+	}
+	if !processAlive(childPID) {
+		t.Fatalf("SIGTERM-resistant descendant %d exited before cleanup", childPID)
+	}
+
+	cleanupCtx, cancelCleanup := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancelCleanup()
+	started := time.Now()
+	err = process.Terminate(cleanupCtx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Terminate() error = %v, want cleanup deadline", err)
+	}
+	if elapsed := time.Since(started); elapsed < 100*time.Millisecond {
+		t.Fatalf("Terminate() returned after %s before escalation", elapsed)
+	}
+	if !waitForProcessExit(childPID, time.Second) {
+		t.Fatalf("SIGTERM-resistant descendant %d survived escalation", childPID)
+	}
+}
+
 // TestWaitReturnsProcessFailure preserves the leader's terminal status for adapter diagnostics.
 func TestWaitReturnsProcessFailure(t *testing.T) {
 	process, err := Start("/bin/sh", []string{"-c", "exit 17"}, Options{})

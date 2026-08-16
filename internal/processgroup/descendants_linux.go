@@ -29,6 +29,7 @@ type linuxDescendantTracker struct {
 type linuxProcess struct {
 	processIdentity
 	ParentPID int
+	State     string
 }
 
 // startDescendantTracker begins observation before the app-server can receive an agent turn.
@@ -145,7 +146,22 @@ func readLinuxProcess(pid int) (linuxProcess, bool) {
 	return linuxProcess{
 		processIdentity: processIdentity{PID: pid, GroupID: groupID, StartTime: startTime},
 		ParentPID:       parentPID,
+		State:           fields[0],
 	}, true
+}
+
+// descendantsTerminated reports whether every recorded identity has exited or changed identity.
+func descendantsTerminated(targets processTargets) bool {
+	for _, identity := range targets.Processes {
+		current, ok := readLinuxProcess(identity.PID)
+		if !ok || current.StartTime != identity.StartTime {
+			continue
+		}
+		if current.State != "Z" && current.State != "X" {
+			return false
+		}
+	}
+	return true
 }
 
 // terminateDescendants sends graceful termination to every still-matching recorded identity and group.
@@ -158,7 +174,7 @@ func killDescendants(targets processTargets) error {
 	return signalLinuxTargets(targets, syscall.SIGKILL)
 }
 
-// signalLinuxTargets validates creation identity before signaling so PID reuse cannot target unrelated processes.
+// signalLinuxTargets validates creation identity and recorded groups before group signaling so PID reuse cannot target unrelated processes.
 func signalLinuxTargets(targets processTargets, signal syscall.Signal) error {
 	groups := map[int]bool{}
 	var result error
@@ -167,7 +183,7 @@ func signalLinuxTargets(targets processTargets, signal syscall.Signal) error {
 		if !ok || current.StartTime != identity.StartTime {
 			continue
 		}
-		if current.GroupID > 0 && current.GroupID != syscall.Getpgrp() {
+		if current.GroupID == identity.GroupID && current.GroupID > 0 && current.GroupID != syscall.Getpgrp() {
 			groups[current.GroupID] = true
 			continue
 		}

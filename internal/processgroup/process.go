@@ -8,7 +8,10 @@ import (
 	"io"
 	"os/exec"
 	"sync"
+	"time"
 )
+
+const terminationPollInterval = 25 * time.Millisecond
 
 // Options configures one supervised process without exposing os/exec mutation after startup.
 type Options struct {
@@ -109,15 +112,27 @@ func (process *Process) terminate(ctx context.Context) error {
 		terminateProcessGroup(process.command),
 		terminateDescendants(targets),
 	)
-	select {
-	case <-process.done:
-		return ignoreMissingProcess(termErr)
-	case <-ctx.Done():
-		killErr := errors.Join(
-			killProcessGroup(process.command),
-			killDescendants(targets),
-		)
-		return errors.Join(ignoreMissingProcess(termErr), ignoreMissingProcess(killErr), ctx.Err())
+
+	ticker := time.NewTicker(terminationPollInterval)
+	defer ticker.Stop()
+	leaderExited := false
+	leaderDone := process.done
+	for {
+		if leaderExited && descendantsTerminated(targets) {
+			return ignoreMissingProcess(termErr)
+		}
+		select {
+		case <-leaderDone:
+			leaderExited = true
+			leaderDone = nil
+		case <-ctx.Done():
+			killErr := errors.Join(
+				killProcessGroup(process.command),
+				killDescendants(targets),
+			)
+			return errors.Join(ignoreMissingProcess(termErr), ignoreMissingProcess(killErr), ctx.Err())
+		case <-ticker.C:
+		}
 	}
 }
 
