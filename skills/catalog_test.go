@@ -49,6 +49,7 @@ func TestSkillEffectivenessPhrases(t *testing.T) {
 		"app/<name>/",
 		"forj <app> make:*",
 		"Java/PHP-style",
+		"flat, self-contained, and portable",
 		"can stand on its own",
 		"File count, type count, and directory symmetry do not justify a package boundary",
 		"migrations/<app>/<connection>/",
