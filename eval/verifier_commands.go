@@ -165,6 +165,46 @@ func (session *verifierCommandSession) Run(ctx context.Context, command []string
 	default:
 		return "", fmt.Errorf("verifier command %q is not allowlisted", command[0])
 	}
+	return session.runExpectedExit(ctx, executable, command[1:], strings.Join(command, " "), 0)
+}
+
+// RunTestBinary compiles the supervisor-authored package test and accepts only its reserved success exit status.
+func (session *verifierCommandSession) RunTestBinary(ctx context.Context, packagePath, testName string, successExitCode int) (string, error) {
+	if packagePath != "." && (!strings.HasPrefix(packagePath, "./") || !filepath.IsLocal(strings.TrimPrefix(packagePath, "./"))) {
+		return "", fmt.Errorf("verifier test package %q must remain relative to the disposable Project", packagePath)
+	}
+	if strings.TrimSpace(testName) == "" {
+		return "", fmt.Errorf("verifier test name is required")
+	}
+	if successExitCode < 1 || successExitCode > 255 {
+		return "", fmt.Errorf("verifier test success exit code %d must be between 1 and 255", successExitCode)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, verifierCommandTimeout)
+		defer cancel()
+	}
+	testBinary := filepath.Join(session.stateRoot, "atlas-verifier-test")
+	buildCommand := []string{"test", "-c", "-o", testBinary, packagePath}
+	if _, err := session.runExpectedExit(ctx, session.goExecutable, buildCommand, "go "+strings.Join(buildCommand, " "), 0); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(testBinary)
+	if err != nil {
+		return "", fmt.Errorf("compiled verifier test binary is not a regular file: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("compiled verifier test binary is not a regular file")
+	}
+	arguments := []string{"-test.run=^" + testName + "$", "-test.count=1"}
+	return session.runExpectedExit(ctx, testBinary, arguments, "verifier test "+testName, successExitCode)
+}
+
+// runExpectedExit executes one process group and compares its kernel-reported exit status with the expected result.
+func (session *verifierCommandSession) runExpectedExit(ctx context.Context, executable string, arguments []string, display string, expectedExitCode int) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -174,27 +214,42 @@ func (session *verifierCommandSession) Run(ctx context.Context, command []string
 		defer cancel()
 	}
 	output := &boundedVerifierOutput{limit: maxVerifierOutput}
-	process, err := processgroup.Start(executable, command[1:], processgroup.Options{
+	process, err := processgroup.Start(executable, arguments, processgroup.Options{
 		Dir:    session.root,
 		Env:    append([]string(nil), session.environment...),
 		Stdout: output,
 		Stderr: output,
 	})
 	if err != nil {
-		return output.String(), fmt.Errorf("start %s: %w", strings.Join(command, " "), err)
+		return output.String(), fmt.Errorf("start %s: %w", display, err)
 	}
-	err = process.Wait(ctx)
+	waitErr := process.Wait(ctx)
 	// A candidate may have backgrounded descendants. They share this dedicated
 	// group and must not survive into a later verifier phase.
 	cleanupContext, cancel := context.WithTimeout(context.Background(), verifierCleanupTimeout)
 	terminateErr := process.Terminate(cleanupContext)
 	cancel()
-	err = errors.Join(err, terminateErr)
+	actualExitCode := 0
+	var exitErr *exec.ExitError
+	if waitErr != nil {
+		if errors.As(waitErr, &exitErr) {
+			actualExitCode = exitErr.ExitCode()
+		} else {
+			actualExitCode = -1
+		}
+	}
+	exitCodeErr := error(nil)
+	if actualExitCode != expectedExitCode {
+		exitCodeErr = fmt.Errorf("process exit code %d, want %d", actualExitCode, expectedExitCode)
+	} else if exitErr != nil {
+		waitErr = nil
+	}
+	err = errors.Join(waitErr, terminateErr, exitCodeErr)
 	if output.exceeded() {
 		err = errors.Join(err, fmt.Errorf("verifier command output exceeds %d bytes", maxVerifierOutput))
 	}
 	if err != nil {
-		return output.String(), fmt.Errorf("%s: %w\n%s", strings.Join(command, " "), err, strings.TrimSpace(output.String()))
+		return output.String(), fmt.Errorf("%s: %w\n%s", display, err, strings.TrimSpace(output.String()))
 	}
 	return output.String(), nil
 }

@@ -56,6 +56,16 @@ func (runner *fakeCommandRunner) Run(_ context.Context, command []string) (strin
 	return "ok", nil
 }
 
+// RunTestBinary records the isolated test execution without trusting candidate-formatted output.
+func (runner *fakeCommandRunner) RunTestBinary(_ context.Context, packagePath, testName string, _ int) (string, error) {
+	command := []string{"go", "test-binary", packagePath, testName}
+	runner.commands = append(runner.commands, command)
+	if runner.failContains != "" && strings.Contains(strings.Join(command, "\x00"), runner.failContains) {
+		return "", errors.New("command failed")
+	}
+	return "ok", nil
+}
+
 // Close releases no resources because the fake session owns no filesystem state.
 func (*fakeCommandRunner) Close(context.Context) error {
 	return nil

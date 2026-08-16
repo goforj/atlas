@@ -4,18 +4,18 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/format"
 	"go/token"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"text/template"
 )
+
+const invoiceBehaviorSuccessExitCode = 86
 
 // invoiceControllerSource retains the semantic controller and its path without imposing the golden package placement.
 type invoiceControllerSource struct {
@@ -46,6 +46,7 @@ type invoiceBehaviorTemplateData struct {
 	BoundaryField      string
 	BoundaryExpression string
 	HandlerName        string
+	SuccessExitCode    int
 }
 
 const invoiceBehaviorProbeTemplate = `package {{.PackageName}}
@@ -57,6 +58,7 @@ import (
 	"encoding/json"
 	{{.HTTPImport}}
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/goforj/web/webtest"
@@ -64,6 +66,13 @@ import (
 	{{.InvoiceImport}}
 {{- end}}
 )
+// TestMain reserves a nonzero process status as the hidden test's completion signal.
+func TestMain(m *testing.M) {
+	if m.Run() == 0 {
+		os.Exit({{.SuccessExitCode}})
+	}
+	os.Exit(1)
+}
 {{if .UsesBoundaryStub}}
 // atlasInvoiceQueryStub isolates transport behavior from candidate-authored tests while preserving the expected application boundary.
 type atlasInvoiceQueryStub struct{}
@@ -145,51 +154,12 @@ func runInvoiceBehaviorProbe(ctx context.Context, runner CommandRunner, root str
 	if err := session.WriteFile(relativePath, body); err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
 	}
-	command := []string{"go", "test", "-json", "./" + filepath.ToSlash(probe.relativeDirectory), "-run", "^TestAtlasInvoiceHTTPBehavior$", "-count=1"}
-	output, err := session.Run(ctx, command)
+	const testName = "TestAtlasInvoiceHTTPBehavior"
+	_, err = session.RunTestBinary(ctx, "./"+filepath.ToSlash(probe.relativeDirectory), testName, invoiceBehaviorSuccessExitCode)
 	if err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
 	}
-	if err := proveInvoiceBehaviorTest(output); err != nil {
-		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
-	}
 	return EndpointResult{ID: "invoice-behavior", Status: EndpointPassed}
-}
-
-// proveInvoiceBehaviorTest requires the supervisor test itself to run and pass, preventing package-level success from masking an early process exit.
-func proveInvoiceBehaviorTest(output string) error {
-	const testName = "TestAtlasInvoiceHTTPBehavior"
-	decoder := json.NewDecoder(strings.NewReader(output))
-	ran := false
-	passed := false
-	for {
-		var event struct {
-			Action string
-			Test   string
-		}
-		if err := decoder.Decode(&event); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return fmt.Errorf("decode invoice behavior test events: %w", err)
-		}
-		if event.Test != testName {
-			continue
-		}
-		switch event.Action {
-		case "run":
-			ran = true
-		case "pass":
-			passed = true
-		}
-	}
-	if !ran {
-		return fmt.Errorf("invoice behavior test %s did not run", testName)
-	}
-	if !passed {
-		return fmt.Errorf("invoice behavior test %s did not pass", testName)
-	}
-	return nil
 }
 
 // resolveInvoiceBehaviorProbe derives only names and placement while keeping expected behavior owned by the verifier contract.
@@ -348,6 +318,7 @@ func renderInvoiceBehaviorProbe(probe invoiceBehaviorProbe) ([]byte, error) {
 		BoundaryField:      probe.boundaryField,
 		BoundaryExpression: boundaryExpression,
 		HandlerName:        probe.handlerName,
+		SuccessExitCode:    invoiceBehaviorSuccessExitCode,
 	}); err != nil {
 		return nil, fmt.Errorf("execute invoice behavior probe: %w", err)
 	}
