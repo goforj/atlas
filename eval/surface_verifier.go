@@ -161,7 +161,8 @@ func derivedSurfaceChange(path string) bool {
 	if path == "_data" || strings.Contains(path, "/_data/") || strings.HasSuffix(path, "/_data") {
 		return true
 	}
-	return path == "bin" || path == "build" || strings.HasPrefix(path, "bin/") || strings.HasPrefix(path, "build/")
+	return path == "bin" || path == "build" || path == "storage" ||
+		strings.HasPrefix(path, "bin/") || strings.HasPrefix(path, "build/") || strings.HasPrefix(path, "storage/")
 }
 
 // verifySurfaceSource finds syntax-bearing facts without counting comments as implementation evidence.
