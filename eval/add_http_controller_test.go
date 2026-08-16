@@ -3,8 +3,11 @@ package eval
 import (
 	"context"
 	"errors"
+	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"os"
 	"path/filepath"
 	"strings"
@@ -335,6 +338,31 @@ func TestControllerHandlerCheckRejectsRouteBoundHardCodedResponse(t *testing.T) 
 	}
 }
 
+// TestInvoiceRouteOwnerRejectsDecoyReceiver prevents a compliant decoy handler from substituting for the handler registered by Routes.
+func TestInvoiceRouteOwnerRejectsDecoyReceiver(t *testing.T) {
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, "controller.go", decoyReceiverControllerSource(), parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("parse decoy receiver controller: %v", err)
+	}
+	if _, err := (&types.Config{Importer: importer.Default()}).Check("invoices", fileSet, []*ast.File{file}, nil); err != nil {
+		t.Fatalf("type-check decoy receiver controller: %v", err)
+	}
+	if ownerName, handlerName := invoiceRouteOwner(file); ownerName != "" || handlerName != "" {
+		t.Fatalf("decoy route owner = %q, handler = %q", ownerName, handlerName)
+	}
+	if result := controllerHandlerCheck(file); result.Status != EndpointFailed {
+		t.Fatalf("decoy handler result = %#v", result)
+	}
+
+	root := t.TempDir()
+	writeFixtureFile(t, root, "go.mod", "module example.com/invoiceeval\n\ngo 1.25.0\n")
+	writeFixtureFile(t, root, "internal/invoices/controller.go", decoyReceiverControllerSource())
+	if _, err := resolveInvoiceBehaviorProbe(root); err == nil {
+		t.Fatal("behavior probe resolved a handler that Routes does not invoke on its receiver")
+	}
+}
+
 // writeControllerFixture materializes only the candidate-owned sources inspected by the verifier.
 func writeControllerFixture(t *testing.T, controller string, registered bool) string {
 	t.Helper()
@@ -404,6 +432,59 @@ func (controller *Controller) Show(request web.Context) error {
 		return err
 	}
 	return request.JSON(http.StatusOK, invoice)
+}
+`
+}
+
+// decoyReceiverControllerSource defines a type-correct controller whose route points at a different receiver.
+func decoyReceiverControllerSource() string {
+	return `package invoices
+
+import (
+	"errors"
+	"net/http"
+)
+
+type Route struct{}
+
+func NewRoute(_ string, _ string, _ func(Context) error) Route { return Route{} }
+
+type Context struct{}
+
+func (Context) Context() any { return nil }
+func (Context) Param(string) string { return "" }
+func (Context) JSON(int, any) error { return nil }
+
+type Invoice struct{}
+
+type Service struct{}
+
+func (*Service) Find(any, string) (Invoice, error) { return Invoice{}, nil }
+
+var ErrInvoiceNotFound = errors.New("not found")
+
+type decoyReceiver struct {
+	service *Service
+}
+
+func (decoy *decoyReceiver) Show(request Context) error {
+	invoice, err := decoy.service.Find(request.Context(), request.Param("id"))
+	if errors.Is(err, ErrInvoiceNotFound) {
+		return request.JSON(http.StatusNotFound, map[string]string{"error": "invoice not found"})
+	}
+	if err != nil {
+		return err
+	}
+	return request.JSON(http.StatusOK, invoice)
+}
+
+type Controller struct {
+	service *Service
+	decoy   *decoyReceiver
+}
+
+func (controller *Controller) Routes() []Route {
+	return []Route{NewRoute(http.MethodGet, "/invoices/:id", controller.decoy.Show)}
 }
 `
 }
