@@ -317,6 +317,24 @@ func TestControllerHandlerCheckRequiresFindRequestContext(t *testing.T) {
 	}
 }
 
+// TestControllerHandlerCheckRejectsRouteBoundHardCodedResponse ensures unrelated compliant methods cannot satisfy the selected route's contract.
+func TestControllerHandlerCheckRejectsRouteBoundHardCodedResponse(t *testing.T) {
+	valid := validControllerSource("service *Service")
+	hardCodedShow := `func (controller *Controller) Show(request web.Context) error {
+	return request.JSON(http.StatusOK, map[string]string{"id": "inv-42", "status": "open"})
+}
+`
+	unusedCompliantMethod := strings.Replace(valid[strings.Index(valid, "func (controller *Controller) Show"):], "Show", "LookupInvoice", 1)
+	mutant := valid[:strings.Index(valid, "func (controller *Controller) Show")] + hardCodedShow + "\n" + unusedCompliantMethod
+	file, err := parser.ParseFile(token.NewFileSet(), "controller.go", mutant, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("parse hard-coded response mutant: %v", err)
+	}
+	if result := controllerHandlerCheck(file); result.Status != EndpointFailed || !strings.Contains(result.Details, "Context") {
+		t.Fatalf("hard-coded Show was accepted: %#v", result)
+	}
+}
+
 // writeControllerFixture materializes only the candidate-owned sources inspected by the verifier.
 func writeControllerFixture(t *testing.T, controller string, registered bool) string {
 	t.Helper()

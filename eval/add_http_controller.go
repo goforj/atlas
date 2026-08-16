@@ -277,19 +277,21 @@ func controllerRouteCheck(file *ast.File) EndpointResult {
 // controllerHandlerCheck verifies context propagation, ID extraction, application lookup, and success/not-found response handling.
 func controllerHandlerCheck(file *ast.File) EndpointResult {
 	required := map[string]bool{"Context": false, "Param": false, "Find": false, "JSON": false, "StatusOK": false, "StatusNotFound": false}
-	for _, declaration := range file.Decls {
-		function, ok := declaration.(*ast.FuncDecl)
-		if !ok || function.Body == nil {
-			continue
-		}
-		if findCallUsesRequestContext(function) {
-			required["Context"] = true
-		}
+	ownerName, handlerName := invoiceRouteOwner(file)
+	handler := controllerRouteHandler(file, ownerName, handlerName)
+	if handler == nil {
+		return EndpointResult{ID: "invoice-handler", Status: EndpointFailed, Details: "handler attached to GET /invoices/:id could not be derived"}
 	}
-	ast.Inspect(file, func(node ast.Node) bool {
+	requestParameters := functionParameterNames(handler)
+	if findCallUsesRequestContext(handler) {
+		required["Context"] = true
+	}
+	ast.Inspect(handler.Body, func(node ast.Node) bool {
 		if call, ok := node.(*ast.CallExpr); ok {
 			if selector, ok := call.Fun.(*ast.SelectorExpr); ok {
-				if selector.Sel.Name != "Context" {
+				if selector.Sel.Name == "Param" && selectorUsesParameter(selector, requestParameters) {
+					required["Param"] = true
+				} else if selector.Sel.Name != "Context" {
 					if _, exists := required[selector.Sel.Name]; exists {
 						required[selector.Sel.Name] = true
 					}
@@ -301,25 +303,54 @@ func controllerHandlerCheck(file *ast.File) EndpointResult {
 		}
 		return true
 	})
-	for name, present := range required {
-		if !present {
+	for _, name := range []string{"Context", "Param", "Find", "JSON", "StatusOK", "StatusNotFound"} {
+		if !required[name] {
 			return EndpointResult{ID: "invoice-handler", Status: EndpointFailed, Details: "handler does not demonstrate " + name + " behavior"}
 		}
 	}
 	return EndpointResult{ID: "invoice-handler", Status: EndpointPassed}
 }
 
-// findCallUsesRequestContext proves a Find invocation receives Context from one of its function's request parameters.
-func findCallUsesRequestContext(function *ast.FuncDecl) bool {
+// controllerRouteHandler returns the concrete receiver method selected by the required route.
+func controllerRouteHandler(file *ast.File, ownerName, handlerName string) *ast.FuncDecl {
+	if ownerName == "" || handlerName == "" {
+		return nil
+	}
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Body == nil || function.Name.Name != handlerName || function.Recv == nil || len(function.Recv.List) == 0 {
+			continue
+		}
+		if expressionTypeName(function.Recv.List[0].Type) == ownerName {
+			return function
+		}
+	}
+	return nil
+}
+
+// functionParameterNames returns the names that can supply request-scoped handler values.
+func functionParameterNames(function *ast.FuncDecl) map[string]bool {
 	parameters := make(map[string]bool)
 	if function.Type.Params == nil {
-		return false
+		return parameters
 	}
 	for _, field := range function.Type.Params.List {
 		for _, name := range field.Names {
 			parameters[name.Name] = true
 		}
 	}
+	return parameters
+}
+
+// selectorUsesParameter reports whether a selector is invoked on one of the handler's parameters.
+func selectorUsesParameter(selector *ast.SelectorExpr, parameters map[string]bool) bool {
+	receiver, ok := selector.X.(*ast.Ident)
+	return ok && parameters[receiver.Name]
+}
+
+// findCallUsesRequestContext proves a Find invocation receives Context from one of its function's request parameters.
+func findCallUsesRequestContext(function *ast.FuncDecl) bool {
+	parameters := functionParameterNames(function)
 	usesRequestContext := false
 	ast.Inspect(function.Body, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
