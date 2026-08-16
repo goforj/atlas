@@ -256,29 +256,34 @@ func (session *session) Wait(ctx context.Context) (AgentResult, error) {
 
 	for {
 		if dropped := session.client.NotificationsDropped(); dropped > 0 {
-			return AgentResult{}, fmt.Errorf("Codex telemetry overflow: discarded %d lifecycle notifications", dropped)
+			return session.snapshotResult(AgentProviderError), fmt.Errorf("Codex telemetry overflow: discarded %d lifecycle notifications", dropped)
 		}
 		select {
 		case notification, ok := <-session.client.Notifications():
 			if !ok {
-				return AgentResult{}, fmt.Errorf("Codex app-server stopped before turn completion: %s", session.client.Stderr())
+				return session.snapshotResult(AgentProviderError), fmt.Errorf("Codex app-server stopped before turn completion: %s", session.client.Stderr())
 			}
 			terminal, outcome, err := session.consume(notification)
 			if err != nil {
-				return AgentResult{}, err
+				return session.snapshotResult(AgentProviderError), err
 			}
 			if terminal {
 				session.mu.Lock()
 				session.finished = true
-				events := append([]Event(nil), session.events...)
-				message := session.message
 				session.mu.Unlock()
-				return AgentResult{Outcome: outcome, Events: events, Message: message}, nil
+				return session.snapshotResult(outcome), nil
 			}
 		case <-ctx.Done():
-			return AgentResult{}, ctx.Err()
+			return session.snapshotResult(classifyOperationError(ctx, ctx.Err(), AgentProviderError)), ctx.Err()
 		}
 	}
+}
+
+// snapshotResult preserves diagnostic telemetry collected before a provider or protocol failure.
+func (session *session) snapshotResult(outcome AgentOutcome) AgentResult {
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	return AgentResult{Outcome: outcome, Events: append([]Event(nil), session.events...), Message: session.message}
 }
 
 // Close interrupts an active turn before terminating the complete supervised app-server job.
@@ -422,7 +427,7 @@ func (session *session) appendEvent(kind EventKind, fields map[string]string) {
 	session.mu.Lock()
 	defer session.mu.Unlock()
 	session.sequence++
-	session.events = append(session.events, Event{Sequence: session.sequence, Kind: kind, Time: time.Now().UTC(), Fields: fields})
+	session.events = append(session.events, Event{Sequence: session.sequence, Kind: kind, Source: EventSourceAdapter, Time: time.Now().UTC(), Fields: fields})
 }
 
 // resolveExecutable records the exact Codex binary rather than trusting later PATH lookup.

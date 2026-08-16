@@ -49,7 +49,7 @@ type ArtifactFile struct {
 	Classification string `json:"classification"`
 }
 
-// ArtifactManifest authenticates the complete retained evidence set.
+// ArtifactManifest integrity-checks the complete retained evidence set against later accidental changes.
 type ArtifactManifest struct {
 	SchemaVersion int            `json:"schema_version"`
 	AttemptID     string         `json:"attempt_id"`
@@ -71,7 +71,7 @@ type AttemptArtifacts struct {
 	closed    bool
 }
 
-// NewArtifactStore requires an authentication key rather than writing unsigned evidence.
+// NewArtifactStore requires an integrity key rather than writing unsigned evidence.
 func NewArtifactStore(root string, key []byte, redactor Redactor) (*ArtifactStore, error) {
 	if root == "" {
 		return nil, fmt.Errorf("artifact root is required")

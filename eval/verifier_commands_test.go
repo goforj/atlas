@@ -62,13 +62,23 @@ func TestVerifierCommandsUsesPrivatePhaseState(t *testing.T) {
 	secondSession := second.(*verifierCommandSession)
 	firstEnvironment := verifierEnvironmentValues(firstSession.environment)
 	secondEnvironment := verifierEnvironmentValues(secondSession.environment)
-	for _, name := range []string{"HOME", "GOCACHE", "GOMODCACHE", "GOTMPDIR", "TMPDIR", "TEMP", "TMP"} {
+	for _, name := range []string{"HOME", "GOCACHE", "GOMODCACHE", "GOPATH", "GOTMPDIR", "TMPDIR", "TEMP", "TMP", "XDG_CACHE_HOME", "XDG_CONFIG_HOME"} {
 		if firstEnvironment[name] == "" || secondEnvironment[name] == "" {
 			t.Fatalf("%s is not private in environments %#v and %#v", name, firstEnvironment, secondEnvironment)
 		}
 		if firstEnvironment[name] == secondEnvironment[name] {
 			t.Fatalf("%s is shared by verifier phases: %q", name, firstEnvironment[name])
 		}
+	}
+	if firstEnvironment["GOWORK"] != "off" || secondEnvironment["GOWORK"] != "off" {
+		t.Fatalf("verifier workspace policy = %q and %q, want off", firstEnvironment["GOWORK"], secondEnvironment["GOWORK"])
+	}
+	marker := filepath.Join(firstEnvironment["HOME"], "phase-marker")
+	if err := os.WriteFile(marker, []byte("private"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(secondEnvironment["HOME"], "phase-marker")); !os.IsNotExist(err) {
+		t.Fatalf("first phase marker reached second phase: %v", err)
 	}
 	firstState := firstSession.stateRoot
 	secondState := secondSession.stateRoot

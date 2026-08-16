@@ -115,13 +115,16 @@ func privateVerifierEnvironment(base []string, stateRoot string) ([]string, erro
 		base = os.Environ()
 	}
 	paths := map[string]string{
-		"HOME":       filepath.Join(stateRoot, "home"),
-		"GOCACHE":    filepath.Join(stateRoot, "go-cache"),
-		"GOMODCACHE": filepath.Join(stateRoot, "go-mod-cache"),
-		"GOTMPDIR":   filepath.Join(stateRoot, "tmp"),
-		"TMPDIR":     filepath.Join(stateRoot, "tmp"),
-		"TEMP":       filepath.Join(stateRoot, "tmp"),
-		"TMP":        filepath.Join(stateRoot, "tmp"),
+		"HOME":            filepath.Join(stateRoot, "home"),
+		"GOCACHE":         filepath.Join(stateRoot, "go-cache"),
+		"GOMODCACHE":      filepath.Join(stateRoot, "go-mod-cache"),
+		"GOPATH":          filepath.Join(stateRoot, "go-path"),
+		"GOTMPDIR":        filepath.Join(stateRoot, "tmp"),
+		"TMPDIR":          filepath.Join(stateRoot, "tmp"),
+		"TEMP":            filepath.Join(stateRoot, "tmp"),
+		"TMP":             filepath.Join(stateRoot, "tmp"),
+		"XDG_CACHE_HOME":  filepath.Join(stateRoot, "xdg-cache"),
+		"XDG_CONFIG_HOME": filepath.Join(stateRoot, "xdg-config"),
 	}
 	for _, path := range paths {
 		if err := os.MkdirAll(path, 0o700); err != nil {
@@ -131,14 +134,18 @@ func privateVerifierEnvironment(base []string, stateRoot string) ([]string, erro
 	environment := make([]string, 0, len(base)+len(paths))
 	for _, entry := range base {
 		name, _, found := strings.Cut(entry, "=")
-		if !found || paths[name] == "" {
+		if !found {
+			continue
+		}
+		if _, overridden := paths[name]; overridden || name == "GOWORK" {
 			continue
 		}
 		environment = append(environment, entry)
 	}
-	for _, name := range []string{"HOME", "GOCACHE", "GOMODCACHE", "GOTMPDIR", "TMPDIR", "TEMP", "TMP"} {
+	for _, name := range []string{"HOME", "GOCACHE", "GOMODCACHE", "GOPATH", "GOTMPDIR", "TMPDIR", "TEMP", "TMP", "XDG_CACHE_HOME", "XDG_CONFIG_HOME"} {
 		environment = append(environment, name+"="+paths[name])
 	}
+	environment = append(environment, "GOWORK=off")
 	return environment, nil
 }
 

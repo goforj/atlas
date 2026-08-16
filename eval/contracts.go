@@ -21,6 +21,16 @@ const (
 	CapabilityMCPToolCalls Capability = "mcp_tool_calls"
 	// CapabilityProcessCleanup proves complete descendant-job termination.
 	CapabilityProcessCleanup Capability = "process_cleanup"
+	// CapabilityCredentialIsolation proves candidate processes cannot reach reusable provider authority.
+	CapabilityCredentialIsolation Capability = "credential_isolation"
+	// CapabilityHostFilesystemIsolation proves candidate processes cannot read or mutate undeclared host paths.
+	CapabilityHostFilesystemIsolation Capability = "host_filesystem_isolation"
+	// CapabilityNetworkEnforcement proves the backend enforces the requested shell network policy.
+	CapabilityNetworkEnforcement Capability = "network_enforcement"
+	// CapabilityVerifierIsolation proves candidate execution cannot mutate verifier code, state, or later phases.
+	CapabilityVerifierIsolation Capability = "verifier_isolation"
+	// CapabilityArtifactIsolation proves candidate processes cannot read signing authority or mutate retained evidence.
+	CapabilityArtifactIsolation Capability = "artifact_isolation"
 )
 
 // EvaluationDefinition is one resolved manifest and its adjacent natural-language prompt.

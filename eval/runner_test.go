@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -489,19 +490,24 @@ func TestRunnerRejectsMissingCapabilityBeforeMutation(t *testing.T) {
 	}
 }
 
-// TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence keeps framework outcomes useful without overstating conformance.
+// TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence retains useful diagnostics without publishing untrusted top-level outcomes.
 func TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence(t *testing.T) {
 	runner, _, preparer, backend, agent := newFakeRunner(t)
 	agent.capabilities = nil
 	backend.capabilities = nil
 	request := fakeAttemptRequest()
 	request.Intent = IntentDiagnostic
+	request.Definition.Limits.Commands = 1
+	agent.session.turn.Events = []Event{
+		{Sequence: 1, Kind: EventCommandStarted, Fields: map[string]string{EventFieldCommandID: "adapter-command-1"}},
+		{Sequence: 2, Kind: EventCommandStarted, Fields: map[string]string{EventFieldCommandID: "adapter-command-2"}},
+	}
 
 	result, err := runner.Run(context.Background(), request)
 	if err != nil {
 		t.Fatalf("Run(): %v", err)
 	}
-	if result.EvaluationStatus != EvaluationDiagnostic || result.Verification == nil || result.Verification.FrameworkOutcome.Status != EndpointPassed || result.Verification.WorkflowConformance.Status != EndpointIneligible {
+	if result.EvaluationStatus != EvaluationDiagnostic || result.Verification == nil || result.Verification.FrameworkOutcome.Status != EndpointIneligible || result.Verification.WorkflowConformance.Status != EndpointIneligible {
 		t.Fatalf("diagnostic result = %#v", result)
 	}
 	if !reflect.DeepEqual(result.UnavailableEvidence, []Capability{CapabilityCommands}) {
@@ -510,11 +516,37 @@ func TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence(t *testing.T) {
 	if preparer.prepareCalls != 1 || backend.openCalls != 1 || agent.prepareCalls != 1 {
 		t.Fatalf("diagnostic lifecycle calls = prepare:%d open:%d agent:%d", preparer.prepareCalls, backend.openCalls, agent.prepareCalls)
 	}
+	commands, err := os.ReadFile(filepath.Join(runner.Artifacts.root, request.AttemptID, "commands.jsonl"))
+	if err != nil {
+		t.Fatalf("read diagnostic commands: %v", err)
+	}
+	if !bytes.Contains(commands, []byte(`"source":"adapter"`)) {
+		t.Fatalf("diagnostic commands = %s, want adapter telemetry", commands)
+	}
+}
+
+// TestRunnerAuthoritativeRequiresIsolationBaseline prevents a partially observed backend from entering an authoritative denominator.
+func TestRunnerAuthoritativeRequiresIsolationBaseline(t *testing.T) {
+	runner, closeLog, preparer, backend, agent := newFakeRunner(t)
+	request := fakeAttemptRequest()
+	request.Intent = IntentAuthoritative
+
+	result, err := runner.Run(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Run(): %v", err)
+	}
+	if result.EvaluationStatus != EvaluationIneligible || len(result.UnavailableEvidence) != len(authoritativeCapabilities) {
+		t.Fatalf("authoritative preflight = %#v", result)
+	}
+	if preparer.prepareCalls != 0 || backend.openCalls != 0 || agent.prepareCalls != 0 || len(*closeLog) != 0 {
+		t.Fatalf("authoritative preflight mutated resources: prepare:%d open:%d agent:%d cleanup:%q", preparer.prepareCalls, backend.openCalls, agent.prepareCalls, *closeLog)
+	}
 }
 
 // TestRunnerAuthoritativeRequiresCompleteSupervisorBaseline prevents an incomplete snapshot from entering a valid denominator.
 func TestRunnerAuthoritativeRequiresCompleteSupervisorBaseline(t *testing.T) {
 	runner, _, _, backend, agent := newFakeRunner(t)
+	backend.capabilities = append(backend.capabilities, authoritativeCapabilities...)
 	backend.environment.baseline = BaselineSnapshot{}
 	request := fakeAttemptRequest()
 	request.Intent = IntentAuthoritative
@@ -647,12 +679,17 @@ func TestRunnerPreservesCleanupFailureBesideAgentOutcome(t *testing.T) {
 func TestRunnerClassifiesPostActionProviderFailureAsEvaluatorError(t *testing.T) {
 	runner, _, _, _, agent := newFakeRunner(t)
 	agent.session.waitErr = errors.New("provider disconnected")
+	agent.session.result.Events = []Event{{Sequence: 1, Kind: EventMessage, Fields: map[string]string{"text": "partial provider explanation"}}}
 	result, err := runner.Run(context.Background(), fakeAttemptRequest())
 	if err == nil {
 		t.Fatal("Run() succeeded after provider failure")
 	}
 	if result.AgentOutcome != AgentProviderError || result.EvaluationStatus != EvaluationEvaluatorError || !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
 		t.Fatalf("attempt result = %#v", result)
+	}
+	transcript, readErr := os.ReadFile(filepath.Join(runner.Artifacts.root, result.AttemptID, "transcript.redacted.txt"))
+	if readErr != nil || !bytes.Contains(transcript, []byte("partial provider explanation")) {
+		t.Fatalf("partial diagnostic transcript = %q, %v", transcript, readErr)
 	}
 }
 
@@ -768,7 +805,7 @@ func newFakeRunner(t *testing.T) (Runner, *[]string, *fakePreparer, *fakeBackend
 			closeLog: closeLog,
 		},
 	}
-	artifactStore, err := NewArtifactStore(t.TempDir(), []byte("0123456789abcdef0123456789abcdef"), NewRedactor(nil))
+	artifactStore, err := NewArtifactStore(filepath.Join(t.TempDir(), "artifacts"), []byte("0123456789abcdef0123456789abcdef"), NewRedactor(nil))
 	if err != nil {
 		t.Fatalf("NewArtifactStore(): %v", err)
 	}
