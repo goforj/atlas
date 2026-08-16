@@ -23,8 +23,8 @@ events, and did not write session files into the Project. This is sufficient to
 confirm that a fresh, non-resumed diagnostic session is available.
 
 A subsequent app-server test used a private Codex state containing only a
-temporary copy of the local login. The first attempt correctly exposed that a
-shared state loaded the maintainer's global `AGENTS.md`; the private state
+temporary copy of an explicitly supplied disposable login. The first attempt
+correctly exposed that a shared state loaded the maintainer's global `AGENTS.md`; the private state
 removed that instruction source. The adapter can therefore fail closed when
 the server reports guidance outside the resolved profile.
 
@@ -91,7 +91,7 @@ best-effort diagnostic containment; it is not authoritative process evidence.
 
 ## Unproven And Ineligible Claims
 
-The current local login uses a file-backed Codex credential store. A local
+The current diagnostic adapter uses a file-backed Codex credential store. A local
 Codex process and its shell descendants share the host read boundary, so an
 isolated working directory, `--ephemeral`, or a reduced environment cannot
 prove that provider authority is inaccessible to candidate code.
@@ -108,6 +108,12 @@ Therefore the local adapter cannot claim:
 These endpoints must report `ineligible` under `unconfined-local`. The
 authoritative backend still requires the external provider broker and isolated
 container or VM boundary defined by the main design.
+
+The local command therefore requires an explicit credential path instead of
+falling back to the developer's normal Codex login. That credential must be
+disposable, revocable, and restricted to the diagnostic. This limits accidental
+exposure but does not create a security boundary; unconfined candidate code can
+still read the copied credential while the attempt is active.
 
 The current host cannot start Codex's Bubblewrap workspace sandbox because
 unprivileged user namespaces are unavailable. The live diagnostic test
