@@ -16,7 +16,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "add-job/v1",
 			allowedChanges: []string{"internal/invoices/*_job.go", "internal/invoices/*_job_test.go", "app/wire/inject_jobs_app.go"},
 			sources: []sourceContract{
-				{id: "typed-job", paths: []string{"internal/invoices/*_job.go"}, identifiers: []string{"ReceiptJob", "ReceiptJobPayload", "InvoiceID", "HandleTask", "Service"}, selectorCalls: []string{"Bind", "Find", "Dispatch"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"invoices:receipt"}},
+				{id: "typed-job", paths: []string{"internal/invoices/*_job.go"}, identifiers: []string{"ReceiptJob", "ReceiptJobPayload", "HandleTask", "Service"}, selectorCalls: []string{"Bind", "Find", "Dispatch"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"invoices:receipt"}, declarations: []declarationContract{{name: "ReceiptJobPayload", identifiers: []string{"InvoiceID"}}}},
 				{id: "job-registration", paths: []string{"app/wire/inject_jobs_app.go"}, identifiers: []string{"NewReceiptJob", "ReceiptJobTypeName", "HandleTask"}},
 			},
 			commands: standardSurfaceCommands(),
