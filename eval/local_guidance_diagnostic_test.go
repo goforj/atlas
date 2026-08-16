@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 )
@@ -45,5 +46,35 @@ func TestNewLocalGuidanceDiagnosticOwnsStandardWiring(t *testing.T) {
 func TestNewLocalGuidanceDiagnosticRejectsMissingHostBoundary(t *testing.T) {
 	if _, err := NewLocalGuidanceDiagnostic(LocalGuidanceDiagnosticOptions{}); err == nil {
 		t.Fatal("NewLocalGuidanceDiagnostic() accepted missing host boundaries")
+	}
+}
+
+// TestLocalGuidanceDiagnosticRunsOneTreatment keeps the run command on the same Atlas lifecycle as paired comparisons.
+func TestLocalGuidanceDiagnosticRunsOneTreatment(t *testing.T) {
+	runner, _, _, _, _ := newFakeRunner(t)
+	diagnostic := LocalGuidanceDiagnostic{runner: runner, forjExecutable: "/tools/forj", runtime: fakeAttemptRequest().Runtime}
+	attempt, err := diagnostic.RunTreatment(context.Background(), LocalDiagnosticTreatmentRequest{
+		EvaluationID:    "add-http-controller",
+		GuidanceProfile: GuidanceProfileAgents,
+		DestinationRoot: t.TempDir(),
+		Environment:     []string{},
+		LogicalTrialID:  "single-treatment",
+	})
+	if err != nil {
+		t.Fatalf("RunTreatment(): %v", err)
+	}
+	if attempt.Profile != GuidanceProfileAgents || attempt.Result.LogicalTrialID != "single-treatment" || attempt.Result.AttemptID != "single-treatment-agents" {
+		t.Fatalf("attempt = %#v", attempt)
+	}
+}
+
+// TestLocalGuidanceDiagnosticRejectsUnsupportedTreatment prevents the diagnostic command from inventing unresolved guidance profiles.
+func TestLocalGuidanceDiagnosticRejectsUnsupportedTreatment(t *testing.T) {
+	runner, _, _, _, _ := newFakeRunner(t)
+	diagnostic := LocalGuidanceDiagnostic{runner: runner, forjExecutable: "/tools/forj"}
+	if _, err := diagnostic.RunTreatment(context.Background(), LocalDiagnosticTreatmentRequest{
+		EvaluationID: "add-http-controller", GuidanceProfile: "skills", DestinationRoot: t.TempDir(), Environment: []string{},
+	}); err == nil {
+		t.Fatal("RunTreatment() accepted an unsupported guidance profile")
 	}
 }

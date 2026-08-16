@@ -1,0 +1,1 @@
+The database team needs an empty migration pair for an upcoming invoice status change. Scaffold a migration named `add_status_to_invoices` on the default connection, but do not invent the SQL schema change yet. Keep the Project healthy and use the framework-supported workflow.

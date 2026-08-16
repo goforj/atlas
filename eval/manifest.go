@@ -26,6 +26,7 @@ var promotedEvaluationDirectories = map[string]string{
 	"add-event-subscriber":    "evaluations/add_event_subscriber",
 	"add-http-controller":     "evaluations/add_http_controller",
 	"add-job":                 "evaluations/add_job",
+	"add-migration":           "evaluations/add_migration",
 	"add-named-app-route":     "evaluations/add_named_app_route",
 	"add-named-cache":         "evaluations/add_named_cache",
 	"add-named-resource":      "evaluations/add_named_resource",

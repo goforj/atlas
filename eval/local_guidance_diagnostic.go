@@ -41,6 +41,15 @@ type LocalGuidanceDiagnosticRequest struct {
 	LogicalTrialID  string
 }
 
+// LocalDiagnosticTreatmentRequest identifies one guidance treatment without requiring a paired comparison.
+type LocalDiagnosticTreatmentRequest struct {
+	EvaluationID    string
+	GuidanceProfile string
+	DestinationRoot string
+	Environment     []string
+	LogicalTrialID  string
+}
+
 // NewLocalGuidanceDiagnostic creates the Atlas-owned registry, promoted verifier, Codex adapter, unconfined backend, artifact store, and runner.
 func NewLocalGuidanceDiagnostic(options LocalGuidanceDiagnosticOptions) (*LocalGuidanceDiagnostic, error) {
 	if strings.TrimSpace(options.WorkRoot) == "" {
@@ -118,6 +127,41 @@ func (diagnostic *LocalGuidanceDiagnostic) Run(ctx context.Context, request Loca
 		Environments:    request.Environments,
 		Runtime:         diagnostic.runtime,
 	})
+}
+
+// RunTreatment evaluates one promoted definition and guidance profile through the same diagnostic runner used by comparisons.
+func (diagnostic *LocalGuidanceDiagnostic) RunTreatment(ctx context.Context, request LocalDiagnosticTreatmentRequest) (GuidanceDiagnosticAttempt, error) {
+	if diagnostic == nil {
+		return GuidanceDiagnosticAttempt{}, fmt.Errorf("local guidance diagnostic is required")
+	}
+	definition, err := LoadPromotedDefinition(request.EvaluationID)
+	if err != nil {
+		return GuidanceDiagnosticAttempt{}, err
+	}
+	if request.GuidanceProfile != GuidanceProfileNone && request.GuidanceProfile != GuidanceProfileAgents {
+		return GuidanceDiagnosticAttempt{}, fmt.Errorf("unsupported local diagnostic guidance profile %q", request.GuidanceProfile)
+	}
+	if request.Environment == nil {
+		return GuidanceDiagnosticAttempt{}, fmt.Errorf("diagnostic environment for profile %q is required", request.GuidanceProfile)
+	}
+	trialID := request.LogicalTrialID
+	if strings.TrimSpace(trialID) == "" {
+		trialID, err = newLocalDiagnosticTrialID()
+		if err != nil {
+			return GuidanceDiagnosticAttempt{}, err
+		}
+	}
+	if !artifactAttemptIDPattern.MatchString(trialID) {
+		return GuidanceDiagnosticAttempt{}, fmt.Errorf("logical trial ID %q must be a safe slug", trialID)
+	}
+	return diagnostic.runner.runGuidanceDiagnosticAttempt(ctx, GuidanceDiagnosticRequest{
+		LogicalTrialID:  trialID,
+		Definition:      definition,
+		DestinationRoot: request.DestinationRoot,
+		ForjExecutable:  diagnostic.forjExecutable,
+		Environments:    map[string][]string{request.GuidanceProfile: append([]string(nil), request.Environment...)},
+		Runtime:         diagnostic.runtime,
+	}, request.GuidanceProfile)
 }
 
 // newLocalDiagnosticTrialID makes a sortable opaque identifier without treating wall-clock time as unique.

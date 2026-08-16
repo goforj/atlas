@@ -224,6 +224,40 @@ func TestVerifyArtifactManifestDetectsTampering(t *testing.T) {
 	}
 }
 
+// TestReadVerifiedAttemptSummaryReturnsOnlyAuthenticatedContent keeps report rendering behind the manifest boundary.
+func TestReadVerifiedAttemptSummaryReturnsOnlyAuthenticatedContent(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "artifacts")
+	key := []byte("0123456789abcdef0123456789abcdef")
+	store, err := NewArtifactStore(root, key, NewRedactor(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := store.Begin("attempt-report")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := artifacts.WriteText("summary.txt", "diagnostic summary\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+		t.Fatal(err)
+	}
+	directory := filepath.Join(root, "attempt-report")
+	summary, manifest, err := ReadVerifiedAttemptSummary(directory, key)
+	if err != nil {
+		t.Fatalf("ReadVerifiedAttemptSummary(): %v", err)
+	}
+	if summary != "diagnostic summary\n" || manifest.AttemptID != "attempt-report" {
+		t.Fatalf("summary = %q, manifest = %#v", summary, manifest)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "summary.txt"), []byte("tampered\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ReadVerifiedAttemptSummary(directory, key); err == nil {
+		t.Fatal("ReadVerifiedAttemptSummary() accepted a tampered summary")
+	}
+}
+
 // TestVerifyArtifactManifestRejectsNonCanonicalJSON prevents parser differentials from authenticating altered raw evidence.
 func TestVerifyArtifactManifestRejectsNonCanonicalJSON(t *testing.T) {
 	key := []byte("0123456789abcdef0123456789abcdef")

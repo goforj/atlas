@@ -22,6 +22,15 @@ func promotedSurfaceContracts() []surfaceContract {
 			commands: standardSurfaceCommands(),
 		},
 		{
+			id:             "add-migration/v1",
+			allowedChanges: []string{"migrations/*_add_status_to_invoices.up.sql", "migrations/*_add_status_to_invoices.down.sql"},
+			sources: []sourceContract{
+				{id: "migration-up", paths: []string{"migrations/*_add_status_to_invoices.up.sql"}, text: []string{"-- Up migration (sqlite)"}},
+				{id: "migration-down", paths: []string{"migrations/*_add_status_to_invoices.down.sql"}, text: []string{"-- Down migration (sqlite)"}},
+			},
+			commands: standardSurfaceCommands(),
+		},
+		{
 			id:             "add-schedule/v1",
 			allowedChanges: []string{"internal/invoices/*_schedule.go", "internal/invoices/*_schedule_test.go", "app/wire/inject_schedules_app.go", "app/schedules.go"},
 			sources: []sourceContract{
