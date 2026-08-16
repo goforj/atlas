@@ -15,6 +15,11 @@ func (noopDescendantTracker) Stop() processTargets {
 	return processTargets{}
 }
 
+// descendantsTerminated reports success because unsupported platforms have no tracked descendants.
+func descendantsTerminated(processTargets) bool {
+	return true
+}
+
 // terminateDescendants has no targets when descendant observation is unavailable.
 func terminateDescendants(processTargets) error {
 	return nil
