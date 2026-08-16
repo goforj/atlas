@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -130,13 +131,14 @@ func privateVerifierEnvironment(base []string, stateRoot string) ([]string, erro
 			return nil, fmt.Errorf("create private verifier state: %w", err)
 		}
 	}
-	environment := make([]string, 0, len(base)+len(paths))
+	moduleProxy := verifierModuleProxy(base)
+	environment := make([]string, 0, len(base)+len(paths)+1)
 	for _, entry := range base {
 		name, _, found := strings.Cut(entry, "=")
 		if !found {
 			continue
 		}
-		if _, overridden := paths[name]; overridden || name == "GOWORK" {
+		if _, overridden := paths[name]; overridden || name == "GOWORK" || (moduleProxy != "" && name == "GOPROXY") {
 			continue
 		}
 		environment = append(environment, entry)
@@ -144,8 +146,47 @@ func privateVerifierEnvironment(base []string, stateRoot string) ([]string, erro
 	for _, name := range []string{"HOME", "GOCACHE", "GOMODCACHE", "GOPATH", "GOTMPDIR", "TMPDIR", "TEMP", "TMP", "XDG_CACHE_HOME", "XDG_CONFIG_HOME"} {
 		environment = append(environment, name+"="+paths[name])
 	}
+	if moduleProxy != "" {
+		environment = append(environment, "GOPROXY="+moduleProxy)
+	}
 	environment = append(environment, "GOWORK=off")
 	return environment, nil
+}
+
+// verifierModuleProxy reuses only immutable module archives from trusted preparation while keeping every verifier's writable module state private.
+func verifierModuleProxy(environment []string) string {
+	values := verifierEnvironmentMap(environment)
+	moduleCache := strings.TrimSpace(values["GOMODCACHE"])
+	if moduleCache == "" {
+		return ""
+	}
+	downloadRoot := filepath.Join(moduleCache, "cache", "download")
+	info, err := os.Stat(downloadRoot)
+	if err != nil || !info.IsDir() {
+		return ""
+	}
+	proxyPath := filepath.ToSlash(downloadRoot)
+	if filepath.VolumeName(downloadRoot) != "" && !strings.HasPrefix(proxyPath, "/") {
+		proxyPath = "/" + proxyPath
+	}
+	local := (&url.URL{Scheme: "file", Path: proxyPath}).String()
+	upstream := strings.TrimSpace(values["GOPROXY"])
+	if upstream == "" || upstream == "off" {
+		return local
+	}
+	return local + "," + upstream
+}
+
+// verifierEnvironmentMap resolves the final value of each process environment entry.
+func verifierEnvironmentMap(environment []string) map[string]string {
+	values := make(map[string]string, len(environment))
+	for _, entry := range environment {
+		name, value, found := strings.Cut(entry, "=")
+		if found {
+			values[name] = value
+		}
+	}
+	return values
 }
 
 // Run executes one deadline- and output-bounded allowlisted process group, then cleans up its group and any descendants observed on supported hosts.
