@@ -74,14 +74,18 @@ the same controller task once without Project guidance and once with the
 canonical `AGENTS.md` guidance:
 
 ```bash
-forj atlas:eval compare add-http-controller --model <model>
+forj atlas:eval compare add-http-controller \
+  --model <model> \
+  --credential /path/to/disposable-auth.json
 ```
 
-The command retains redacted, authenticated evidence and verifies the final
-Project independently from the agent session. Its current local backend is
-diagnostic only: missing supervisor-grade command and filesystem observation
-is reported as ineligible evidence rather than promoted to an authoritative
-workflow claim. See [the implementation plan](docs/live-agent-evaluation-plan.md)
+The credential must be disposable, revocable, and restricted to this
+diagnostic; the current unconfined backend cannot keep file-backed provider
+authority secret from candidate processes. The command retains redacted
+evidence with post-run integrity checks and verifies the final Project after
+the agent session. Missing supervisor-grade isolation and observation keep
+top-level outcomes ineligible rather than promoting local diagnostics to an
+authoritative claim. See [the implementation plan](docs/live-agent-evaluation-plan.md)
 and [Codex adapter qualification](docs/codex-adapter-feasibility.md) for the
 boundary and release sequence.
 
