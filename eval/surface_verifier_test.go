@@ -90,7 +90,20 @@ func TestSurfaceVerifierAllowsToolDerivedOutputs(t *testing.T) {
 		{Path: "build"},
 		{Path: "build/api_index.json"},
 		{Path: "app/wire/wire_gen.go"},
+		{Path: "internal/database/_data", After: ProjectPathState{Kind: "directory"}},
+		{Path: "internal/database/_data/sqlite/app.db"},
 	}, nil)
+	if result.Status != EndpointPassed {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+// TestSurfaceVerifierAllowsOwnedPackageDirectories keeps new cohesive package roots aligned with their reviewed file patterns.
+func TestSurfaceVerifierAllowsOwnedPackageDirectories(t *testing.T) {
+	result := verifySurfaceOwnership(
+		[]ProjectChange{{Path: "internal/audits", After: ProjectPathState{Kind: "directory"}}},
+		[]string{"internal/audits/*.go"},
+	)
 	if result.Status != EndpointPassed {
 		t.Fatalf("result = %#v", result)
 	}
