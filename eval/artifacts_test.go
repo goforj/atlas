@@ -149,3 +149,71 @@ func TestNewArtifactStoreRequiresAuthenticationKey(t *testing.T) {
 		t.Fatal("NewArtifactStore() accepted a short authentication key")
 	}
 }
+
+// TestVerifyArtifactManifestRequiresAuthenticationKey rejects verification keys that cannot safely authenticate evidence.
+func TestVerifyArtifactManifestRequiresAuthenticationKey(t *testing.T) {
+	for _, key := range [][]byte{nil, []byte("short"), []byte("0123456789abcdef0123456789abc")} {
+		if _, err := VerifyArtifactManifest(t.TempDir(), key); err == nil || !strings.Contains(err.Error(), "at least 32 bytes") {
+			t.Fatalf("VerifyArtifactManifest() error = %v, want authentication key rejection", err)
+		}
+	}
+}
+
+// TestArtifactStoreCanaryRejectsRegisteredSecretsBeforeFinalization keeps bypassed writes from becoming authenticated evidence.
+func TestArtifactStoreCanaryRejectsRegisteredSecretsBeforeFinalization(t *testing.T) {
+	root := t.TempDir()
+	secret := "canary-secret-not-for-artifacts"
+	store, err := NewArtifactStore(root, []byte("0123456789abcdef0123456789abcdef"), NewRedactor([]string{secret}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := store.Begin("attempt-05")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "attempt-05", "bypassed.txt"), []byte(secret), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err == nil || strings.Contains(err.Error(), secret) {
+		t.Fatalf("Finalize() error = %v, want secret-safe canary rejection", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "attempt-05", "manifest.json")); !os.IsNotExist(err) {
+		t.Fatalf("manifest after canary rejection = %v, want absent", err)
+	}
+}
+
+// TestArtifactStoreRedactsQuotedCredentialTokens keeps Codex credential values out of all persisted diagnostic surfaces.
+func TestArtifactStoreRedactsQuotedCredentialTokens(t *testing.T) {
+	accessToken := "quoted-access-token-value"
+	token := "quoted-token-value"
+	store, err := NewArtifactStore(t.TempDir(), []byte("0123456789abcdef0123456789abcdef"), NewRedactor([]string{accessToken, token}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := store.Begin("attempt-06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	quotedCredential := `{"access_token":"` + accessToken + `","token":"` + token + `"}`
+	if err := artifacts.AppendEvent(Event{Sequence: 1, Kind: EventMessage, Fields: map[string]string{"credential": quotedCredential}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := artifacts.WriteText("transcript.redacted.txt", quotedCredential); err != nil {
+		t.Fatal(err)
+	}
+	if err := artifacts.WriteText("diff.patch", `+credential `+quotedCredential); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"events.jsonl", "transcript.redacted.txt", "diff.patch"} {
+		body, err := os.ReadFile(filepath.Join(artifacts.directory, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(body), accessToken) || strings.Contains(string(body), token) {
+			t.Fatalf("%s retained a credential token: %q", name, body)
+		}
+	}
+}
