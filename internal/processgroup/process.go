@@ -117,7 +117,6 @@ func (process *Process) terminate(ctx context.Context) error {
 			killProcessGroup(process.command),
 			killDescendants(targets),
 		)
-		<-process.done
 		return errors.Join(ignoreMissingProcess(termErr), ignoreMissingProcess(killErr), ctx.Err())
 	}
 }

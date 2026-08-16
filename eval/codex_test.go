@@ -12,7 +12,10 @@ import (
 	"time"
 )
 
-const fakeCodexAdapterServerEnv = "ATLAS_FAKE_CODEX_ADAPTER_SERVER"
+const (
+	fakeCodexAdapterServerEnv = "ATLAS_FAKE_CODEX_ADAPTER_SERVER"
+	fakeCodexAdapterFloodEnv  = "ATLAS_FAKE_CODEX_ADAPTER_FLOOD"
+)
 
 // TestAdapterRunsFreshAttributedDiagnosticSession exercises guidance attribution and event normalization through the real protocol client.
 func TestAdapterRunsFreshAttributedDiagnosticSession(t *testing.T) {
@@ -143,6 +146,48 @@ func TestAdapterPrepareRollsBackGuidanceOnCredentialFailure(t *testing.T) {
 	}
 }
 
+// TestAdapterFailsExplicitlyWhenTelemetryOverflows prevents a dropped terminal notification from masquerading as a stalled turn.
+func TestAdapterFailsExplicitlyWhenTelemetryOverflows(t *testing.T) {
+	t.Setenv(fakeCodexAdapterFloodEnv, "1")
+	projectRoot := t.TempDir()
+	homeRoot := t.TempDir()
+	credential := filepath.Join(t.TempDir(), "auth.json")
+	if err := os.WriteFile(credential, []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write credential: %v", err)
+	}
+	adapter, err := NewCodexAgent(CodexOptions{
+		Executable:       os.Args[0],
+		Arguments:        []string{"-test.run=TestFakeCodexAdapterServer"},
+		Model:            "gpt-test",
+		CredentialSource: credential,
+		Environment: []string{
+			fakeCodexAdapterServerEnv + "=1",
+			fakeCodexAdapterFloodEnv + "=1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewCodexAgent(): %v", err)
+	}
+	prepared, err := adapter.Prepare(context.Background(), RunEnvironment{ProjectRoot: projectRoot, HomeRoot: homeRoot}, Guidance{Profile: "none"})
+	if err != nil {
+		t.Fatalf("Prepare(): %v", err)
+	}
+	defer prepared.Close(context.Background())
+	session, err := adapter.Start(context.Background(), prepared.Agent())
+	if err != nil {
+		t.Fatalf("Start(): %v", err)
+	}
+	defer session.Close(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := session.Turn(ctx, AgentTurn{Prompt: "emit telemetry"}); err != nil {
+		t.Fatalf("Turn(): %v", err)
+	}
+	if _, err := session.Wait(ctx); err == nil || !strings.Contains(err.Error(), "telemetry overflow") {
+		t.Fatalf("Wait() error = %v, want telemetry overflow", err)
+	}
+}
+
 // TestFakeCodexAdapterServer provides deterministic app-server notifications for adapter tests.
 func TestFakeCodexAdapterServer(t *testing.T) {
 	if os.Getenv(fakeCodexAdapterServerEnv) != "1" {
@@ -170,7 +215,9 @@ func runFakeCodexAdapterServer() {
 			writeFakeAdapterResponse(*request.ID, map[string]any{"userAgent": "fake-codex/1"})
 		case "thread/start":
 			var params struct {
-				CWD string `json:"cwd"`
+				CWD            string `json:"cwd"`
+				ApprovalPolicy string `json:"approvalPolicy"`
+				Sandbox        string `json:"sandbox"`
 			}
 			_ = json.Unmarshal(request.Params, &params)
 			projectRoot = params.CWD
@@ -183,9 +230,19 @@ func runFakeCodexAdapterServer() {
 			}
 			writeFakeAdapterResponse(*request.ID, map[string]any{
 				"model": "gpt-test", "modelProvider": "openai", "instructionSources": sources,
-				"thread": map[string]any{"id": "thread-1", "ephemeral": true},
+				"thread": map[string]any{
+					"id":             "thread-1",
+					"ephemeral":      true,
+					"approvalPolicy": params.ApprovalPolicy,
+					"sandbox":        params.Sandbox,
+				},
 			})
 		case "turn/start":
+			if os.Getenv(fakeCodexAdapterFloodEnv) == "1" {
+				for range 1025 {
+					writeFakeAdapterNotification("server/flood", map[string]any{})
+				}
+			}
 			writeFakeAdapterResponse(*request.ID, map[string]any{"turn": map[string]any{"id": "turn-1"}})
 			writeFakeAdapterNotification("item/started", fakeAdapterItemParams(map[string]any{
 				"id": "command-1", "type": "commandExecution", "command": "forj make:controller invoices", "commandActions": []any{}, "cwd": projectRoot, "status": "inProgress",
