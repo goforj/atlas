@@ -32,7 +32,8 @@ func (u Updater) Update(ctx context.Context, opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	explicitSurfaces := opts.Guidelines || opts.Skills || opts.MCP
+	applySurfaceSelections(&opts)
+	explicitSurfaces := opts.GuidelinesSelection != nil || opts.SkillsSelection != nil || opts.MCPSelection != nil || opts.Guidelines || opts.Skills || opts.MCP
 	if !explicitSurfaces {
 		opts.Guidelines = cfg.Features.Guidelines
 		opts.Skills = cfg.Features.Skills

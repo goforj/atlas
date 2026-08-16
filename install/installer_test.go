@@ -35,10 +35,14 @@ func TestInstallerWritesAgentFilesAndConfig(t *testing.T) {
 		t.Fatalf("expected 4 agents, got %d", len(result.Agents))
 	}
 
-	assertContains(t, filepath.Join(root, "AGENTS.md"), "cmd/app/main.go")
-	assertContains(t, filepath.Join(root, "CLAUDE.md"), "forj make:*")
-	assertContains(t, filepath.Join(root, "GEMINI.md"), "GoForj Atlas")
-	assertContains(t, filepath.Join(root, ".github", "copilot-instructions.md"), "internal/")
+	if result.Guidance.Version != GuidanceReconciliationVersion || !result.Guidance.Enabled || len(result.Guidance.Targets) != 4 {
+		t.Fatalf("guidance reconciliation = %#v", result.Guidance)
+	}
+	for _, path := range []string{"AGENTS.md", "CLAUDE.md", "GEMINI.md", filepath.Join(".github", "copilot-instructions.md")} {
+		if _, err := os.Stat(filepath.Join(root, path)); !os.IsNotExist(err) {
+			t.Fatalf("Atlas wrote host-owned guideline %s: %v", path, err)
+		}
+	}
 	assertContains(t, filepath.Join(root, ".codex", "config.toml"), "atlas:mcp")
 	assertContains(t, filepath.Join(root, ".mcp.json"), "goforj-atlas")
 	assertContains(t, filepath.Join(root, ".vscode", "mcp.json"), "goforj-atlas")
@@ -46,7 +50,7 @@ func TestInstallerWritesAgentFilesAndConfig(t *testing.T) {
 	assertContains(t, filepath.Join(root, ".goforj", "atlas.json"), `"agents"`)
 }
 
-func TestInstallerPreservesUserGuidelineContent(t *testing.T) {
+func TestInstallerLeavesUserGuidelineContentForHostReconciliation(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("# Local Rules\n\nDo not delete me.\n"), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
@@ -65,11 +69,8 @@ func TestInstallerPreservesUserGuidelineContent(t *testing.T) {
 	}
 
 	content := readFile(t, filepath.Join(root, "AGENTS.md"))
-	if !strings.Contains(content, "Do not delete me.") {
-		t.Fatalf("user content was not preserved:\n%s", content)
-	}
-	if strings.Count(content, "<!-- goforj-atlas:start -->") != 1 {
-		t.Fatalf("expected one marker block:\n%s", content)
+	if content != "# Local Rules\n\nDo not delete me.\n" {
+		t.Fatalf("Atlas changed host-owned user content:\n%s", content)
 	}
 }
 
@@ -133,7 +134,7 @@ func TestStatusReportsInstalledAndStaleSkills(t *testing.T) {
 	if !status.Installed || status.Project != "demo" || status.GoForjVersion != "0.18.0" || status.DocsRevision != "rev1" {
 		t.Fatalf("status = %#v", status)
 	}
-	if len(status.Agents) != 1 || !status.Agents[0].Configured || !status.Agents[0].MCPPresent || !status.Agents[0].GuidelinesPresent {
+	if len(status.Agents) != 1 || !status.Agents[0].Configured || !status.Agents[0].MCPPresent || status.Agents[0].GuidelinesPresent {
 		t.Fatalf("agents = %#v", status.Agents)
 	}
 	if !status.Skills.Stale || len(status.Warnings) == 0 {
@@ -141,7 +142,7 @@ func TestStatusReportsInstalledAndStaleSkills(t *testing.T) {
 	}
 }
 
-func TestUpdaterPreservesUserGuidelineContent(t *testing.T) {
+func TestUpdaterLeavesUserGuidelineContentForHostReconciliation(t *testing.T) {
 	root := t.TempDir()
 	if _, err := NewInstaller(agents.Codex{}).Install(context.Background(), Options{
 		Root:   root,
@@ -154,7 +155,7 @@ func TestUpdaterPreservesUserGuidelineContent(t *testing.T) {
 		t.Fatalf("install failed: %v", err)
 	}
 	path := filepath.Join(root, "AGENTS.md")
-	content := readFile(t, path) + "\n\n# Local Rules\n\nKeep this.\n"
+	content := "# Local Rules\n\nKeep this.\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write local content: %v", err)
 	}
@@ -168,8 +169,8 @@ func TestUpdaterPreservesUserGuidelineContent(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
-	if got := readFile(t, path); !strings.Contains(got, "Keep this.") {
-		t.Fatalf("user content was not preserved:\n%s", got)
+	if got := readFile(t, path); got != content {
+		t.Fatalf("Atlas changed host-owned user content:\n%s", got)
 	}
 }
 
@@ -241,6 +242,33 @@ func TestUpdaterRefreshesOneSurfaceWithoutDisablingOthers(t *testing.T) {
 	}
 }
 
+func TestUpdaterAppliesExplicitSurfaceDisable(t *testing.T) {
+	root := t.TempDir()
+	projectInfo := project.Project{Root: root, Name: "demo"}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
+		t.Fatalf("install Codex: %v", err)
+	}
+	disabled := false
+	result, err := NewUpdater().Update(context.Background(), Options{
+		Root:                root,
+		Project:             projectInfo,
+		GuidelinesSelection: &disabled,
+	})
+	if err != nil {
+		t.Fatalf("disable guidelines: %v", err)
+	}
+	cfg, err := config.Load(root)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Features.Guidelines || !cfg.Features.Skills || !cfg.Features.MCP {
+		t.Fatalf("features = %#v", cfg.Features)
+	}
+	if result.Guidance.Enabled {
+		t.Fatalf("guidance reconciliation = %#v", result.Guidance)
+	}
+}
+
 func TestUpdaterDiscoverReplacesCommittedAgentSelection(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -259,10 +287,9 @@ func TestUpdaterDiscoverReplacesCommittedAgentSelection(t *testing.T) {
 	if len(result.Agents) != 1 || result.Agents[0] != "claude" {
 		t.Fatalf("discovered agents = %v, want [claude]", result.Agents)
 	}
-	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); !os.IsNotExist(err) {
-		t.Fatalf("old Codex guideline remains: %v", err)
+	if result.Guidance.Targets[0] != "claude" {
+		t.Fatalf("guidance targets = %#v", result.Guidance.Targets)
 	}
-	assertContains(t, filepath.Join(root, "CLAUDE.md"), "GoForj Atlas")
 }
 
 func TestInstallerPrunesDeselectedAgentProjections(t *testing.T) {
@@ -272,14 +299,14 @@ func TestInstallerPrunesDeselectedAgentProjections(t *testing.T) {
 		t.Fatalf("install all agents: %v", err)
 	}
 	claudePath := filepath.Join(root, "CLAUDE.md")
-	if err := os.WriteFile(claudePath, []byte(readFile(t, claudePath)+"\n# User Rules\n\nKeep me.\n"), 0o644); err != nil {
+	if err := os.WriteFile(claudePath, []byte("# User Rules\n\nKeep me.\n"), 0o644); err != nil {
 		t.Fatalf("append Claude rules: %v", err)
 	}
 	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
 		t.Fatalf("reinstall Codex: %v", err)
 	}
 	claude := readFile(t, claudePath)
-	if !strings.Contains(claude, "Keep me.") || strings.Contains(claude, "goforj-atlas") {
+	if claude != "# User Rules\n\nKeep me.\n" {
 		t.Fatalf("Claude user content was not preserved cleanly:\n%s", claude)
 	}
 	for _, path := range []string{filepath.Join(root, ".claude"), filepath.Join(root, ".gemini"), filepath.Join(root, ".vscode"), filepath.Join(root, "GEMINI.md"), filepath.Join(root, ".mcp.json")} {
@@ -317,7 +344,7 @@ func TestInstallerPrunesDisabledSurfaces(t *testing.T) {
 	if !cfg.Features.Guidelines || cfg.Features.Skills || cfg.Features.MCP {
 		t.Fatalf("unexpected configured surfaces: %#v", cfg.Features)
 	}
-	if len(cfg.GeneratedFiles["codex"]) != 1 || cfg.GeneratedFiles["codex"][0] != "AGENTS.md" {
+	if len(cfg.GeneratedFiles["codex"]) != 0 {
 		t.Fatalf("disabled surfaces remain in ownership manifest: %#v", cfg.GeneratedFiles)
 	}
 	status, err := Status(context.Background(), StatusOptions{Root: root, Project: projectInfo})

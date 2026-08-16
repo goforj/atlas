@@ -26,7 +26,7 @@ type agentRemovalOptions struct {
 func removeAgent(ctx context.Context, root string, agent agents.Agent, cfg config.Config, dryRun bool) ([]string, error) {
 	return removeAgentSurfaces(ctx, agent, cfg, agentRemovalOptions{
 		Root:       root,
-		Guidelines: true,
+		Guidelines: false,
 		MCP:        true,
 		Skills:     true,
 		DryRun:     dryRun,
@@ -168,7 +168,6 @@ func resultFilesForAgent(root string, agent agents.Agent, paths []string) []stri
 
 // enabledSurfacePaths keeps the ownership manifest aligned with the configured Atlas features.
 func enabledSurfacePaths(root string, agent agents.Agent, features config.Features, paths []string) []string {
-	guidelinePath := agent.GuidelinesPath(root)
 	mcpPath := agent.MCPConfigPath(root)
 	skillRoot := agent.SkillsPath(root)
 	promptRoot := ""
@@ -178,10 +177,6 @@ func enabledSurfacePaths(root string, agent agents.Agent, features config.Featur
 	filtered := make([]string, 0, len(paths))
 	for _, path := range paths {
 		switch {
-		case path == guidelinePath:
-			if features.Guidelines {
-				filtered = append(filtered, path)
-			}
 		case path == mcpPath:
 			if features.MCP {
 				filtered = append(filtered, path)
