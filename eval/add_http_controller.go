@@ -26,6 +26,8 @@ type CommandSession interface {
 	WriteFile(string, []byte) error
 	// Run executes one allowlisted verifier command.
 	Run(context.Context, []string) (string, error)
+	// RunTestBinary compiles and executes a supervisor-authored test with an exit status that candidate stdout cannot forge.
+	RunTestBinary(context.Context, string, string, int) (string, error)
 	// Close destroys the disposable Project and any supervisor-owned input.
 	Close(context.Context) error
 }
