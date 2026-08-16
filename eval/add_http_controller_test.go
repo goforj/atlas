@@ -15,11 +15,15 @@ type fakeCommandRunner struct {
 	failContains string
 	commands     [][]string
 	files        map[string][]byte
+	opens        int
 }
 
-// Open returns one fake session so verifier tests retain command ordering.
+// Open records isolated phases while retaining supervisor files for assertions.
 func (runner *fakeCommandRunner) Open(context.Context, string) (CommandSession, error) {
-	runner.files = make(map[string][]byte)
+	if runner.files == nil {
+		runner.files = make(map[string][]byte)
+	}
+	runner.opens++
 	return runner, nil
 }
 
@@ -72,7 +76,7 @@ func TestAddHTTPControllerVerifierAcceptsIndependentBoundaryShapes(t *testing.T)
 			if result.FrameworkOutcome.Status != EndpointPassed {
 				t.Fatalf("framework outcome = %#v; checks = %#v", result.FrameworkOutcome, result.Checks)
 			}
-			if len(runner.commands) != 4 {
+			if len(runner.commands) != 4 || runner.opens != 4 {
 				t.Fatalf("verifier commands = %#v", runner.commands)
 			}
 			if len(runner.files) != 1 {
@@ -240,6 +244,32 @@ func TestAddHTTPControllerVerifierRejectsTargetedMutants(t *testing.T) {
 			}
 			if !checkHasStatus(result.Checks, test.wantCheck, EndpointFailed) {
 				t.Fatalf("checks do not fail %q: %#v", test.wantCheck, result.Checks)
+			}
+		})
+	}
+}
+
+// TestAddHTTPControllerVerifierRejectsProtectedAndUnrelatedChanges relies only on the supervisor baseline projection.
+func TestAddHTTPControllerVerifierRejectsProtectedAndUnrelatedChanges(t *testing.T) {
+	root := writeControllerFixture(t, validControllerSource("service *Service"), true)
+	for _, test := range []struct {
+		name   string
+		path   string
+		wantID string
+	}{
+		{name: "generated wire", path: "app/wire/wire_gen.go", wantID: "generated-file-ownership"},
+		{name: "unrelated readme", path: "README.md", wantID: "change-ownership"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := NewAddHTTPControllerVerifier(&fakeCommandRunner{}).Verify(context.Background(), VerificationInput{
+				ProjectRoot: root,
+				Changes:     []ProjectChange{{Path: test.path, Before: ProjectPathState{Kind: "file"}, After: ProjectPathState{Kind: "file"}}},
+			})
+			if err != nil {
+				t.Fatalf("Verify(): %v", err)
+			}
+			if !checkHasStatus(result.Checks, test.wantID, EndpointFailed) {
+				t.Fatalf("checks = %#v, want %q failure", result.Checks, test.wantID)
 			}
 		})
 	}

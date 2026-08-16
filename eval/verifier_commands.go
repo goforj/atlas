@@ -11,6 +11,14 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/goforj/atlas/internal/processgroup"
+)
+
+const (
+	verifierCommandTimeout = 30 * time.Second
+	maxVerifierOutput      = 1 << 20
 )
 
 // VerifierCommands executes an allowlisted toolchain in a disposable copy of the candidate Project.
@@ -66,7 +74,7 @@ func (session *verifierCommandSession) WriteFile(relativePath string, body []byt
 	return errors.Join(writeErr, file.Close())
 }
 
-// Open clones the sealed Project once so verifier commands can share generated build state without mutating candidate evidence.
+// Open clones the sealed Project for exactly one verifier phase, so no phase can observe another phase's candidate-controlled mutation.
 func (runner VerifierCommands) Open(_ context.Context, sourceRoot string) (CommandSession, error) {
 	goExecutable, err := resolveVerifierExecutable(runner.GoExecutable, "go")
 	if err != nil {
@@ -91,7 +99,7 @@ func (runner VerifierCommands) Open(_ context.Context, sourceRoot string) (Comma
 	}, nil
 }
 
-// Run executes only the declared Go or GoForj tool identity and captures bounded process output through the caller's context.
+// Run executes one deadline- and output-bounded allowlisted process group, then kills any descendants before returning.
 func (session *verifierCommandSession) Run(ctx context.Context, command []string) (string, error) {
 	if len(command) == 0 {
 		return "", fmt.Errorf("verifier command is required")
@@ -105,16 +113,78 @@ func (session *verifierCommandSession) Run(ctx context.Context, command []string
 	default:
 		return "", fmt.Errorf("verifier command %q is not allowlisted", command[0])
 	}
-	cmd := exec.CommandContext(ctx, executable, command[1:]...)
-	cmd.Dir = session.root
-	cmd.Env = append([]string(nil), session.environment...)
-	var output bytes.Buffer
-	cmd.Stdout = &output
-	cmd.Stderr = &output
-	if err := cmd.Run(); err != nil {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, verifierCommandTimeout)
+		defer cancel()
+	}
+	output := &boundedVerifierOutput{limit: maxVerifierOutput}
+	process, err := processgroup.Start(executable, command[1:], processgroup.Options{
+		Dir:    session.root,
+		Env:    append([]string(nil), session.environment...),
+		Stdout: output,
+		Stderr: output,
+	})
+	if err != nil {
+		return output.String(), fmt.Errorf("start %s: %w", strings.Join(command, " "), err)
+	}
+	err = process.Wait(ctx)
+	// A candidate may have backgrounded descendants. They share this dedicated
+	// group and must not survive into a later verifier phase.
+	cleanupContext, cancel := context.WithTimeout(context.Background(), verifierCleanupTimeout)
+	terminateErr := process.Terminate(cleanupContext)
+	cancel()
+	err = errors.Join(err, terminateErr)
+	if output.exceeded() {
+		err = errors.Join(err, fmt.Errorf("verifier command output exceeds %d bytes", maxVerifierOutput))
+	}
+	if err != nil {
 		return output.String(), fmt.Errorf("%s: %w\n%s", strings.Join(command, " "), err, strings.TrimSpace(output.String()))
 	}
 	return output.String(), nil
+}
+
+// boundedVerifierOutput prevents untrusted candidate output from consuming supervisor memory.
+type boundedVerifierOutput struct {
+	mu       sync.Mutex
+	buffer   bytes.Buffer
+	limit    int
+	overflow bool
+}
+
+// Write retains a bounded prefix and tells os/exec to close the pipe once the limit is reached.
+func (output *boundedVerifierOutput) Write(body []byte) (int, error) {
+	output.mu.Lock()
+	defer output.mu.Unlock()
+	remaining := output.limit - output.buffer.Len()
+	if remaining > 0 {
+		if len(body) > remaining {
+			output.buffer.Write(body[:remaining])
+			output.overflow = true
+			return remaining, errors.New("verifier output limit reached")
+		}
+		output.buffer.Write(body)
+		return len(body), nil
+	}
+	output.overflow = true
+	return 0, errors.New("verifier output limit reached")
+}
+
+// String returns the retained diagnostic prefix.
+func (output *boundedVerifierOutput) String() string {
+	output.mu.Lock()
+	defer output.mu.Unlock()
+	return output.buffer.String()
+}
+
+// exceeded reports whether output was truncated.
+func (output *boundedVerifierOutput) exceeded() bool {
+	output.mu.Lock()
+	defer output.mu.Unlock()
+	return output.overflow
 }
 
 // Close destroys the verifier's mutable Project clone without touching sealed candidate evidence.
@@ -174,6 +244,11 @@ func copyProjectTree(sourceRoot, destinationRoot string) error {
 		case info.IsDir():
 			return os.Mkdir(destinationPath, info.Mode().Perm())
 		case info.Mode().IsRegular():
+			// Candidate tests, especially TestMain, are executable candidate control
+			// flow. The verifier runs only supervisor-authored tests in its clone.
+			if strings.HasSuffix(relative, "_test.go") {
+				return nil
+			}
 			return copyRegularFile(sourcePath, destinationPath, info.Mode().Perm())
 		case info.Mode()&os.ModeSymlink != 0:
 			target, err := os.Readlink(sourcePath)

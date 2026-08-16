@@ -60,16 +60,13 @@ func (verifier *AddHTTPControllerVerifier) Verify(ctx context.Context, input Ver
 	if verifier == nil || verifier.runner == nil {
 		return VerificationResult{}, fmt.Errorf("add HTTP controller verifier requires an isolated command runner")
 	}
-	session, err := verifier.runner.Open(ctx, input.ProjectRoot)
-	if err != nil {
-		return VerificationResult{}, fmt.Errorf("open isolated verifier session: %w", err)
-	}
 	checks := make([]EndpointResult, 0, 10)
 	checks = append(checks, inspectInvoiceController(input.ProjectRoot)...)
-	checks = append(checks, runCheck(ctx, session, "project-tests", []string{"go", "test", "./..."}, ""))
-	checks = append(checks, runInvoiceBehaviorProbe(ctx, session, input.ProjectRoot))
-	checks = append(checks, runCheck(ctx, session, "app-build", []string{"forj", "build"}, ""))
-	checks = append(checks, runCheck(ctx, session, "route-visible", []string{"forj", "route:list"}, "/api/v1/invoices/:id"))
+	checks = append(checks, ownershipChecks(input.Changes)...)
+	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "project-tests", []string{"go", "test", "./..."}, ""))
+	checks = append(checks, runInvoiceBehaviorProbe(ctx, verifier.runner, input.ProjectRoot))
+	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "app-build", []string{"forj", "build"}, ""))
+	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "route-visible", []string{"forj", "route:list"}, "/api/v1/invoices/:id"))
 
 	failed := 0
 	for _, check := range checks {
@@ -87,12 +84,48 @@ func (verifier *AddHTTPControllerVerifier) Verify(ctx context.Context, input Ver
 		WorkflowConformance: EndpointResult{ID: "workflow-owned-by-runner", Status: EndpointIneligible},
 		Checks:              checks,
 	}
-	cleanupContext, cancel := context.WithTimeout(context.Background(), verifierCleanupTimeout)
-	defer cancel()
-	if err := session.Close(cleanupContext); err != nil {
-		return VerificationResult{}, fmt.Errorf("close isolated verifier session: %w", err)
-	}
 	return result, nil
+}
+
+// runIsolatedCheck gives every executable phase its own candidate clone and discards all writes before another phase starts.
+func (verifier *AddHTTPControllerVerifier) runIsolatedCheck(ctx context.Context, root, id string, command []string, contains string) (result EndpointResult) {
+	session, err := verifier.runner.Open(ctx, root)
+	if err != nil {
+		return EndpointResult{ID: id, Status: EndpointFailed, Details: fmt.Sprintf("open isolated verifier session: %v", err)}
+	}
+	defer func() {
+		cleanupContext, cancel := context.WithTimeout(context.Background(), verifierCleanupTimeout)
+		defer cancel()
+		if closeErr := session.Close(cleanupContext); closeErr != nil && result.Status == EndpointPassed {
+			result = EndpointResult{ID: id, Status: EndpointFailed, Details: fmt.Sprintf("close isolated verifier session: %v", closeErr)}
+		}
+	}()
+	return runCheck(ctx, session, id, command, contains)
+}
+
+// ownershipChecks enforces protected generated-file and semantic change-budget rules from a supervisor-owned baseline projection.
+func ownershipChecks(changes []ProjectChange) []EndpointResult {
+	if len(changes) == 0 {
+		return []EndpointResult{{ID: "change-ownership", Status: EndpointPassed}}
+	}
+	allowed := []string{"internal/invoices/", "internal/http/", "app/routes.go", "app/wire/inject_http_controllers_app.go"}
+	for _, change := range changes {
+		path := filepath.ToSlash(change.Path)
+		if filepath.Base(path) == "wire_gen.go" {
+			return []EndpointResult{{ID: "generated-file-ownership", Status: EndpointFailed, Details: fmt.Sprintf("candidate changed protected generated file %q", path)}}
+		}
+		permitted := false
+		for _, prefix := range allowed {
+			if strings.HasPrefix(path, prefix) || path == prefix {
+				permitted = true
+				break
+			}
+		}
+		if !permitted {
+			return []EndpointResult{{ID: "change-ownership", Status: EndpointFailed, Details: fmt.Sprintf("candidate changed unrelated path %q", path)}}
+		}
+	}
+	return []EndpointResult{{ID: "generated-file-ownership", Status: EndpointPassed}, {ID: "change-ownership", Status: EndpointPassed}}
 }
 
 // runCheck delegates executable behavior to the trusted verifier environment rather than the candidate's agent session.
