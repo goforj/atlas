@@ -44,7 +44,7 @@ func NewAddHTTPControllerVerifier(runner CommandRunner) *AddHTTPControllerVerifi
 func PromotedVerifiers(runner CommandRunner) []Verifier {
 	verifiers := []Verifier{NewAddHTTPControllerVerifier(runner)}
 	for _, contract := range promotedSurfaceContracts() {
-		verifiers = append(verifiers, NewSurfaceVerifier(runner, contract))
+		verifiers = append(verifiers, newSurfaceVerifier(runner, contract))
 	}
 	verifiers = append(verifiers, NewSafeAbstentionVerifier())
 	return verifiers

@@ -6,11 +6,13 @@ import (
 	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -21,40 +23,20 @@ import (
 //go:embed evaluations/*/evaluation.yaml evaluations/*/prompt.md
 var promotedEvaluationFiles embed.FS
 
-var promotedEvaluationDirectories = map[string]string{
-	"add-app-command":               "evaluations/add_app_command",
-	"add-app-lifecycle-hook":        "evaluations/add_app_lifecycle_hook",
-	"add-cached-repository":         "evaluations/add_cached_repository",
-	"add-database-transaction":      "evaluations/add_database_transaction",
-	"add-event-subscriber":          "evaluations/add_event_subscriber",
-	"add-http-controller":           "evaluations/add_http_controller",
-	"add-job":                       "evaluations/add_job",
-	"add-mail-workflow":             "evaluations/add_mail_workflow",
-	"add-migration":                 "evaluations/add_migration",
-	"add-named-app-route":           "evaluations/add_named_app_route",
-	"add-named-cache":               "evaluations/add_named_cache",
-	"add-named-resource":            "evaluations/add_named_resource",
-	"add-named-storage":             "evaluations/add_named_storage",
-	"add-outbound-http-integration": "evaluations/add_outbound_http_integration",
-	"add-route-middleware":          "evaluations/add_route_middleware",
-	"add-schedule":                  "evaluations/add_schedule",
-	"add-upload-workflow":           "evaluations/add_upload_workflow",
-	"add-validated-write-endpoint":  "evaluations/add_validated_write_endpoint",
-	"build-json-api-feature":        "evaluations/build_json_api_feature",
-	"create-additional-app":         "evaluations/create_additional_app",
-	"create-model":                  "evaluations/create_model",
-	"dispatch-event-followup-job":   "evaluations/dispatch_event_followup_job",
-	"publish-domain-event":          "evaluations/publish_domain_event",
-	"protect-route-with-auth":       "evaluations/protect_route_with_auth",
-	"repair-wire-provider":          "evaluations/repair_wire_provider",
-	"schedule-existing-job":         "evaluations/schedule_existing_job",
-	"unknown-framework-shape":       "evaluations/unknown_framework_shape",
+var promotedEvaluationCatalog struct {
+	sync.Once
+	directories map[string]string
+	err         error
 }
 
 // PromotedEvaluationIDs returns promoted evaluation IDs in stable order, optionally limited to one suite.
 func PromotedEvaluationIDs(suite string) ([]string, error) {
-	ids := make([]string, 0, len(promotedEvaluationDirectories))
-	for id := range promotedEvaluationDirectories {
+	directories, err := promotedEvaluationIndex()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(directories))
+	for id := range directories {
 		if strings.TrimSpace(suite) != "" {
 			definition, err := LoadPromotedDefinition(id)
 			if err != nil {
@@ -110,7 +92,11 @@ func LoadDefinition(directory string) (EvaluationDefinition, error) {
 
 // LoadPromotedDefinition reads one reviewed evaluation bundled with Atlas.
 func LoadPromotedDefinition(id string) (EvaluationDefinition, error) {
-	directory, ok := promotedEvaluationDirectories[id]
+	directories, err := promotedEvaluationIndex()
+	if err != nil {
+		return EvaluationDefinition{}, err
+	}
+	directory, ok := directories[id]
 	if !ok {
 		return EvaluationDefinition{}, fmt.Errorf("evaluation %q is not promoted", id)
 	}
@@ -123,6 +109,46 @@ func LoadPromotedDefinition(id string) (EvaluationDefinition, error) {
 		return EvaluationDefinition{}, fmt.Errorf("read promoted evaluation prompt: %w", err)
 	}
 	return loadDefinitionContent(body, prompt)
+}
+
+// promotedEvaluationIndex derives the catalog from embedded manifests so adding a reviewed directory cannot leave it silently unreachable.
+func promotedEvaluationIndex() (map[string]string, error) {
+	promotedEvaluationCatalog.Do(func() {
+		promotedEvaluationCatalog.directories, promotedEvaluationCatalog.err = buildPromotedEvaluationIndex()
+	})
+	return promotedEvaluationCatalog.directories, promotedEvaluationCatalog.err
+}
+
+// buildPromotedEvaluationIndex validates every embedded evaluation directory exactly once per process.
+func buildPromotedEvaluationIndex() (map[string]string, error) {
+	entries, err := fs.ReadDir(promotedEvaluationFiles, "evaluations")
+	if err != nil {
+		return nil, fmt.Errorf("read promoted evaluation catalog: %w", err)
+	}
+	directories := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		directory := "evaluations/" + entry.Name()
+		body, err := promotedEvaluationFiles.ReadFile(directory + "/evaluation.yaml")
+		if err != nil {
+			return nil, fmt.Errorf("read %s/evaluation.yaml: %w", directory, err)
+		}
+		prompt, err := promotedEvaluationFiles.ReadFile(directory + "/prompt.md")
+		if err != nil {
+			return nil, fmt.Errorf("read %s/prompt.md: %w", directory, err)
+		}
+		definition, err := loadDefinitionContent(body, prompt)
+		if err != nil {
+			return nil, fmt.Errorf("load promoted evaluation %s: %w", directory, err)
+		}
+		if previous, exists := directories[definition.ID]; exists {
+			return nil, fmt.Errorf("duplicate promoted evaluation ID %q in %s and %s", definition.ID, previous, directory)
+		}
+		directories[definition.ID] = directory
+	}
+	return directories, nil
 }
 
 // loadDefinitionContent joins a strict manifest with its exact adjacent prompt bytes.

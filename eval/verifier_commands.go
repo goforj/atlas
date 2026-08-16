@@ -334,7 +334,7 @@ func copyProjectTree(ctx context.Context, sourceRoot, destinationRoot string) er
 	return copyProjectTreeWithFilter(ctx, sourceRoot, destinationRoot, func(string) bool { return false })
 }
 
-// copyVerifierProjectTree excludes candidate tests because verifier phases execute only supervisor-authored tests.
+// copyVerifierProjectTree excludes candidate tests so candidate-authored assertions cannot determine verifier outcomes.
 func copyVerifierProjectTree(ctx context.Context, sourceRoot, destinationRoot string) error {
 	return copyProjectTreeWithFilter(ctx, sourceRoot, destinationRoot, func(relative string) bool {
 		return strings.HasSuffix(relative, "_test.go")

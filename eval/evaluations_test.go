@@ -43,34 +43,9 @@ func TestPromotedMajorSurfaceEvaluationsResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRegistry(): %v", err)
 	}
-	ids := []string{
-		"add-app-command",
-		"add-app-lifecycle-hook",
-		"add-cached-repository",
-		"add-database-transaction",
-		"add-event-subscriber",
-		"add-http-controller",
-		"add-job",
-		"add-mail-workflow",
-		"add-migration",
-		"add-named-app-route",
-		"add-named-cache",
-		"add-named-resource",
-		"add-named-storage",
-		"add-outbound-http-integration",
-		"add-route-middleware",
-		"add-schedule",
-		"add-upload-workflow",
-		"add-validated-write-endpoint",
-		"build-json-api-feature",
-		"create-additional-app",
-		"create-model",
-		"dispatch-event-followup-job",
-		"publish-domain-event",
-		"protect-route-with-auth",
-		"repair-wire-provider",
-		"schedule-existing-job",
-		"unknown-framework-shape",
+	ids, err := PromotedEvaluationIDs("")
+	if err != nil {
+		t.Fatalf("PromotedEvaluationIDs(): %v", err)
 	}
 	for _, id := range ids {
 		t.Run(id, func(t *testing.T) {
