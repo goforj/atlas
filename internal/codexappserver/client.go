@@ -18,6 +18,8 @@ import (
 const (
 	defaultMessageLimit      = 8 << 20
 	defaultNotificationLimit = 1024
+	defaultNotificationBytes = defaultMessageLimit
+	defaultStderrLimit       = defaultMessageLimit
 	cleanupTimeout           = 5 * time.Second
 )
 
@@ -76,16 +78,21 @@ type Client struct {
 	pendingMu sync.Mutex
 	pending   map[uint64]chan protocolMessage
 
-	notifications        chan Notification
-	notificationMu       sync.Mutex
-	notificationsDropped uint64
-	readerDone           chan struct{}
-	readerMu             sync.Mutex
-	readerErr            error
-	stderr               lockedBuffer
-	closeOnce            sync.Once
-	closeDone            chan struct{}
-	closeErr             error
+	notifications         chan Notification
+	notificationMu        sync.Mutex
+	notificationQueue     []queuedNotification
+	notificationBytes     int
+	notificationByteLimit int
+	notificationWake      chan struct{}
+	notificationsClosed   bool
+	notificationsDropped  uint64
+	readerDone            chan struct{}
+	readerMu              sync.Mutex
+	readerErr             error
+	stderr                lockedBuffer
+	closeOnce             sync.Once
+	closeDone             chan struct{}
+	closeErr              error
 }
 
 // protocolMessage captures the common JSONL envelope without binding Atlas to the complete Codex schema.
@@ -104,10 +111,18 @@ type protocolError struct {
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
-// lockedBuffer bounds concurrent stderr access to the process lifetime.
+// queuedNotification records the retained size of a lifecycle notification.
+type queuedNotification struct {
+	notification Notification
+	bytes        int
+}
+
+// lockedBuffer retains the most recent stderr bytes for process diagnostics.
 type lockedBuffer struct {
-	mu   sync.Mutex
-	data []byte
+	mu      sync.Mutex
+	data    []byte
+	limit   int
+	dropped uint64
 }
 
 // Start launches and initializes one Codex app-server connection.
@@ -132,13 +147,17 @@ func Start(ctx context.Context, options StartOptions) (*Client, error) {
 	}
 
 	client := &Client{
-		stdin:         stdinWrite,
-		nextID:        1,
-		pending:       map[uint64]chan protocolMessage{},
-		notifications: make(chan Notification, defaultNotificationLimit),
-		readerDone:    make(chan struct{}),
-		closeDone:     make(chan struct{}),
+		stdin:                 stdinWrite,
+		nextID:                1,
+		pending:               map[uint64]chan protocolMessage{},
+		notifications:         make(chan Notification),
+		notificationByteLimit: defaultNotificationBytes,
+		notificationWake:      make(chan struct{}, 1),
+		stderr:                lockedBuffer{limit: defaultStderrLimit},
+		readerDone:            make(chan struct{}),
+		closeDone:             make(chan struct{}),
 	}
+	go client.deliverNotifications()
 	process, err := processgroup.Start(options.Executable, arguments, processgroup.Options{
 		Dir:    options.Dir,
 		Env:    options.Env,
@@ -151,6 +170,7 @@ func Start(ctx context.Context, options StartOptions) (*Client, error) {
 	if err != nil {
 		_ = stdinWrite.Close()
 		_ = stdoutRead.Close()
+		client.closeNotifications()
 		return nil, err
 	}
 	client.process = process
@@ -299,11 +319,19 @@ func (client *Client) Notifications() <-chan Notification {
 	return client.notifications
 }
 
-// NotificationsDropped returns the number of lifecycle notifications discarded because the bounded telemetry queue was full.
+// NotificationsDropped returns the number of lifecycle notifications discarded because the telemetry queue exceeded its message or byte limit.
 func (client *Client) NotificationsDropped() uint64 {
 	client.notificationMu.Lock()
 	defer client.notificationMu.Unlock()
 	return client.notificationsDropped
+}
+
+// StderrDropped returns the number of stderr bytes omitted from retained diagnostics.
+func (client *Client) StderrDropped() uint64 {
+	if client == nil {
+		return 0
+	}
+	return client.stderr.Dropped()
 }
 
 // Close terminates the complete app-server process group with a fresh cleanup budget.
@@ -393,7 +421,7 @@ func (client *Client) write(message protocolMessage, params any) error {
 // read owns stdout framing so responses and lifecycle notifications cannot race each other.
 func (client *Client) read(stdout *os.File) {
 	defer close(client.readerDone)
-	defer close(client.notifications)
+	defer client.closeNotifications()
 	defer stdout.Close()
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 64*1024), defaultMessageLimit)
@@ -418,12 +446,73 @@ func (client *Client) read(stdout *os.File) {
 
 // deliverNotification keeps protocol-response delivery independent from telemetry consumption.
 func (client *Client) deliverNotification(notification Notification) {
-	select {
-	case client.notifications <- notification:
-	default:
-		client.notificationMu.Lock()
+	bytes := len(notification.Method) + len(notification.Params)
+	client.notificationMu.Lock()
+	if len(client.notificationQueue) >= defaultNotificationLimit || bytes > client.notificationByteLimit-client.notificationBytes {
 		client.notificationsDropped++
 		client.notificationMu.Unlock()
+		return
+	}
+	client.notificationQueue = append(client.notificationQueue, queuedNotification{notification: notification, bytes: bytes})
+	client.notificationBytes += bytes
+	client.notificationMu.Unlock()
+	client.wakeNotificationDelivery()
+}
+
+// deliverNotifications transfers retained telemetry without allowing a slow consumer to block protocol reads.
+func (client *Client) deliverNotifications() {
+	defer close(client.notifications)
+	for {
+		notification, ok := client.nextNotification()
+		if !ok {
+			return
+		}
+		client.notifications <- notification
+		client.removeDeliveredNotification()
+	}
+}
+
+// nextNotification waits for the next retained notification or final queue closure.
+func (client *Client) nextNotification() (Notification, bool) {
+	for {
+		client.notificationMu.Lock()
+		if len(client.notificationQueue) > 0 {
+			notification := client.notificationQueue[0].notification
+			client.notificationMu.Unlock()
+			return notification, true
+		}
+		if client.notificationsClosed {
+			client.notificationMu.Unlock()
+			return Notification{}, false
+		}
+		client.notificationMu.Unlock()
+		<-client.notificationWake
+	}
+}
+
+// removeDeliveredNotification releases the aggregate byte budget after delivery.
+func (client *Client) removeDeliveredNotification() {
+	client.notificationMu.Lock()
+	deferred := client.notificationQueue[0]
+	client.notificationQueue[0] = queuedNotification{}
+	client.notificationQueue = client.notificationQueue[1:]
+	client.notificationBytes -= deferred.bytes
+	client.notificationMu.Unlock()
+}
+
+// closeNotifications marks telemetry input complete while allowing retained notifications to drain in order.
+func (client *Client) closeNotifications() {
+	client.notificationMu.Lock()
+	client.notificationsClosed = true
+	client.notificationMu.Unlock()
+	client.wakeNotificationDelivery()
+}
+
+// wakeNotificationDelivery coalesces queue state changes for the delivery loop.
+func (client *Client) wakeNotificationDelivery() {
+	select {
+	case client.notificationWake <- struct{}{}:
+	default:
 	}
 }
 
@@ -483,7 +572,22 @@ func (client *Client) closeAfterStartFailure() error {
 func (buffer *lockedBuffer) Write(data []byte) (int, error) {
 	buffer.mu.Lock()
 	defer buffer.mu.Unlock()
-	buffer.data = append(buffer.data, data...)
+	if buffer.limit <= 0 {
+		buffer.dropped += uint64(len(data))
+		return len(data), nil
+	}
+	if len(buffer.data)+len(data) <= buffer.limit {
+		buffer.data = append(buffer.data, data...)
+		return len(data), nil
+	}
+
+	discarded := len(buffer.data) + len(data) - buffer.limit
+	buffer.dropped += uint64(discarded)
+	if len(data) >= buffer.limit {
+		buffer.data = append(buffer.data[:0], data[len(data)-buffer.limit:]...)
+		return len(data), nil
+	}
+	buffer.data = append(buffer.data[discarded:], data...)
 	return len(data), nil
 }
 
@@ -492,4 +596,11 @@ func (buffer *lockedBuffer) String() string {
 	buffer.mu.Lock()
 	defer buffer.mu.Unlock()
 	return string(append([]byte(nil), buffer.data...))
+}
+
+// Dropped returns the number of stderr bytes omitted from the retained tail.
+func (buffer *lockedBuffer) Dropped() uint64 {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return buffer.dropped
 }

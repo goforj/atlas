@@ -95,6 +95,56 @@ func TestClientDoesNotBlockResponsesBehindTelemetry(t *testing.T) {
 	}
 }
 
+// TestClientDropsNotificationsBeyondByteLimit verifies large telemetry cannot consume unbounded memory.
+func TestClientDropsNotificationsBeyondByteLimit(t *testing.T) {
+	client := newNotificationTestClient(10)
+	go client.deliverNotifications()
+
+	client.deliverNotification(Notification{Method: "item", Params: json.RawMessage("1")})
+	client.deliverNotification(Notification{Method: "item", Params: json.RawMessage("2")})
+	client.deliverNotification(Notification{Method: "item", Params: json.RawMessage("23")})
+	if got := client.NotificationsDropped(); got != 1 {
+		t.Fatalf("notifications dropped = %d, want 1", got)
+	}
+
+	for _, want := range []string{"1", "2"} {
+		notification := <-client.Notifications()
+		if got := string(notification.Params); got != want {
+			t.Fatalf("notification params = %q, want %q", got, want)
+		}
+	}
+	client.closeNotifications()
+	if _, ok := <-client.Notifications(); ok {
+		t.Fatal("notifications channel remained open after queued notifications drained")
+	}
+}
+
+// TestLockedBufferRetainsTail verifies stderr diagnostics remain bounded while preserving the most recent output.
+func TestLockedBufferRetainsTail(t *testing.T) {
+	buffer := lockedBuffer{limit: 5}
+	if _, err := buffer.Write([]byte("abc")); err != nil {
+		t.Fatalf("write initial stderr: %v", err)
+	}
+	if _, err := buffer.Write([]byte("defgh")); err != nil {
+		t.Fatalf("write overflowing stderr: %v", err)
+	}
+	if got := buffer.String(); got != "defgh" {
+		t.Fatalf("stderr = %q, want tail %q", got, "defgh")
+	}
+	if got := buffer.Dropped(); got != 3 {
+		t.Fatalf("dropped stderr bytes = %d, want 3", got)
+	}
+	if _, err := buffer.Write([]byte("ij")); err != nil {
+		t.Fatalf("write final stderr: %v", err)
+	}
+	if got := buffer.String(); got != "fghij" {
+		t.Fatalf("stderr = %q, want tail %q", got, "fghij")
+	}
+	if got := buffer.Dropped(); got != 5 {
+		t.Fatalf("dropped stderr bytes = %d, want 5", got)
+	}
+}
+
 // TestClientRejectsMismatchedEffectivePolicy keeps a diagnostic session from silently weakening its requested policy.
 func TestClientRejectsMismatchedEffectivePolicy(t *testing.T) {
 	t.Setenv(fakePolicyMismatchEnv, "1")
@@ -159,6 +209,15 @@ func closeClient(t *testing.T, client *Client) {
 	defer cancel()
 	if err := client.Close(ctx); err != nil {
 		t.Errorf("close app-server: %v", err)
+	}
+}
+
+// newNotificationTestClient creates an in-memory telemetry client with a small aggregate byte limit.
+func newNotificationTestClient(byteLimit int) *Client {
+	return &Client{
+		notifications:         make(chan Notification),
+		notificationByteLimit: byteLimit,
+		notificationWake:      make(chan struct{}, 1),
 	}
 }
 
