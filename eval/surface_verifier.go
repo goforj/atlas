@@ -37,39 +37,75 @@ type sourceContract struct {
 	selectorCalls     []string
 	forbiddenCalls    []string
 	stringLiterals    []string
+	forbiddenLiterals []string
+	declarations      []declarationContract
+	assignments       []assignmentContract
 	text              []string
+}
+
+// assignmentContract relates a named local value to the calls and identifiers used to build it.
+type assignmentContract struct {
+	name                 string
+	identifiers          []string
+	forbiddenIdentifiers []string
+	selectorCalls        []string
+}
+
+// declarationContract requires related syntax to occur inside one named declaration instead of anywhere in a package.
+type declarationContract struct {
+	name                 string
+	identifiers          []string
+	forbiddenIdentifiers []string
+	selectorCalls        []string
+	forbiddenCalls       []string
+	stringLiterals       []string
+	forbiddenLiterals    []string
+	nestedCalls          []nestedCallContract
+}
+
+// nestedCallContract proves an inner call occurs within an outer call expression, including callback arguments.
+type nestedCallContract struct {
+	outer string
+	inner string
 }
 
 // commandContract defines one supervisor-owned executable check.
 type commandContract struct {
-	id        string
-	arguments []string
-	contains  string
+	id              string
+	arguments       []string
+	contains        string
+	supervisorFiles []supervisorFile
 }
 
-// SurfaceVerifier verifies one promoted framework surface through syntax, ownership, and isolated commands.
-type SurfaceVerifier struct {
+// supervisorFile installs verifier-owned executable evidence after candidate tests have been removed.
+type supervisorFile struct {
+	path string
+	body string
+}
+
+// surfaceVerifier verifies one promoted framework surface through syntax, ownership, and isolated commands.
+type surfaceVerifier struct {
 	runner   CommandRunner
 	contract surfaceContract
 }
 
-// NewSurfaceVerifier creates a verifier from a reviewed in-code contract.
-func NewSurfaceVerifier(runner CommandRunner, contract surfaceContract) *SurfaceVerifier {
-	return &SurfaceVerifier{runner: runner, contract: contract}
+// newSurfaceVerifier creates a verifier from a reviewed in-code contract.
+func newSurfaceVerifier(runner CommandRunner, contract surfaceContract) *surfaceVerifier {
+	return &surfaceVerifier{runner: runner, contract: contract}
 }
 
 // ID returns the promoted verifier contract identity.
-func (verifier *SurfaceVerifier) ID() string {
+func (verifier *surfaceVerifier) ID() string {
 	return verifier.contract.id
 }
 
 // Capabilities returns no agent-observation requirements because checks consume sealed candidate evidence.
-func (*SurfaceVerifier) Capabilities() []Capability {
+func (*surfaceVerifier) Capabilities() []Capability {
 	return nil
 }
 
 // Verify checks semantic source facts, change ownership, and isolated executable behavior.
-func (verifier *SurfaceVerifier) Verify(ctx context.Context, input VerificationInput) (VerificationResult, error) {
+func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationInput) (VerificationResult, error) {
 	if verifier == nil || verifier.runner == nil {
 		return VerificationResult{}, fmt.Errorf("surface verifier requires an isolated command runner")
 	}
@@ -88,7 +124,7 @@ func (verifier *SurfaceVerifier) Verify(ctx context.Context, input VerificationI
 		}, nil
 	}
 	for _, contract := range verifier.contract.commands {
-		checks = append(checks, runIsolatedCommand(ctx, verifier.runner, input.ProjectRoot, contract.id, contract.arguments, contract.contains))
+		checks = append(checks, runIsolatedCommand(ctx, verifier.runner, input.ProjectRoot, contract))
 	}
 	framework := summarizeSurfaceChecks(verifier.ID(), checks)
 	return VerificationResult{
@@ -184,7 +220,9 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 	if err != nil {
 		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: err.Error()}
 	}
-	facts := sourceFacts{identifiers: map[string]bool{}, selectorCalls: map[string]bool{}, stringLiterals: map[string]bool{}}
+	facts := newSourceFacts()
+	declarations := map[string]*sourceFacts{}
+	assignments := map[string]*sourceFacts{}
 	var text strings.Builder
 	for _, path := range paths {
 		body, err := os.ReadFile(path)
@@ -199,38 +237,42 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 		if err != nil {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("parse %s: %v", filepath.ToSlash(path), err)}
 		}
-		collectSourceFacts(file, &facts)
+		collectSourceFacts(file, &facts, declarations, assignments)
 	}
-	for _, identifier := range contract.identifiers {
-		if !facts.identifiers[identifier] {
-			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required identifier %q is absent", identifier)}
+	if details := verifySourceFacts(facts, contract.identifiers, contract.identifierChoices, contract.selectorCalls, contract.forbiddenCalls, contract.stringLiterals, contract.forbiddenLiterals); details != "" {
+		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details}
+	}
+	for _, declaration := range contract.declarations {
+		scope := declarations[declaration.name]
+		if scope == nil {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required declaration %q is absent", declaration.name)}
 		}
-	}
-	for _, choices := range contract.identifierChoices {
-		matched := false
-		for _, identifier := range choices {
-			if facts.identifiers[identifier] {
-				matched = true
-				break
+		if details := verifySourceFacts(*scope, declaration.identifiers, nil, declaration.selectorCalls, declaration.forbiddenCalls, declaration.stringLiterals, declaration.forbiddenLiterals); details != "" {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q: %s", declaration.name, details)}
+		}
+		for _, identifier := range declaration.forbiddenIdentifiers {
+			if scope.identifiers[identifier] {
+				return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q contains forbidden identifier %q", declaration.name, identifier)}
 			}
 		}
-		if !matched {
-			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("one of the required identifiers %q is absent", choices)}
+		for _, nested := range declaration.nestedCalls {
+			if !scope.nestedCalls[nested.outer+">"+nested.inner] {
+				return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q does not call %q within %q", declaration.name, nested.inner, nested.outer)}
+			}
 		}
 	}
-	for _, selector := range contract.selectorCalls {
-		if !facts.selectorCalls[selector] {
-			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required call %q is absent", selector)}
+	for _, assignment := range contract.assignments {
+		scope := assignments[assignment.name]
+		if scope == nil {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required assignment %q is absent", assignment.name)}
 		}
-	}
-	for _, selector := range contract.forbiddenCalls {
-		if facts.selectorCalls[selector] {
-			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("forbidden call %q is present", selector)}
+		if details := verifySourceFacts(*scope, assignment.identifiers, nil, assignment.selectorCalls, nil, nil, nil); details != "" {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("assignment %q: %s", assignment.name, details)}
 		}
-	}
-	for _, literal := range contract.stringLiterals {
-		if !facts.stringLiterals[literal] {
-			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required string literal %q is absent", literal)}
+		for _, identifier := range assignment.forbiddenIdentifiers {
+			if scope.identifiers[identifier] {
+				return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("assignment %q contains forbidden identifier %q", assignment.name, identifier)}
+			}
 		}
 	}
 	for _, required := range contract.text {
@@ -246,18 +288,130 @@ type sourceFacts struct {
 	identifiers    map[string]bool
 	selectorCalls  map[string]bool
 	stringLiterals map[string]bool
+	nestedCalls    map[string]bool
 }
 
-// collectSourceFacts records declarations and calls while excluding comments from evidence.
-func collectSourceFacts(file *ast.File, facts *sourceFacts) {
+// newSourceFacts creates one isolated syntax evidence set.
+func newSourceFacts() sourceFacts {
+	return sourceFacts{
+		identifiers:    map[string]bool{},
+		selectorCalls:  map[string]bool{},
+		stringLiterals: map[string]bool{},
+		nestedCalls:    map[string]bool{},
+	}
+}
+
+// verifySourceFacts applies shared syntax requirements without weakening declaration-scoped checks into file-wide evidence.
+func verifySourceFacts(facts sourceFacts, identifiers []string, identifierChoices [][]string, selectorCalls, forbiddenCalls, stringLiterals, forbiddenLiterals []string) string {
+	for _, identifier := range identifiers {
+		if !facts.identifiers[identifier] {
+			return fmt.Sprintf("required identifier %q is absent", identifier)
+		}
+	}
+	for _, choices := range identifierChoices {
+		matched := false
+		for _, identifier := range choices {
+			if facts.identifiers[identifier] {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Sprintf("one of the required identifiers %q is absent", choices)
+		}
+	}
+	for _, selector := range selectorCalls {
+		if !facts.selectorCalls[selector] {
+			return fmt.Sprintf("required call %q is absent", selector)
+		}
+	}
+	for _, selector := range forbiddenCalls {
+		if facts.selectorCalls[selector] {
+			return fmt.Sprintf("forbidden call %q is present", selector)
+		}
+	}
+	for _, literal := range stringLiterals {
+		if !facts.stringLiterals[literal] {
+			return fmt.Sprintf("required string literal %q is absent", literal)
+		}
+	}
+	for _, literal := range forbiddenLiterals {
+		if facts.stringLiterals[literal] {
+			return fmt.Sprintf("forbidden string literal %q is present", literal)
+		}
+	}
+	return ""
+}
+
+// collectSourceFacts records package-wide and named-declaration evidence while excluding comments.
+func collectSourceFacts(file *ast.File, facts *sourceFacts, declarations, assignments map[string]*sourceFacts) {
+	collectNodeFacts(file, facts)
+	for _, declaration := range file.Decls {
+		switch value := declaration.(type) {
+		case *ast.FuncDecl:
+			collectDeclarationFacts(value.Name.Name, value, declarations)
+		case *ast.GenDecl:
+			for _, spec := range value.Specs {
+				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+					collectDeclarationFacts(typeSpec.Name.Name, typeSpec, declarations)
+				}
+			}
+		}
+	}
 	ast.Inspect(file, func(node ast.Node) bool {
+		assignment, ok := node.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		for index, expression := range assignment.Lhs {
+			identifier, ok := expression.(*ast.Ident)
+			if !ok || index >= len(assignment.Rhs) {
+				continue
+			}
+			facts := assignments[identifier.Name]
+			if facts == nil {
+				value := newSourceFacts()
+				facts = &value
+				assignments[identifier.Name] = facts
+			}
+			collectNodeFacts(assignment.Rhs[index], facts)
+		}
+		return true
+	})
+}
+
+// collectDeclarationFacts merges declarations with the same name so reviewed method families remain supported.
+func collectDeclarationFacts(name string, node ast.Node, declarations map[string]*sourceFacts) {
+	facts := declarations[name]
+	if facts == nil {
+		value := newSourceFacts()
+		facts = &value
+		declarations[name] = facts
+	}
+	collectNodeFacts(node, facts)
+}
+
+// collectNodeFacts records identifiers, calls, literals, and call containment for one syntax boundary.
+func collectNodeFacts(node ast.Node, facts *sourceFacts) {
+	ast.Inspect(node, func(node ast.Node) bool {
 		switch value := node.(type) {
 		case *ast.Ident:
 			facts.identifiers[value.Name] = true
 		case *ast.CallExpr:
-			if selector, ok := value.Fun.(*ast.SelectorExpr); ok {
-				facts.selectorCalls[expressionTypeName(selector.X)+"."+selector.Sel.Name] = true
-				facts.selectorCalls[selector.Sel.Name] = true
+			outer := callName(value)
+			if outer != "" {
+				facts.selectorCalls[outer] = true
+				for _, argument := range value.Args {
+					ast.Inspect(argument, func(inner ast.Node) bool {
+						call, ok := inner.(*ast.CallExpr)
+						if ok && call != value {
+							if innerName := callName(call); innerName != "" {
+								facts.nestedCalls[outer+">"+innerName] = true
+							}
+						}
+						return true
+					})
+				}
 			}
 		case *ast.BasicLit:
 			if value.Kind == token.STRING {
@@ -266,6 +420,18 @@ func collectSourceFacts(file *ast.File, facts *sourceFacts) {
 		}
 		return true
 	})
+}
+
+// callName returns the stable terminal name used by reviewed contracts across package and receiver choices.
+func callName(call *ast.CallExpr) string {
+	switch value := call.Fun.(type) {
+	case *ast.Ident:
+		return value.Name
+	case *ast.SelectorExpr:
+		return value.Sel.Name
+	default:
+		return ""
+	}
 }
 
 // matchingSurfacePaths resolves reviewed Project-relative globs without following arbitrary external paths.
@@ -292,19 +458,24 @@ func matchingSurfacePaths(root string, patterns []string) ([]string, error) {
 }
 
 // runIsolatedCommand executes one check in a private clone and always destroys its writable state.
-func runIsolatedCommand(ctx context.Context, runner CommandRunner, root, id string, command []string, contains string) (result EndpointResult) {
+func runIsolatedCommand(ctx context.Context, runner CommandRunner, root string, contract commandContract) (result EndpointResult) {
 	session, err := runner.Open(ctx, root)
 	if err != nil {
-		return EndpointResult{ID: id, Status: EndpointFailed, Details: fmt.Sprintf("open isolated verifier session: %v", err)}
+		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("open isolated verifier session: %v", err)}
 	}
 	defer func() {
 		cleanupContext, cancel := context.WithTimeout(context.Background(), verifierCleanupTimeout)
 		defer cancel()
 		if closeErr := session.Close(cleanupContext); closeErr != nil && result.Status == EndpointPassed {
-			result = EndpointResult{ID: id, Status: EndpointFailed, Details: fmt.Sprintf("close isolated verifier session: %v", closeErr)}
+			result = EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("close isolated verifier session: %v", closeErr)}
 		}
 	}()
-	return runCheck(ctx, session, id, command, contains)
+	for _, file := range contract.supervisorFiles {
+		if err := session.WriteFile(file.path, []byte(file.body)); err != nil {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("install supervisor probe: %v", err)}
+		}
+	}
+	return runCheck(ctx, session, contract.id, contract.arguments, contract.contains)
 }
 
 // summarizeSurfaceChecks produces one endpoint without concealing individual failures.

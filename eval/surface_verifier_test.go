@@ -31,7 +31,7 @@ func (command *ShowCmd) Run(ctx context.Context) { command.service.Find(ctx, "42
 		commands:       []commandContract{{id: "build", arguments: []string{"forj", "build"}}},
 	}
 	runner := &fakeCommandRunner{}
-	verifier := NewSurfaceVerifier(runner, contract)
+	verifier := newSurfaceVerifier(runner, contract)
 	result, err := verifier.Verify(context.Background(), VerificationInput{ProjectRoot: root})
 	if err != nil {
 		t.Fatalf("Verify(): %v", err)
@@ -67,7 +67,7 @@ func TestSurfaceVerifierRejectsOutOfScopeChanges(t *testing.T) {
 	if err := os.WriteFile(path, []byte("package feature\ntype Feature struct{}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	verifier := NewSurfaceVerifier(&fakeCommandRunner{}, surfaceContract{
+	verifier := newSurfaceVerifier(&fakeCommandRunner{}, surfaceContract{
 		id:             "ownership-test/v1",
 		allowedChanges: []string{"internal/feature/*.go"},
 		sources:        []sourceContract{{id: "shape", paths: []string{"internal/feature/*.go"}, identifiers: []string{"Feature"}}},
@@ -141,5 +141,92 @@ func TestSurfaceVerifierAcceptsReviewedIdentifierFamilies(t *testing.T) {
 	contract.identifierChoices = [][]string{{"ProfileCache", "Store"}}
 	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
 		t.Fatalf("unknown family result = %#v", result)
+	}
+}
+
+// TestSurfaceVerifierScopesRelatedEvidenceToDeclarations prevents unused helpers from satisfying behavior owned by another function.
+func TestSurfaceVerifierScopesRelatedEvidenceToDeclarations(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "service.go")
+	mutant := `package feature
+type Repository struct{}
+func (Repository) WithTransaction(callback func()) { callback() }
+func (Repository) AdjustBalance() {}
+func unused(repository Repository) { repository.WithTransaction(func() { repository.AdjustBalance() }) }
+func Transfer(repository Repository) { repository.AdjustBalance() }
+`
+	if err := os.WriteFile(path, []byte(mutant), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contract := sourceContract{
+		id:    "transaction",
+		paths: []string{"service.go"},
+		declarations: []declarationContract{{
+			name:          "Transfer",
+			selectorCalls: []string{"WithTransaction", "AdjustBalance"},
+			nestedCalls:   []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}},
+		}},
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+		t.Fatalf("mutant result = %#v, want declaration-scoped failure", result)
+	}
+	valid := `package feature
+type Repository struct{}
+func (Repository) WithTransaction(callback func()) { callback() }
+func (Repository) AdjustBalance() {}
+func Transfer(repository Repository) { repository.WithTransaction(func() { repository.AdjustBalance() }) }
+`
+	if err := os.WriteFile(path, []byte(valid), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("valid result = %#v", result)
+	}
+}
+
+// TestSurfaceVerifierRelatesRoutesToTheirAssignedGroup rejects a compiling route placed in the public group.
+func TestSurfaceVerifierRelatesRoutesToTheirAssignedGroup(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "routes.go")
+	mutant := `package app
+func routes(invoicesController Controller) {
+	publicRoutes := concat(invoicesController.Routes())
+	protectedRoutes := concat()
+	_, _ = publicRoutes, protectedRoutes
+}
+
+// TestRunIsolatedCommandInstallsSupervisorFiles proves executable behavior comes from verifier-owned source after candidate tests are removed.
+func TestRunIsolatedCommandInstallsSupervisorFiles(t *testing.T) {
+	runner := &fakeCommandRunner{}
+	contract := commandContract{
+		id:        "trusted-probe",
+		arguments: []string{"go", "test", "./feature"},
+		supervisorFiles: []supervisorFile{{
+			path: "feature/atlas_eval_test.go",
+			body: "package feature\n",
+		}},
+	}
+	result := runIsolatedCommand(context.Background(), runner, t.TempDir(), contract)
+	if result.Status != EndpointPassed {
+		t.Fatalf("result = %#v", result)
+	}
+	if got := string(runner.files["feature/atlas_eval_test.go"]); got != "package feature\n" {
+		t.Fatalf("supervisor file = %q", got)
+	}
+}
+`
+	if err := os.WriteFile(path, []byte(mutant), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contract := sourceContract{
+		id:    "route-groups",
+		paths: []string{"routes.go"},
+		assignments: []assignmentContract{
+			{name: "publicRoutes", forbiddenIdentifiers: []string{"invoicesController"}},
+			{name: "protectedRoutes", identifiers: []string{"invoicesController"}, selectorCalls: []string{"Routes"}},
+		},
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+		t.Fatalf("mutant result = %#v, want wrong-group failure", result)
 	}
 }

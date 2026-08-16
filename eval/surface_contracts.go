@@ -113,8 +113,8 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "build-json-api-feature/v1",
 			allowedChanges: []string{"internal/users/*.go", "app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
-				{id: "users-application-boundary", paths: []string{"internal/users/service.go", "internal/users/controller.go"}, identifiers: []string{"User", "Service", "Find", "Controller", "Show", "Routes"}, selectorCalls: []string{"Find", "Param", "JSON", "NewRoute"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"/users/:id"}},
-				{id: "users-registration", paths: []string{"app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewController", "NewService"}},
+				{id: "users-application-boundary", paths: []string{"internal/users/*.go"}, identifiers: []string{"User", "Controller", "Routes"}, identifierChoices: [][]string{{"Service", "UseCase", "Query"}, {"Find", "Get", "Lookup"}, {"Show", "Get"}}, selectorCalls: []string{"Param", "JSON", "NewRoute"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"/users/:id"}},
+				{id: "users-registration", paths: []string{"app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewController"}, identifierChoices: [][]string{{"NewService", "NewUseCase", "NewQuery"}}},
 			},
 			commands: append(standardSurfaceCommands(), commandContract{id: "users-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/users/:id"}),
 		},
@@ -140,10 +140,10 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "add-outbound-http-integration/v1",
 			allowedChanges: []string{"go.mod", "go.sum", "internal/taxrates/*.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
-				{id: "typed-http-client", paths: []string{"internal/taxrates/client.go"}, identifiers: []string{"Rate", "Client", "NewClient", "Find", "GetCtx"}, selectorCalls: []string{"PathEscape"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "typed-http-client", paths: []string{"internal/taxrates/*.go"}, identifiers: []string{"Rate", "Client", "NewClient", "Find"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Find", identifiers: []string{"ctx"}}}},
 				{id: "http-client-provider", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"provideTaxRateClient", "NewClient"}, selectorCalls: []string{"Get"}},
 			},
-			commands: standardSurfaceCommands(commandContract{id: "integration-tests", arguments: []string{"go", "test", "./internal/taxrates"}}),
+			commands: standardSurfaceCommands(),
 		},
 		{
 			id:             "add-validated-write-endpoint/v1",
@@ -158,39 +158,45 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "add-route-middleware/v1",
 			allowedChanges: []string{"internal/invoices/controller.go", "internal/invoices/middleware.go", "internal/invoices/middleware_test.go", "app/wire/inject_http_controllers_app.go"},
 			sources: []sourceContract{
-				{id: "invoice-token-policy", paths: []string{"internal/invoices/middleware.go", "internal/invoices/controller.go"}, identifiers: []string{"RequireToken"}, selectorCalls: []string{"Request", "Get", "JSON", "NewRoute"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"X-Invoice-Token", "unauthorized"}, text: []string{"RequireToken(controller.token)"}},
-				{id: "resolved-token-provider", paths: []string{"app/wire/inject_http_controllers_app.go"}, identifiers: []string{"provideInvoiceController", "NewController"}, selectorCalls: []string{"Get"}, stringLiterals: []string{"INVOICE_HTTP_TOKEN"}},
+				{id: "invoice-token-policy", paths: []string{"internal/invoices/middleware.go", "internal/invoices/controller.go"}, identifiers: []string{"RequireToken"}, selectorCalls: []string{"NewRoute"}, forbiddenCalls: []string{"Background", "TODO"}, text: []string{"RequireToken(controller.token)"}, declarations: []declarationContract{{name: "RequireToken", selectorCalls: []string{"Request", "Get", "JSON"}, stringLiterals: []string{"X-Invoice-Token", "unauthorized"}}}},
+				{id: "resolved-token-provider", paths: []string{"app/wire/inject_http_controllers_app.go"}, identifiers: []string{"provideInvoiceController"}, declarations: []declarationContract{{name: "provideInvoiceController", selectorCalls: []string{"Get", "NewController"}, stringLiterals: []string{"INVOICE_HTTP_TOKEN", ""}, forbiddenLiterals: []string{"invoice-secret"}}}},
 			},
-			commands: standardSurfaceCommands(commandContract{id: "middleware-tests", arguments: []string{"go", "test", "./internal/invoices", "-run", "TestRequireToken"}}),
+			commands: standardSurfaceCommands(commandContract{
+				id:        "token-policy-behavior",
+				arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasRequireTokenBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{
+					path: "internal/invoices/atlas_eval_token_policy_test.go",
+					body: tokenPolicyBehaviorProbe,
+				}},
+			}),
 		},
 		{
 			id:             "add-database-transaction/v1",
 			allowedChanges: []string{"go.mod", "go.sum", "internal/accounts/*.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
 				{id: "transaction-bound-repository", paths: []string{"internal/accounts/repository.go"}, identifiers: []string{"Repository", "WithTransaction", "AdjustBalance"}, selectorCalls: []string{"WithContext", "Transaction", "UpdateColumn"}, forbiddenCalls: []string{"Background", "TODO"}},
-				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, selectorCalls: []string{"WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Transfer", selectorCalls: []string{"WithTransaction", "AdjustBalance"}, nestedCalls: []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}}}}},
 				{id: "account-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewRepository", "NewService"}},
 			},
-			commands: standardSurfaceCommands(commandContract{id: "transaction-tests", arguments: []string{"go", "test", "./internal/accounts", "-run", "TestTransferCommitsOrRollsBack"}}),
+			commands: standardSurfaceCommands(),
 		},
 		{
 			id:             "add-mail-workflow/v1",
 			allowedChanges: []string{"internal/invoices/receipt_mailer.go", "internal/invoices/receipt_mailer_test.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
-				{id: "receipt-mail-service", paths: []string{"internal/invoices/receipt_mailer.go"}, identifiers: []string{"ReceiptMailer", "NewReceiptMailer", "Send", "Manager"}, selectorCalls: []string{"Find", "Default", "Message", "To", "Subject", "Text", "Send"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "receipt-mail-service", paths: []string{"internal/invoices/receipt_mailer.go"}, identifiers: []string{"ReceiptMailer", "NewReceiptMailer", "Send", "Manager"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Send", selectorCalls: []string{"Find", "Default", "Message", "To", "Subject", "Text", "Send"}}}},
 				{id: "receipt-mail-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewReceiptMailer"}},
 			},
 			forbiddenText: []textExclusion{{id: "no-provider-sdk", paths: []string{"internal/invoices/receipt_mailer.go"}, text: "smtp"}},
-			commands:      standardSurfaceCommands(commandContract{id: "receipt-tests", arguments: []string{"go", "test", "./internal/invoices", "-run", "TestReceiptContent"}}),
+			commands:      standardSurfaceCommands(),
 		},
 		{
 			id:             "protect-route-with-auth/v1",
 			allowedChanges: []string{".env", ".env.example", ".env.local", "app/routes.go"},
 			sources: []sourceContract{
-				{id: "generated-auth-composition", paths: []string{"app/routes.go"}, identifiers: []string{"publicRoutes", "protectedRoutes", "invoicesController", "authService", "RequireAuth"}, selectorCalls: []string{"NewRouteGroup"}},
+				{id: "generated-auth-composition", paths: []string{"app/routes.go"}, identifiers: []string{"publicRoutes", "protectedRoutes", "invoicesController", "authService", "RequireAuth"}, selectorCalls: []string{"NewRouteGroup"}, assignments: []assignmentContract{{name: "publicRoutes", forbiddenIdentifiers: []string{"invoicesController"}}, {name: "protectedRoutes", identifiers: []string{"invoicesController"}, selectorCalls: []string{"Routes"}}}},
 			},
-			forbiddenText: []textExclusion{{id: "invoice-not-public", paths: []string{"app/routes.go"}, text: "authController.Routes(),\n\t\tinvoicesController.Routes(),"}},
-			commands:      append(standardSurfaceCommands(), commandContract{id: "protected-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/invoices/:id"}),
+			commands: append(standardSurfaceCommands(), commandContract{id: "protected-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/invoices/:id"}),
 		},
 		{
 			id:             "add-cached-repository/v1",
@@ -224,7 +230,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "dispatch-event-followup-job/v1",
 			allowedChanges: []string{".env", ".env.example", "internal/jobs/*.go", "internal/reports/*.go", "internal/notifications/*.go", "internal/storages/*_gen.go", "app/lifecycle.go", "app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
-				{id: "typed-report-job", paths: []string{"internal/reports/service.go", "internal/reports/generate_job.go"}, identifiers: []string{"GeneratePayload", "GenerateJob", "GenerateJobTypeName", "HandleTask", "ReportQueue"}, selectorCalls: []string{"Dispatch", "Bind", "GenerateForUser"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:generate"}},
+				{id: "typed-report-job", paths: []string{"internal/reports/service.go", "internal/reports/generate_job.go"}, identifiers: []string{"GeneratePayload", "GenerateJob", "GenerateJobTypeName", "HandleTask", "ReportQueue"}, selectorCalls: []string{"Dispatch", "Bind", "GenerateForUser"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:generate"}, declarations: []declarationContract{{name: "GeneratePayload", identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}, {name: "GenerateForUser", selectorCalls: []string{"Find"}}, {name: "HandleTask", selectorCalls: []string{"Bind", "GenerateForUser"}}}},
 				{id: "event-job-boundary", paths: []string{"internal/notifications/service.go"}, identifiers: []string{"HandleUserCreated", "ReportQueue"}, selectorCalls: []string{"Queue"}, forbiddenCalls: []string{"Background", "TODO"}},
 				{id: "report-job-registration", paths: []string{"app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewGenerateJob", "NewService"}},
 			},
@@ -243,11 +249,52 @@ func promotedSurfaceContracts() []surfaceContract {
 	}
 }
 
+const tokenPolicyBehaviorProbe = `package invoices
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/goforj/web"
+	"github.com/goforj/web/webtest"
+)
+
+// TestAtlasRequireTokenBehavior verifies rejected and accepted policy paths through a supervisor-owned oracle.
+func TestAtlasRequireTokenBehavior(t *testing.T) {
+	tests := []struct {
+		name string
+		expected string
+		provided string
+		want int
+	}{
+		{name: "unconfigured", want: http.StatusUnauthorized},
+		{name: "missing", expected: "secret", want: http.StatusUnauthorized},
+		{name: "accepted", expected: "secret", provided: "secret", want: http.StatusNoContent},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, "/invoices/inv-42", nil)
+			request.Header.Set("X-Invoice-Token", test.provided)
+			response := httptest.NewRecorder()
+			context := webtest.NewContext(request, response, "/invoices/:id", nil)
+			next := func(context web.Context) error { return context.NoContent(http.StatusNoContent) }
+			if err := RequireToken(test.expected)(next)(context); err != nil {
+				t.Fatalf("middleware: %v", err)
+			}
+			if response.Code != test.want {
+				t.Fatalf("status = %d, want %d", response.Code, test.want)
+			}
+		})
+	}
+}
+`
+
 // standardSurfaceCommands proves the complete Project after source-level checks pass.
 func standardSurfaceCommands(additional ...commandContract) []commandContract {
 	commands := []commandContract{
 		{id: "app-build", arguments: []string{"forj", "build"}},
-		{id: "project-tests", arguments: []string{"go", "test", "./..."}},
+		{id: "project-compile", arguments: []string{"go", "test", "./..."}},
 	}
 	return append(commands, additional...)
 }
