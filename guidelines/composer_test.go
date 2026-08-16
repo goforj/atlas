@@ -22,6 +22,8 @@ func TestComposeCarriesTheBaselineFrameworkContract(t *testing.T) {
 		"use the matching `forj make:*` generator",
 		"`forj admin make:controller reports`",
 		"Never edit `wire_gen.go`",
+		"can stand on its own",
+		"do not create category packages",
 		"Keep controllers, commands, jobs, and schedules thin",
 		"database access behind repositories",
 		"documentation matching the Project's GoForj version",

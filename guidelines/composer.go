@@ -31,6 +31,7 @@ func Compose(p project.Project) string {
 
 	out.WriteString("## Ownership\n\n")
 	out.WriteString("- Keep `app/` focused on App composition and transport registration. Put shared implementation and domain behavior in focused packages under `internal/`.\n")
+	out.WriteString("- Start with one cohesive package for a responsibility and add files within it. Create a subpackage only when it has a cohesive API and can stand on its own; do not create category packages such as `services`, `handlers`, `models`, `types`, or `utils` merely to sort code.\n")
 	out.WriteString("- Keep controllers, commands, jobs, and schedules thin; invoke services for application behavior.\n")
 	out.WriteString("- Keep database access behind repositories or equivalent domain ports, and propagate cancellation through connection-backed work.\n")
 	out.WriteString("- Treat generated registration points as in-use framework code: preserve the generated integration unless the requested design deliberately replaces it.\n\n")
