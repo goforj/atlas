@@ -81,13 +81,14 @@ type ArtifactManifest struct {
 
 // AttemptArtifacts owns append-only evidence for one attempt until finalization.
 type AttemptArtifacts struct {
-	directory string
-	attemptID string
-	key       []byte
-	redactor  Redactor
-	events    *os.File
-	lastEvent uint64
-	closed    bool
+	directory         string
+	directoryIdentity os.FileInfo
+	attemptID         string
+	key               []byte
+	redactor          Redactor
+	events            *os.File
+	lastEvent         uint64
+	closed            bool
 }
 
 // NewArtifactStore requires an integrity key rather than writing unsigned evidence.
@@ -120,12 +121,19 @@ func (store *ArtifactStore) Begin(attemptID string) (*AttemptArtifacts, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create event artifact: %w", err)
 	}
+	directoryIdentity, err := os.Stat(directory)
+	if err != nil {
+		_ = events.Close()
+		_ = os.RemoveAll(directory)
+		return nil, fmt.Errorf("inspect attempt artifacts: %w", err)
+	}
 	return &AttemptArtifacts{
-		directory: directory,
-		attemptID: attemptID,
-		key:       append([]byte(nil), store.key...),
-		redactor:  store.redactor,
-		events:    events,
+		directory:         directory,
+		directoryIdentity: directoryIdentity,
+		attemptID:         attemptID,
+		key:               append([]byte(nil), store.key...),
+		redactor:          store.redactor,
+		events:            events,
 	}, nil
 }
 
