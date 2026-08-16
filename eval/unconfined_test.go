@@ -4,12 +4,38 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 // preparedProjectFixture supplies the data-only Project boundary required by the backend.
 type preparedProjectFixture struct {
 	result PreparationResult
+}
+
+// TestUnconfinedLocalRejectsOversizedSealedTree prevents a diagnostic candidate from exhausting verifier storage.
+func TestUnconfinedLocalRejectsOversizedSealedTree(t *testing.T) {
+	projectRoot := t.TempDir()
+	path := filepath.Join(projectRoot, "oversized.bin")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(maxProjectTreeBytes + 1); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	environment, err := (UnconfinedLocal{WorkRoot: t.TempDir()}).Open(context.Background(), BackendRequest{Project: preparedProjectFixture{result: PreparationResult{ProjectRoot: projectRoot}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer environment.Close(context.Background())
+	if _, err := environment.Seal(context.Background()); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("Seal() error = %v, want project-size rejection", err)
+	}
 }
 
 // Result returns the fixture Project identity.

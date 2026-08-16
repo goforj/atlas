@@ -328,7 +328,12 @@ func TestRunnerCapturesBaselineAfterGuidanceMaterialization(t *testing.T) {
 	backend.environment.sealed.Root = preparer.project.result.ProjectRoot
 	backend.environment.baseline.TreeDigest = ""
 	agent.prepareHook = func(environment RunEnvironment, _ Guidance) error {
-		return os.WriteFile(filepath.Join(environment.ProjectRoot, "AGENTS.md"), []byte("Use GoForj generators.\n"), 0o644)
+		if err := os.WriteFile(filepath.Join(environment.ProjectRoot, "AGENTS.md"), []byte("Use GoForj generators.\n"), 0o644); err != nil {
+			return err
+		}
+		_, digest, err := snapshotProjectForDiff(environment.ProjectRoot)
+		backend.environment.baseline.TreeDigest = digest
+		return err
 	}
 	request := fakeAttemptRequest()
 	request.GuidanceProfile = GuidanceProfileAgents
@@ -461,8 +466,11 @@ func TestRunnerRejectsCommandBudgetOverrun(t *testing.T) {
 	request := fakeAttemptRequest()
 	request.Definition.Limits.Commands = 1
 	backend.environment.events = []Event{
-		{Sequence: 1, Source: EventSourceSupervisor, Kind: EventCommandStarted},
-		{Sequence: 2, Source: EventSourceSupervisor, Kind: EventCommandStarted},
+		{Sequence: 1, Source: EventSourceSupervisor, Kind: EventCommandStarted, Fields: map[string]string{EventFieldCommandID: "command-1", EventFieldExecutableDigest: "sha256:forj", EventFieldArguments: `[]`}},
+		{Sequence: 2, Source: EventSourceSupervisor, Kind: EventCommandFinished, Fields: map[string]string{EventFieldCommandID: "command-1", EventFieldExitCode: "0"}},
+		{Sequence: 3, Source: EventSourceSupervisor, Kind: EventCommandStarted, Fields: map[string]string{EventFieldCommandID: "command-2", EventFieldExecutableDigest: "sha256:forj", EventFieldArguments: `[]`}},
+		{Sequence: 4, Source: EventSourceSupervisor, Kind: EventCommandFinished, Fields: map[string]string{EventFieldCommandID: "command-2", EventFieldExitCode: "0"}},
+		{Sequence: 5, Source: EventSourceSupervisor, Kind: EventRunFinished},
 	}
 
 	result, err := runner.Run(context.Background(), request)
@@ -482,11 +490,25 @@ func TestRunnerRejectsMissingCapabilityBeforeMutation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(): %v", err)
 	}
-	if result.EvaluationStatus != EvaluationIneligible || !reflect.DeepEqual(result.UnavailableEvidence, []Capability{CapabilityCommands}) {
+	if result.EvaluationStatus != EvaluationIneligible || len(result.UnavailableEvidence) != len(authoritativeCapabilities)+1 || !capabilityAvailable(result.UnavailableEvidence, CapabilityCommands) {
 		t.Fatalf("ineligible result = %#v", result)
 	}
 	if preparer.resolveCalls != 1 || preparer.prepareCalls != 0 || backend.openCalls != 0 || agent.prepareCalls != 0 || len(*closeLog) != 0 {
 		t.Fatalf("preflight mutated resources: resolve:%d prepare:%d open:%d agent:%d cleanup:%q", preparer.resolveCalls, preparer.prepareCalls, backend.openCalls, agent.prepareCalls, *closeLog)
+	}
+}
+
+// TestRunnerRejectsUnknownIntent prevents a caller typo from weakening authoritative capability gates.
+func TestRunnerRejectsUnknownIntent(t *testing.T) {
+	runner, closeLog, preparer, backend, agent := newFakeRunner(t)
+	request := fakeAttemptRequest()
+	request.Intent = "typo"
+	result, err := runner.Run(context.Background(), request)
+	if err == nil || !strings.Contains(err.Error(), "intent") || result.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("Run() = %#v, %v", result, err)
+	}
+	if preparer.resolveCalls != 0 || preparer.prepareCalls != 0 || backend.openCalls != 0 || agent.prepareCalls != 0 || len(*closeLog) != 0 {
+		t.Fatalf("invalid intent mutated resources: resolve:%d prepare:%d open:%d agent:%d cleanup:%q", preparer.resolveCalls, preparer.prepareCalls, backend.openCalls, agent.prepareCalls, *closeLog)
 	}
 }
 
@@ -510,7 +532,7 @@ func TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence(t *testing.T) {
 	if result.EvaluationStatus != EvaluationDiagnostic || result.Verification == nil || result.Verification.FrameworkOutcome.Status != EndpointIneligible || result.Verification.WorkflowConformance.Status != EndpointIneligible {
 		t.Fatalf("diagnostic result = %#v", result)
 	}
-	if !reflect.DeepEqual(result.UnavailableEvidence, []Capability{CapabilityCommands}) {
+	if len(result.UnavailableEvidence) != len(authoritativeCapabilities)+1 || !capabilityAvailable(result.UnavailableEvidence, CapabilityCommands) {
 		t.Fatalf("unavailable evidence = %q", result.UnavailableEvidence)
 	}
 	if preparer.prepareCalls != 1 || backend.openCalls != 1 || agent.prepareCalls != 1 {
@@ -528,6 +550,7 @@ func TestRunnerDiagnosticContinuesWithoutTrustedWorkflowEvidence(t *testing.T) {
 // TestRunnerAuthoritativeRequiresIsolationBaseline prevents a partially observed backend from entering an authoritative denominator.
 func TestRunnerAuthoritativeRequiresIsolationBaseline(t *testing.T) {
 	runner, closeLog, preparer, backend, agent := newFakeRunner(t)
+	backend.capabilities = []Capability{CapabilityCommands}
 	request := fakeAttemptRequest()
 	request.Intent = IntentAuthoritative
 
@@ -543,10 +566,30 @@ func TestRunnerAuthoritativeRequiresIsolationBaseline(t *testing.T) {
 	}
 }
 
+// TestRunnerAuthoritativeRequiresAdapterCredentialIsolation prevents a file-backed credential adapter from inheriting a backend's claim.
+func TestRunnerAuthoritativeRequiresAdapterCredentialIsolation(t *testing.T) {
+	runner, closeLog, preparer, backend, agent := newFakeRunner(t)
+	agent.capabilities = []Capability{CapabilityCommands}
+	request := fakeAttemptRequest()
+	request.Intent = IntentAuthoritative
+
+	result, err := runner.Run(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Run(): %v", err)
+	}
+	if result.EvaluationStatus != EvaluationIneligible || !reflect.DeepEqual(result.UnavailableEvidence, []Capability{CapabilityCredentialIsolation}) {
+		t.Fatalf("authoritative credential preflight = %#v", result)
+	}
+	if preparer.prepareCalls != 0 || backend.openCalls != 0 || agent.prepareCalls != 0 || len(*closeLog) != 0 {
+		t.Fatalf("credential preflight mutated resources: prepare:%d open:%d agent:%d cleanup:%q", preparer.prepareCalls, backend.openCalls, agent.prepareCalls, *closeLog)
+	}
+}
+
 // TestRunnerAuthoritativeRequiresCompleteSupervisorBaseline prevents an incomplete snapshot from entering a valid denominator.
 func TestRunnerAuthoritativeRequiresCompleteSupervisorBaseline(t *testing.T) {
 	runner, _, _, backend, agent := newFakeRunner(t)
 	backend.capabilities = append(backend.capabilities, authoritativeCapabilities...)
+	agent.capabilities = append(agent.capabilities, CapabilityCredentialIsolation)
 	backend.environment.baseline = BaselineSnapshot{}
 	request := fakeAttemptRequest()
 	request.Intent = IntentAuthoritative
@@ -563,6 +606,31 @@ func TestRunnerRejectsAdapterProvenanceInSupervisorEvidence(t *testing.T) {
 	result, err := runner.Run(context.Background(), fakeAttemptRequest())
 	if err == nil || result.EvaluationStatus != EvaluationEvaluatorError || !strings.Contains(err.Error(), "supervisor provenance") {
 		t.Fatalf("Run() = %#v, %v", result, err)
+	}
+}
+
+// TestValidateSupervisorEventsRejectsAmbiguousCommandCorrelation prevents monitor defects from satisfying workflow requirements.
+func TestValidateSupervisorEventsRejectsAmbiguousCommandCorrelation(t *testing.T) {
+	validStart := Event{Sequence: 1, Source: EventSourceSupervisor, Kind: EventCommandStarted, Fields: map[string]string{EventFieldCommandID: "command-1", EventFieldExecutableDigest: "sha256:forj", EventFieldArguments: `[]`}}
+	for _, test := range []struct {
+		name   string
+		events []Event
+	}{
+		{name: "duplicate sequence", events: []Event{validStart, {Sequence: 1, Source: EventSourceSupervisor, Kind: EventRunFinished}}},
+		{name: "duplicate start", events: []Event{validStart, {Sequence: 2, Source: EventSourceSupervisor, Kind: EventCommandStarted, Fields: validStart.Fields}}},
+		{name: "unmatched finish", events: []Event{{Sequence: 1, Source: EventSourceSupervisor, Kind: EventCommandFinished, Fields: map[string]string{EventFieldCommandID: "command-1", EventFieldExitCode: "0"}}}},
+		{name: "unfinished command", events: []Event{validStart}},
+		{name: "invalid arguments", events: []Event{{Sequence: 1, Source: EventSourceSupervisor, Kind: EventCommandStarted, Fields: map[string]string{EventFieldCommandID: "command-1", EventFieldExecutableDigest: "sha256:forj", EventFieldArguments: `{}`}}}},
+		{name: "terminal is not final", events: []Event{{Sequence: 1, Source: EventSourceSupervisor, Kind: EventRunFinished}, {Sequence: 2, Source: EventSourceSupervisor, Kind: EventMessage}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := validateSupervisorEvents(test.events, false); err == nil {
+				t.Fatalf("validateSupervisorEvents(%#v) succeeded", test.events)
+			}
+		})
+	}
+	if err := validateSupervisorEvents(nil, true); err == nil {
+		t.Fatal("validateSupervisorEvents accepted a missing required terminal marker")
 	}
 }
 
@@ -787,7 +855,7 @@ func newFakeRunner(t *testing.T) (Runner, *[]string, *fakePreparer, *fakeBackend
 		},
 	}
 	backend := &fakeBackend{
-		capabilities: []Capability{CapabilityCommands},
+		capabilities: append([]Capability{CapabilityCommands}, authoritativeCapabilities...),
 		environment: &fakeBackendEnvironment{
 			environment: RunEnvironment{ProjectRoot: projectRoot, Capabilities: []Capability{CapabilityCommands}},
 			baseline:    BaselineSnapshot{TreeDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", Complete: true},
@@ -801,7 +869,7 @@ func newFakeRunner(t *testing.T) (Runner, *[]string, *fakePreparer, *fakeBackend
 		},
 	}
 	agent := &fakeAgent{
-		capabilities: []Capability{CapabilityCommands},
+		capabilities: []Capability{CapabilityCommands, CapabilityCredentialIsolation},
 		preparation: &fakeAgentPreparation{
 			agent:    PreparedAgent{Name: "fake-agent", Executable: "/tools/agent", ExecutableDigest: "sha256:agent", Model: "fake-model"},
 			closeLog: closeLog,
@@ -846,6 +914,7 @@ func fakeAttemptRequest() AttemptRequest {
 		AttemptID:      "attempt-01",
 		LogicalTrialID: "trial-01",
 		Definition:     definition,
+		Intent:         IntentAuthoritative,
 		Preparation: PreparationRequest{
 			ScenarioID:      definition.ProjectScenario,
 			DestinationRoot: "/private/project",

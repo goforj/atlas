@@ -19,6 +19,8 @@ import (
 const (
 	verifierCommandTimeout = 30 * time.Second
 	maxVerifierOutput      = 1 << 20
+	maxProjectTreeEntries  = 25_000
+	maxProjectTreeBytes    = int64(2 << 30)
 )
 
 // VerifierCommands executes an allowlisted toolchain in a disposable copy of the candidate Project.
@@ -76,7 +78,7 @@ func (session *verifierCommandSession) WriteFile(relativePath string, body []byt
 }
 
 // Open clones the sealed Project for exactly one verifier phase, so no phase can observe another phase's candidate-controlled mutation.
-func (runner VerifierCommands) Open(_ context.Context, sourceRoot string) (CommandSession, error) {
+func (runner VerifierCommands) Open(ctx context.Context, sourceRoot string) (CommandSession, error) {
 	goExecutable, err := resolveVerifierExecutable(runner.GoExecutable, "go")
 	if err != nil {
 		return nil, err
@@ -89,7 +91,7 @@ func (runner VerifierCommands) Open(_ context.Context, sourceRoot string) (Comma
 	if err != nil {
 		return nil, fmt.Errorf("create verifier Project: %w", err)
 	}
-	if err := copyProjectTree(sourceRoot, root); err != nil {
+	if err := copyProjectTree(ctx, sourceRoot, root); err != nil {
 		return nil, errors.Join(err, os.RemoveAll(root))
 	}
 	stateRoot, err := os.MkdirTemp(runner.WorkRoot, "atlas-verifier-state-")
@@ -269,14 +271,22 @@ func resolveVerifierExecutable(candidate, fallback string) (string, error) {
 }
 
 // copyProjectTree preserves regular files, directories, modes, and safe internal symlinks in the verifier-owned clone.
-func copyProjectTree(sourceRoot, destinationRoot string) error {
+func copyProjectTree(ctx context.Context, sourceRoot, destinationRoot string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	sourceRoot, err := filepath.Abs(sourceRoot)
 	if err != nil {
 		return fmt.Errorf("resolve source Project: %w", err)
 	}
+	entries := 0
+	remainingBytes := maxProjectTreeBytes
 	return filepath.WalkDir(sourceRoot, func(sourcePath string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		relative, err := filepath.Rel(sourceRoot, sourcePath)
 		if err != nil {
@@ -284,6 +294,10 @@ func copyProjectTree(sourceRoot, destinationRoot string) error {
 		}
 		if relative == "." {
 			return nil
+		}
+		entries++
+		if entries > maxProjectTreeEntries {
+			return fmt.Errorf("Project tree exceeds %d entries", maxProjectTreeEntries)
 		}
 		destinationPath := filepath.Join(destinationRoot, relative)
 		info, err := os.Lstat(sourcePath)
@@ -299,7 +313,11 @@ func copyProjectTree(sourceRoot, destinationRoot string) error {
 			if strings.HasSuffix(relative, "_test.go") {
 				return nil
 			}
-			return copyRegularFile(sourcePath, destinationPath, info.Mode().Perm())
+			if info.Size() < 0 || info.Size() > remainingBytes {
+				return fmt.Errorf("Project tree exceeds %d bytes", maxProjectTreeBytes)
+			}
+			remainingBytes -= info.Size()
+			return copyRegularFile(ctx, sourcePath, destinationPath, info.Mode().Perm(), info.Size())
 		case info.Mode()&os.ModeSymlink != 0:
 			target, err := os.Readlink(sourcePath)
 			if err != nil {
@@ -325,7 +343,7 @@ func copyProjectTree(sourceRoot, destinationRoot string) error {
 }
 
 // copyRegularFile copies one immutable source into verifier-owned storage without following symlinks.
-func copyRegularFile(source, destination string, mode os.FileMode) error {
+func copyRegularFile(ctx context.Context, source, destination string, mode os.FileMode, maxBytes int64) error {
 	input, err := os.Open(source)
 	if err != nil {
 		return err
@@ -335,6 +353,44 @@ func copyRegularFile(source, destination string, mode os.FileMode) error {
 		_ = input.Close()
 		return err
 	}
-	_, copyErr := io.Copy(output, input)
-	return errors.Join(copyErr, input.Close(), output.Close())
+	buffer := make([]byte, 32<<10)
+	var copied int64
+	var copyErr error
+	for copyErr == nil {
+		if err := ctx.Err(); err != nil {
+			copyErr = err
+			break
+		}
+		read, readErr := input.Read(buffer)
+		if read > 0 {
+			copied += int64(read)
+			if copied > maxBytes {
+				copyErr = fmt.Errorf("Project file %q changed size while copying", source)
+				break
+			}
+			written, writeErr := output.Write(buffer[:read])
+			if writeErr != nil {
+				copyErr = writeErr
+				break
+			}
+			if written != read {
+				copyErr = io.ErrShortWrite
+				break
+			}
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			copyErr = readErr
+		}
+	}
+	if copyErr == nil && copied != maxBytes {
+		copyErr = fmt.Errorf("Project file %q changed size while copying", source)
+	}
+	closeErr := errors.Join(input.Close(), output.Close())
+	if copyErr != nil {
+		return errors.Join(copyErr, closeErr, os.Remove(destination))
+	}
+	return closeErr
 }

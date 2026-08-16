@@ -105,6 +105,26 @@ func TestSnapshotProjectForDiffUsesGlobalLexicalOrder(t *testing.T) {
 	}
 }
 
+// TestSnapshotProjectForDiffRejectsOversizedTrees bounds candidate-controlled hashing before reading sparse content.
+func TestSnapshotProjectForDiffRejectsOversizedTrees(t *testing.T) {
+	project := t.TempDir()
+	path := filepath.Join(project, "oversized.bin")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(maxProjectTreeBytes + 1); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := snapshotProjectForDiff(project); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("snapshotProjectForDiff() error = %v, want project-size rejection", err)
+	}
+}
+
 // buildFixtureProjectDiff captures the same pre-mutation boundary used by the runner.
 func buildFixtureProjectDiff(baseline, final string) (string, error) {
 	snapshot, _, err := snapshotProjectForDiff(baseline)
