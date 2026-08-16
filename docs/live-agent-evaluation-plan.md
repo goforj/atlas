@@ -41,9 +41,13 @@ The diagnostic core portfolio is implemented across Atlas and GoForj:
   outbound HTTP integration cases;
 - `forj atlas:eval list`, `run`, `report`, `compare`, and `suite` expose the
   diagnostic portfolio without requiring a separate Atlas executable;
-- semantic verifiers are calibrated against golden Projects and targeted
-  mutants while accepting independently valid cohesive names and package
-  shapes; and
+- every promoted verifier is calibrated against a golden Project and a
+  targeted structural mutant; transaction, cache-aside, named-storage,
+  conditional-image, validation, route-policy, command, and HTTP-controller
+  evaluations additionally execute supervisor-owned behavior probes against
+  compiling semantic mutants;
+- manifests classify scaffold, feature, repair, and abstention measurements so
+  focused runs do not infer intent from names or mix unlike tasks; and
 - live paired and targeted treatments exercise the real Codex adapter while
   correctly reporting workflow conformance and authoritative framework outcome
   as ineligible without trusted isolation and command evidence.
@@ -66,15 +70,16 @@ gate:
 | GoForj preparation | Scenario decoder, plan, preparation, clone, tree, and documentation-parity tests cover strict v2 YAML, unchanged v1 behavior, dependency ordering, target omission, symlink rejection, independent writable copies, and lexical tree identities. Tagged calibration covers the core golden Projects, targeted mutants, and safe abstention. |
 | Atlas evaluation core | Runner, artifact, manifest, diff, authenticated report, diagnostic, workflow, and isolation tests cover capability preflight, baseline timing, cancellation, timeout, cleanup, repairable finalization, sealing before verification, redaction, and HMAC-backed post-run tamper evidence for artifacts, plus separate outcome and conformance endpoints. Verifier phases keep separate writable Go state while using the supervisor's prepared module archives as a local proxy before falling back to the declared upstream. This HMAC evidence is not adversarial authentication when an unconfined candidate and the supervisor share a UID, because that candidate can read the signing key or replace retained files. |
 | Guidance ownership | Guidance reconciliation tests cover every native target, managed-block ownership, stable target selection, and legacy inference. Tagged `TestBaselineGuidanceSurvivesProjectLifecycle` proves baseline guidance survives render, build, and a representative generator workflow. |
-| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 30 versioned contracts. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. An additional-App topology case, six application-shaped capstones, focused validation, middleware, transaction, mail, Auth, lifecycle, and outbound HTTP cases, plus relationship modeling, inferred storage ownership, and conditional image delivery add golden and targeted-mutant calibration without presenting those calibrations as live treatment results. Current guided implementations satisfy their semantic, build, and test checks, while every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
+| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 30 versioned contracts and classify them as scaffold, feature, repair, or abstention measurements. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. Newer application-shaped cases add golden and targeted-mutant calibration without presenting calibration as live treatment evidence. High-risk runtime semantics—transaction rollback, cache population, named-storage round trips, image revalidation, payload validation, route policy, command behavior, and controller behavior—are exercised by tests installed only in the verifier clone. Other contracts currently establish source shape, registration, compilation, or route visibility and must not be reported as behavioral proof. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
 
 Live calibration found real harness defects rather than being rerun until
 green. A valid transport-package controller exposed constructor-name
 overfitting; cohesive named-resource implementations exposed type-name
 overfitting; and storage tests exposed runtime-created directories being
-misclassified as authored source. The corrected verifiers accept those valid
-families, keep nested storage source files inside the ownership budget, and
-retain targeted mutant coverage.
+misclassified as authored source. The corrected verifiers accept those
+reviewed implementation families, keep nested storage source files inside the
+ownership budget, and retain targeted mutant coverage. A verifier is not
+described as behavior-complete merely because its source and build checks pass.
 
 Several unguided controls also completed simpler tasks successfully. The live
 runs therefore demonstrate the harness, current guidance behavior, and useful
@@ -94,7 +99,8 @@ Repository-wide local validation also includes:
 - race coverage for the GoForj scenario, Atlas integration, and preparer
   packages;
 - executable calibration of every promoted implementation verifier against a
-  golden Project and targeted mutant, plus safe-abstention calibration; and
+  golden Project and targeted mutant, behavior-preserving structural evidence
+  mutants for each supervisor probe, plus safe-abstention calibration; and
 - focused scenario execution for migration and named cache, queue, and storage
   beneath `/tmp` after rebasing onto current GoForj `main`.
 
@@ -125,6 +131,13 @@ released-module and released-binary checks below.
 - One-sided behavior diagnostics plus independent ownership and conformance
   verification.
 - Diagnostic reports, comparison semantics, and fake-agent test support.
+
+The suite remains the release-sized portfolio (`core`). `task_kind` is the
+orthogonal measurement dimension: `scaffold` asks whether framework workflows
+are discovered and used, `feature` evaluates application behavior across one
+or more surfaces, `repair` starts from an existing defect, and `abstention`
+measures safe refusal. Callers can select either dimension without encoding
+policy in directory names or prompt wording.
 
 ### Shared Boundary
 

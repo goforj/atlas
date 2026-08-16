@@ -2,6 +2,7 @@ schema_version: 1
 id: choose-storage-for-files
 summary: Recognize a durable file category and keep it behind a named storage boundary.
 suite: core
+task_kind: feature
 project_scenario: invoice-attachments
 workflow: goforj-choose-storage-for-files/v1
 verifier: choose-storage-for-files/v1

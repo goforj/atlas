@@ -2,6 +2,7 @@ schema_version: 1
 id: add-cached-repository
 summary: Add cache-aside user lookup behind a repository boundary.
 suite: core
+task_kind: feature
 project_scenario: cached-user-profile
 workflow: goforj-add-cached-repository/v1
 verifier: add-cached-repository/v1

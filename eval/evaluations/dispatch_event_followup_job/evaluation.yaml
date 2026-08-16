@@ -2,6 +2,7 @@ schema_version: 1
 id: dispatch-event-followup-job
 summary: Dispatch typed report work from an event reaction.
 suite: core
+task_kind: feature
 project_scenario: reports-generate-job
 workflow: goforj-dispatch-event-followup-job/v1
 verifier: dispatch-event-followup-job/v1

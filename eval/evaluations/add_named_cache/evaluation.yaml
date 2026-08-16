@@ -2,6 +2,7 @@ schema_version: 1
 id: add-named-cache
 summary: Configure and inject a named profiles cache.
 suite: core
+task_kind: scaffold
 project_scenario: named-profiles-cache
 workflow: goforj-add-named-cache/v1
 verifier: add-named-cache/v1

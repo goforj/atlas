@@ -2,6 +2,7 @@ schema_version: 1
 id: add-database-transaction
 summary: Add an atomic database workflow through a transaction-bound repository.
 suite: core
+task_kind: feature
 project_scenario: account-transfer-transaction
 workflow: goforj-add-database-transaction/v1
 verifier: add-database-transaction/v1

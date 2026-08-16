@@ -2,6 +2,7 @@ schema_version: 1
 id: add-schedule
 summary: Add hourly invoice reconciliation through the scheduler.
 suite: core
+task_kind: scaffold
 project_scenario: invoice-reconcile-schedule
 workflow: goforj-add-schedule/v1
 verifier: add-schedule/v1

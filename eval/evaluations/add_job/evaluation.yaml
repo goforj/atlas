@@ -2,6 +2,7 @@ schema_version: 1
 id: add-job
 summary: Add typed background receipt work for an existing invoice service.
 suite: core
+task_kind: scaffold
 project_scenario: invoice-receipt-job
 workflow: goforj-add-job/v1
 verifier: add-job/v1

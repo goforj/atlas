@@ -114,27 +114,45 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "choose-storage-for-files/v1",
-			allowedChanges:      generatedEnvironmentChanges("internal/storages/*_gen.go", "internal/invoices/attachments.go", "internal/invoices/attachments_test.go", "app/wire/inject_services_app.go"),
-			qualityTestPatterns: []string{"internal/invoices/attachments_test.go"},
+			allowedChanges:      generatedEnvironmentChanges("internal/storages/*_gen.go", "internal/invoices/*attachment*.go", "app/wire/inject_services_app.go"),
+			qualityTestPatterns: []string{"internal/invoices/*attachment*_test.go"},
 			sources: []sourceContract{
 				{id: "attachment-storage-config", paths: []string{".env"}, text: []string{"STORAGE_ATTACHMENTS_DRIVER=", "STORAGE_ATTACHMENTS_ROOT="}},
 				{id: "attachment-storage-accessor", paths: []string{"internal/storages/*_gen.go"}, identifiers: []string{"Attachments"}},
-				{id: "attachment-service-boundary", paths: []string{"internal/invoices/attachments.go"}, identifiers: []string{"Attachment", "AttachmentService", "Manager", "Store", "Read"}, selectorCalls: []string{"Attachments", "WithContext", "Put", "Get"}, forbiddenCalls: []string{"Background", "WriteFile", "ReadFile"}},
+				{id: "attachment-service-boundary", paths: []string{"internal/invoices/*attachment*.go"}, identifiers: []string{"Attachment", "AttachmentService"}, forbiddenCalls: []string{"Background", "WriteFile", "ReadFile"}, declarations: []declarationContract{
+					{name: "NewAttachmentService", identifiers: []string{"Manager"}, selectorCalls: []string{"Attachments"}},
+					{name: "Store", receiver: "AttachmentService", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "Put"}, forbiddenCalls: []string{"Background", "WriteFile"}},
+					{name: "Read", receiver: "AttachmentService", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "Get"}, forbiddenCalls: []string{"Background", "ReadFile"}},
+				}},
 				{id: "attachment-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewAttachmentService"}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:        "attachment-storage-behavior",
+				arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasAttachmentStorageBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{
+					path: "internal/invoices/atlas_eval_attachment_storage_test.go",
+					body: attachmentStorageBehaviorProbe,
+				}},
+			}),
 		},
 		{
 			id:                  "serve-cacheable-image/v1",
 			allowedChanges:      []string{"internal/avatars/*.go", "app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"},
 			qualityTestPatterns: []string{"internal/avatars/*_test.go"},
 			sources: []sourceContract{
-				{id: "avatar-storage-boundary", paths: []string{"internal/avatars/service.go"}, identifiers: []string{"Image", "Service", "Find", "Digest"}, selectorCalls: []string{"WithContext", "Get"}, forbiddenCalls: []string{"Background", "ReadFile"}},
-				{id: "avatar-revalidation", paths: []string{"internal/avatars/controller.go"}, identifiers: []string{"Controller", "Show"}, selectorCalls: []string{"Find", "SetHeader", "Request", "Get", "NoContent", "Blob"}, stringLiterals: []string{"Cache-Control", "ETag", "If-None-Match"}},
+				{id: "avatar-storage-boundary", paths: []string{"internal/avatars/*.go"}, identifiers: []string{"Image", "Service", "Digest"}, forbiddenCalls: []string{"Background", "ReadFile"}, declarations: []declarationContract{{name: "Find", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "Get"}, forbiddenCalls: []string{"Background", "ReadFile"}}}},
+				{id: "avatar-revalidation", paths: []string{"internal/avatars/*.go"}, identifiers: []string{"Controller"}, declarations: []declarationContract{{name: "Show", receiver: "Controller", selectorCalls: []string{"Find", "SetHeader", "Request", "Get", "NoContent", "Blob"}, stringLiterals: []string{"Cache-Control", "ETag", "If-None-Match"}}}},
 				{id: "avatar-route-registration", paths: []string{"internal/avatars/controller.go", "app/routes.go", "app/wire/inject_http_controllers_app.go"}, identifiers: []string{"NewController", "Routes"}, stringLiterals: []string{"/avatars/:id"}},
 				{id: "avatar-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}, selectorCalls: []string{"Avatars"}},
 			},
-			commands: append(standardSurfaceCommands(), commandContract{id: "avatar-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/avatars/:id"}),
+			commands: append(standardSurfaceCommands(commandContract{
+				id:        "avatar-revalidation-behavior",
+				arguments: []string{"go", "test", "./internal/avatars", "-run", "^TestAtlasAvatarRevalidationBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{
+					path: "internal/avatars/atlas_eval_avatar_revalidation_test.go",
+					body: avatarRevalidationBehaviorProbe,
+				}},
+			}), commandContract{id: "avatar-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/avatars/:id"}),
 		},
 		{
 			id:             "repair-wire-provider/v1",
@@ -189,7 +207,14 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "validated-request-boundary", paths: []string{"internal/invoices/controller.go"}, identifiers: []string{"createInvoiceRequest", "validationErrorResponse", "CreateInput", "MethodPost"}, forbiddenCalls: []string{"TODO"}, stringLiterals: []string{"/invoices", "invalid_payload", "validation_failed", "customer_id", "total_cents"}, declarations: []declarationContract{{name: "Store", receiver: "Controller", selectorCalls: []string{"Bind", "Create", "JSON"}, forbiddenCalls: []string{"Background"}}}},
 				{id: "invoice-create-behavior", paths: []string{"internal/invoices/repository.go", "internal/invoices/service.go"}, identifiers: []string{"Repository", "Create", "CreateInput"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Repository", identifiers: []string{"Create"}}, {name: "Create", receiver: "MemoryRepository", identifiers: []string{"Invoice"}}, {name: "Create", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"Create"}}}},
 			},
-			commands: append(standardSurfaceCommands(), commandContract{id: "invoice-write-route", arguments: []string{"forj", "route:list"}, contains: "/api/v1/invoices"}),
+			commands: append(standardSurfaceCommands(commandContract{
+				id:        "invoice-validation-behavior",
+				arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasInvoiceValidationBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{
+					path: "internal/invoices/atlas_eval_invoice_validation_test.go",
+					body: invoiceValidationBehaviorProbe,
+				}},
+			}), commandContract{id: "invoice-write-route", arguments: []string{"forj", "route:list"}, contains: "/api/v1/invoices"}),
 		},
 		{
 			id:                  "add-route-middleware/v1",
@@ -216,7 +241,14 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Transfer", receiver: "Service", selectorCalls: []string{"WithTransaction", "AdjustBalance"}, nestedCalls: []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}}}}},
 				{id: "account-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewRepository", "NewService"}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:        "transaction-behavior",
+				arguments: []string{"go", "test", "./internal/accounts", "-run", "^TestAtlasTransferTransactionBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{
+					path: "internal/accounts/atlas_eval_transfer_transaction_test.go",
+					body: transferTransactionBehaviorProbe,
+				}},
+			}),
 		},
 		{
 			id:                  "add-mail-workflow/v1",
@@ -244,7 +276,14 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "cache-aside-repository", paths: []string{"internal/users/repository.go", "internal/users/service.go"}, identifiers: []string{"UserRepository", "MemoryUserRepository", "CachedUserRepository", "Get", "Set"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Find", receiver: "CachedUserRepository", identifiers: []string{"ctx"}, selectorCalls: []string{"Get", "Set", "WithContext", "Find"}}, {name: "Find", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}}}},
 				{id: "profiles-cache-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewCachedUserRepository"}, selectorCalls: []string{"Profiles"}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:        "cache-aside-behavior",
+				arguments: []string{"go", "test", "./internal/users", "-run", "^TestAtlasCacheAsideBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{
+					path: "internal/users/atlas_eval_cache_aside_test.go",
+					body: cacheAsideBehaviorProbe,
+				}},
+			}),
 		},
 		{
 			id:                  "add-upload-workflow/v1",

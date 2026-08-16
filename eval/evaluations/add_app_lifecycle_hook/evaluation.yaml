@@ -2,6 +2,7 @@ schema_version: 1
 id: add-app-lifecycle-hook
 summary: Add application readiness through the lifecycle registry.
 suite: core
+task_kind: feature
 project_scenario: invoice-readiness-hook
 workflow: goforj-add-app-lifecycle-hook/v1
 verifier: add-app-lifecycle-hook/v1

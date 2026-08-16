@@ -2,6 +2,7 @@ schema_version: 1
 id: build-json-api-feature
 summary: Build a complete service-backed JSON API feature.
 suite: core
+task_kind: feature
 project_scenario: json-api-route
 workflow: goforj-build-json-api-feature/v1
 verifier: build-json-api-feature/v1

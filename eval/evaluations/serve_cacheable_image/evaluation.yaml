@@ -2,6 +2,7 @@ schema_version: 1
 id: serve-cacheable-image
 summary: Serve storage-backed image content without repeated unchanged transfers.
 suite: core
+task_kind: feature
 project_scenario: cacheable-avatar-response
 workflow: goforj-serve-cacheable-image/v1
 verifier: serve-cacheable-image/v1
