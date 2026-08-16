@@ -109,6 +109,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		if _, err := artifacts.Finalize(planDigest, baselineTree, finalTree); err != nil {
 			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_manifest", Message: err.Error()})
 			result.EvaluationStatus = EvaluationEvaluatorError
+			repairFinalizationArtifacts(artifacts, request, &result)
 		}
 		if runErr == nil && result.EvaluationStatus == EvaluationEvaluatorError {
 			runErr = fmt.Errorf("evaluation integrity failed during deferred cleanup or artifact finalization")

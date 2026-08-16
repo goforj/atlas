@@ -3,6 +3,7 @@ package eval
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -11,6 +12,16 @@ import (
 	"testing"
 	"time"
 )
+
+// hasSecondaryFailurePhase reports whether one lifecycle phase reached retained failure evidence.
+func hasSecondaryFailurePhase(failures []SecondaryFailure, phase string) bool {
+	for _, failure := range failures {
+		if failure.Phase == phase {
+			return true
+		}
+	}
+	return false
+}
 
 // fakePreparer records whether preflight reached Project mutation.
 type fakePreparer struct {
@@ -339,6 +350,55 @@ func TestRunnerCompletesLifecycleAndCleansInReverseOrder(t *testing.T) {
 	}
 	if agent.session.lastTurn.Prompt != fakeAttemptRequest().Definition.Prompt || !reflect.DeepEqual(agent.session.lastTurn.Limits, fakeAttemptRequest().Definition.Limits) {
 		t.Fatalf("agent turn = %#v", agent.session.lastTurn)
+	}
+}
+
+// TestRunnerRepairsTerminalReportsAfterFinalizationFailure keeps durable reports aligned with the returned integrity failure.
+func TestRunnerRepairsTerminalReportsAfterFinalizationFailure(t *testing.T) {
+	runner, _, _, _, agent := newFakeRunner(t)
+	request := fakeAttemptRequest()
+	agent.prepareHook = func(RunEnvironment, Guidance) error {
+		return os.Mkdir(filepath.Join(runner.Artifacts.root, request.AttemptID, "unexpected"), 0o700)
+	}
+	result, err := runner.Run(context.Background(), request)
+	if err == nil || result.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("Run() = %#v, %v, want finalization failure", result, err)
+	}
+	if !hasSecondaryFailurePhase(result.SecondaryFailures, "artifact_manifest") {
+		t.Fatalf("secondary failures = %#v, want artifact_manifest", result.SecondaryFailures)
+	}
+	directory := filepath.Join(runner.Artifacts.root, request.AttemptID)
+	var retained AttemptResult
+	body, readErr := os.ReadFile(filepath.Join(directory, "run.json"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if err := json.Unmarshal(body, &retained); err != nil {
+		t.Fatal(err)
+	}
+	if retained.EvaluationStatus != EvaluationEvaluatorError || !hasSecondaryFailurePhase(retained.SecondaryFailures, "artifact_manifest") {
+		t.Fatalf("retained run = %#v, want finalization failure", retained)
+	}
+	var scorecard AttemptScorecard
+	body, readErr = os.ReadFile(filepath.Join(directory, "scorecard.json"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if err := json.Unmarshal(body, &scorecard); err != nil {
+		t.Fatal(err)
+	}
+	if scorecard.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("retained scorecard = %#v, want evaluator_error", scorecard)
+	}
+	summary, readErr := os.ReadFile(filepath.Join(directory, "summary.txt"))
+	if readErr != nil || !strings.Contains(string(summary), "Evaluation failed") {
+		t.Fatalf("retained summary = %q, %v", summary, readErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(directory, "triage.json")); statErr != nil {
+		t.Fatalf("retained triage: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(directory, "manifest.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("manifest after failed finalization = %v, want absent", statErr)
 	}
 }
 
