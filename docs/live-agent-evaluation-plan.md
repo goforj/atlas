@@ -11,45 +11,46 @@ design wins until both are updated in review.
 The ignored root `IMPLEMENTATION.md` is local scratch material. It is not an
 implementation dependency or reviewable source of truth for this work.
 
-## First Deliverable
+## Delivered Diagnostic Slice
 
-The first useful vertical slice compares a fresh Codex agent with no guidance
-against the same agent with GoForj's baseline `AGENTS.md`. Both attempts begin
-from the same prepared invoice HTTP Project and receive the same natural task.
-The slice records diagnostic evidence, independently verifies the resulting
-Project, and reports framework outcome separately from generator-workflow
-conformance.
+The first useful vertical slice compared a fresh Codex agent with no guidance
+against the same agent with GoForj's baseline `AGENTS.md`. The implemented
+slice now applies that treatment boundary to the complete 13-evaluation core
+portfolio. Paired attempts begin from the same guidance-neutral prepared
+Project, receive the same natural task, retain diagnostic evidence, and report
+framework outcome separately from generator-workflow conformance.
 
 This slice is diagnostic and local. It does not make authoritative isolation,
 security, or release-gate claims.
 
 ## Implementation Status
 
-The diagnostic vertical slice is implemented locally across Atlas and GoForj:
+The diagnostic core portfolio is implemented across Atlas and GoForj:
 
 - the Codex adapter feasibility boundary is recorded and tested;
 - scenario schema v2, prepare-prefix execution, and command-local immutable
   prepared bases are implemented in GoForj;
 - the Atlas runner, guidance treatments, verifier, redacted authenticated
   artifacts, focused supervisor diff, and diagnostic report are implemented;
-- the `invoice-http-route` scenario and `add-http-controller` evaluation run as
-  paired `none` and `agents` treatments; and
-- a fresh live paired run completed from the same guidance-neutral prepared
-  tree, exercised the verifier and supervisor-owned behavior oracle in both
-  treatments, and correctly reported workflow conformance as ineligible
-  without trusted command evidence; and
-- the current verifier is calibrated locally against two compiled, behaviorally
-  valid implementation families plus a compilable response mutant. A successful
-  same-process behavior probe is explicitly ineligible because candidate
-  production initialization can terminate the oracle process and manufacture
-  any process-local completion signal.
+- 14 GoForj scenario fixtures establish reusable starting state and exercise
+  the 13 promoted controller, command, job, migration, schedule,
+  event/subscriber, model, additional-App, named resource, Wire-repair, and
+  clarification evaluations;
+- `forj atlas:eval list`, `run`, `report`, `compare`, and `suite` expose the
+  diagnostic portfolio without requiring a separate Atlas executable;
+- semantic verifiers are calibrated against golden Projects and targeted
+  mutants while accepting independently valid cohesive names and package
+  shapes; and
+- live paired and targeted treatments exercise the real Codex adapter while
+  correctly reporting workflow conformance and authoritative framework outcome
+  as ineligible without trusted isolation and command evidence.
 
-The remaining integration gate is release ordered. Atlas must be published
-with the new evaluation packages before GoForj can update its module pin and
-pass the intentionally workspace-independent `GOWORK=off` integration build.
-After those releases are available, rerun the paired diagnostic from the
-released GoForj binary so retained runtime identities are retrievable release
-versions rather than local `(devel)` builds.
+The pull requests currently use an exact Atlas pseudo-version so standalone
+`GOWORK=off` builds and CI exercise the reviewed cross-repository boundary.
+The remaining release gate is still Atlas-first: publish Atlas, replace the
+pseudo-version with the release tag, then publish GoForj and rerun the portfolio
+from released binaries so retained runtime identities no longer report local
+`(devel)` builds.
 
 ## Local Readiness Evidence
 
@@ -59,46 +60,40 @@ gate:
 | Gate | Evidence |
 | --- | --- |
 | Adapter feasibility | `TestLiveCodexAppServerFeasibility`, `TestAdapterRunsFreshAttributedDiagnosticSession`, and the process-group tests prove fresh-thread attribution, isolated agent state, interruption, and descendant termination. |
-| GoForj preparation | Scenario decoder, plan, preparation, clone, tree, and documentation-parity tests cover strict v2 YAML, unchanged v1 behavior, dependency ordering, target omission, symlink rejection, independent writable copies, and lexical tree identities. The tagged `TestInvoiceHTTPRouteScenarioIntegration` exercises the complete golden path. |
-| Atlas evaluation core | Runner, artifact, manifest, diff, report, diagnostic, workflow, and isolation tests cover capability preflight, baseline timing, cancellation, timeout, cleanup, sealing before verification, redaction, and HMAC-backed post-run tamper evidence for artifacts, plus separate outcome and conformance endpoints. This HMAC evidence is not adversarial authentication when an unconfined candidate and the supervisor share a UID, because that candidate can read the signing key or replace retained files. |
+| GoForj preparation | Scenario decoder, plan, preparation, clone, tree, and documentation-parity tests cover strict v2 YAML, unchanged v1 behavior, dependency ordering, target omission, symlink rejection, independent writable copies, and lexical tree identities. Tagged calibration covers the core golden Projects, targeted mutants, and safe abstention. |
+| Atlas evaluation core | Runner, artifact, manifest, diff, authenticated report, diagnostic, workflow, and isolation tests cover capability preflight, baseline timing, cancellation, timeout, cleanup, repairable finalization, sealing before verification, redaction, and HMAC-backed post-run tamper evidence for artifacts, plus separate outcome and conformance endpoints. This HMAC evidence is not adversarial authentication when an unconfined candidate and the supervisor share a UID, because that candidate can read the signing key or replace retained files. |
 | Guidance ownership | Guidance reconciliation tests cover every native target, managed-block ownership, stable target selection, and legacy inference. Tagged `TestBaselineGuidanceSurvivesProjectLifecycle` proves baseline guidance survives render, build, and a representative generator workflow. |
-| Diagnostic slice | The promoted manifest, workflow, and verifier tests bind the three versioned contracts. The verifier injects a supervisor-owned 200/404 behavior oracle only after the agent stops and only into its disposable clone. The oracle can expose failures, but a successful run is ineligible for an authoritative framework pass because candidate production and the oracle share a process. Tagged preparer tests also prove the invoice starting state and same-base paired treatments. Trial `trial-20260816t003503-7707b4c6a6b2` completed both live treatments and retained complete artifact sets with the same prepared tree, scenario plan, environment, executable, model, and prompt identities; its historical pass statuses are diagnostic rather than authoritative. |
+| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 13 versioned contracts. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the added thirteenth evaluation. Current guided implementations satisfy their semantic, build, and test checks, while every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
 
-A prior unassisted live attempt produced a valid transport-package
-implementation using `InvoiceController`, `NewInvoiceController`, and an
-injected `*invoices.Service`. The then-current verifier rejected that family
-because it still assumed the golden `Controller` and `NewController` names.
-That attempt remains retained as failed calibration evidence; it was not rerun
-until green. The verifier now derives the route-owning type and its constructor
-from the candidate AST, accepts both implementation families, and still
-rejects direct and qualified repository dependencies, wrong routes, missing
-registration, missing context propagation, and build failures.
+Live calibration found real harness defects rather than being rerun until
+green. A valid transport-package controller exposed constructor-name
+overfitting; cohesive named-resource implementations exposed type-name
+overfitting; and storage tests exposed runtime-created directories being
+misclassified as authored source. The corrected verifiers accept those valid
+families, keep nested storage source files inside the ownership budget, and
+retain targeted mutant coverage.
 
-The recorded local pair reported passes under the earlier same-process behavior
-proof. Those pass statuses are no longer considered authoritative: ordinary
-candidate initialization could emit the accepted output or exit status without
-running the hidden test. Current code reports otherwise-successful framework
-behavior as ineligible until the oracle can execute across a boundary where
-candidate code cannot manufacture its completion evidence. Provider telemetry
-showed both candidates used the generator, but the report did not promote that
-untrusted observation into a workflow claim.
-
-Both treatments passed this single local pair, so it demonstrates the harness
-and current verifier rather than an effect from baseline guidance. Guidance
-efficacy remains a repeated-trial question under the randomized protocol; this
-diagnostic must not be presented as comparative evidence.
+Several unguided controls also completed simpler tasks successfully. The live
+runs therefore demonstrate the harness, current guidance behavior, and useful
+failure discovery—not a treatment-effect estimate. Guidance efficacy remains
+a repeated, randomized, authoritative-trial question. Candidate-reported
+commands remain diagnostic telemetry and never become generator-conformance
+evidence on the unconfined backend.
 
 Repository-wide local validation also includes:
 
 - the complete Atlas test and vet suites plus race coverage for evaluation,
   adapter, isolation, verifier, process-group, and app-server packages;
-- the complete GoForj root test and vet suites with `GOWORK=off` and a temporary
-  local Atlas replacement;
+- the complete GoForj root test and vet suites from a clean rebased worktree
+  with `GOWORK=off` and the exact remote Atlas pseudo-version;
 - independent test and vet passes for GoForj's `integration` and
   `tools/renderwarm` modules;
 - race coverage for the GoForj scenario, Atlas integration, and preparer
-  packages; and
-- all ten GoForj smoke render compositions built and tested beneath `/tmp`.
+  packages;
+- executable calibration of every promoted implementation verifier against a
+  golden Project and targeted mutant, plus safe-abstention calibration; and
+- focused scenario execution for migration and named cache, queue, and storage
+  beneath `/tmp` after rebasing onto current GoForj `main`.
 
 These checks qualify the local source relationship. They do not replace the
 released-module and released-binary checks below.
@@ -218,16 +213,12 @@ works, not yet evidence of authoritative isolation or release readiness.
 
 ## Pull Request Sequence
 
-Keep changes independently reviewable and merge prerequisites before their
-consumers:
+The implementation is consolidated into two cross-linked review boundaries:
 
-1. Atlas: tracked plan and adapter feasibility spike.
-2. GoForj: scenario schema v2 and preparation API.
-3. Atlas: evaluation contracts, registries, fake runner, and artifacts.
-4. GoForj and Atlas: baseline guidance reconciliation boundary, cross-linked.
-5. GoForj: invoice scenario and thin command surface.
-6. Atlas: route expectation, verifier, Codex diagnostic adapter, and first
-   evaluation.
+1. Atlas owns the tracked plan, adapter, contracts, runner, artifacts,
+   verifiers, reports, and canonical guidance composition.
+2. GoForj owns scenario schema and preparation, executable fixtures, durable
+   native guidance projection, and the thin command surface.
 
 Cross-repository pull requests must link the exact dependency and must not
 assume an unpublished sibling version is available outside the repository
@@ -287,20 +278,20 @@ ephemeral base copied into each trial. Persistent content-addressed caching is
 promoted only after representative preparation measurements justify its
 security and maintenance cost.
 
-The promoted `goforj-add-http-route/v1` workflow records only an exact,
-successful GoForj generator invocation. That is sufficient to keep the local
-diagnostic honest because its backend cannot supply trusted command evidence
-and reports conformance as ineligible. It is not the authoritative generator
-contract described by the design. Before an authoritative backend is enabled,
-promote a new workflow version whose typed predicates include normalized App
-and resource identity, generated and protected paths, command ancestry,
-write attribution, permitted post-generation edits, and continued use of the
-generated registration outputs. Calibrate each predicate independently; do
-not reinterpret the existing `/v1` result as that stronger claim.
+The promoted `/v1` workflows record exact successful GoForj generator
+invocations. That is sufficient to describe the intended local workflow while
+the backend reports conformance as ineligible without trusted command evidence.
+It is not the authoritative generator contract described by the design. Before
+an authoritative backend is enabled, promote new workflow versions whose typed
+predicates include normalized App and resource identity, generated and
+protected paths, command ancestry, write attribution, permitted
+post-generation edits, and continued use of generated registration outputs.
+Calibrate each predicate independently; do not reinterpret `/v1` results as
+that stronger claim.
 
-## Completion Checkpoint
+## Current Checkpoint
 
-The design is ready for broader scenario work when:
+The diagnostic portfolio is complete when:
 
 - the adapter feasibility gate is recorded;
 - v1 scenario behavior remains compatible while v2 preparation is available;
@@ -313,6 +304,8 @@ The design is ready for broader scenario work when:
   provenance-guided diagnosis and a fresh stochastic rerun, not deterministic
   verifier replay of the original candidate tree.
 
-The first five conditions are complete locally. The final condition becomes a
-release-qualified claim only after the Atlas publication, GoForj pin update,
-`GOWORK=off` validation, and one paired run using those released identities.
+All six conditions are complete for local diagnostics. The final condition
+becomes a release-qualified claim only after Atlas publication, the GoForj pin
+update, `GOWORK=off` validation, and a new run using released identities. The
+next implementation phase is the authoritative sandbox and its negative
+isolation suite, not more unconfined result promotion.
