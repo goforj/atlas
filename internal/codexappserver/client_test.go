@@ -273,10 +273,10 @@ func runFakeAppServer() {
 		if json.Unmarshal(scanner.Bytes(), &request) != nil || request.ID == nil {
 			continue
 		}
-		var result any = map[string]any{}
+		var result any = struct{}{}
 		switch request.Method {
 		case "initialize":
-			result = map[string]any{"userAgent": "fake-codex/1"}
+			result = initializeResult{UserAgent: "fake-codex/1"}
 		case "thread/start":
 			threadNumber++
 			var params struct {
@@ -287,15 +287,15 @@ func runFakeAppServer() {
 			if os.Getenv(fakePolicyMismatchEnv) == "1" {
 				params.Sandbox = "danger-full-access"
 			}
-			result = map[string]any{
-				"model":              "gpt-test",
-				"modelProvider":      "openai",
-				"approvalPolicy":     params.ApprovalPolicy,
-				"sandbox":            map[string]any{"type": fakeSandboxPolicyType(params.Sandbox)},
-				"instructionSources": []string{"/project/AGENTS.md"},
-				"thread": map[string]any{
-					"id":        fmt.Sprintf("thread-%d", threadNumber),
-					"ephemeral": true,
+			result = threadStartResult{
+				Model:              "gpt-test",
+				ModelProvider:      "openai",
+				ApprovalPolicy:     params.ApprovalPolicy,
+				Sandbox:            sandboxPolicyResult{Type: fakeSandboxPolicyType(params.Sandbox)},
+				InstructionSources: []string{"/project/AGENTS.md"},
+				Thread: threadIdentityResult{
+					ID:        fmt.Sprintf("thread-%d", threadNumber),
+					Ephemeral: true,
 				},
 			}
 		case "turn/start":
@@ -305,9 +305,9 @@ func runFakeAppServer() {
 					writeFakeNotification("item/started", map[string]any{"sequence": turnNumber})
 				}
 			}
-			result = map[string]any{"turn": map[string]any{"id": fmt.Sprintf("turn-%d", turnNumber)}}
+			result = turnStartResult{Turn: turnIdentityResult{ID: fmt.Sprintf("turn-%d", turnNumber)}}
 		case "turn/interrupt":
-			result = map[string]any{}
+			result = struct{}{}
 		default:
 			writeFakeResponse(*request.ID, nil, map[string]any{"code": -32601, "message": "unknown method"})
 			continue

@@ -19,6 +19,37 @@ const (
 	fakeCodexAdapterPacedEnv  = "ATLAS_FAKE_CODEX_ADAPTER_PACED"
 )
 
+// fakeAdapterThreadStartResult mirrors the stable thread identity returned by Codex.
+type fakeAdapterThreadStartResult struct {
+	Model              string                   `json:"model"`
+	ModelProvider      string                   `json:"modelProvider"`
+	ApprovalPolicy     string                   `json:"approvalPolicy"`
+	Sandbox            fakeAdapterSandboxResult `json:"sandbox"`
+	InstructionSources []string                 `json:"instructionSources"`
+	Thread             fakeAdapterThreadResult  `json:"thread"`
+}
+
+// fakeAdapterSandboxResult mirrors Codex's typed sandbox response.
+type fakeAdapterSandboxResult struct {
+	Type string `json:"type"`
+}
+
+// fakeAdapterThreadResult identifies one fake Codex thread.
+type fakeAdapterThreadResult struct {
+	ID        string `json:"id"`
+	Ephemeral bool   `json:"ephemeral"`
+}
+
+// fakeAdapterTurnStartResult identifies one fake Codex turn.
+type fakeAdapterTurnStartResult struct {
+	Turn fakeAdapterTurnResult `json:"turn"`
+}
+
+// fakeAdapterTurnResult contains the stable turn identity used by the adapter.
+type fakeAdapterTurnResult struct {
+	ID string `json:"id"`
+}
+
 // TestAdapterRunsFreshAttributedDiagnosticSession exercises guidance attribution and event normalization through the real protocol client.
 func TestAdapterRunsFreshAttributedDiagnosticSession(t *testing.T) {
 	projectRoot := t.TempDir()
@@ -339,17 +370,21 @@ func runFakeCodexAdapterServer() {
 			if os.Getenv("ATLAS_FAKE_EXTRA_GUIDANCE") == "1" {
 				sources = append(sources, filepath.Join(os.Getenv("HOME"), "AGENTS.md"))
 			}
-			writeFakeAdapterResponse(*request.ID, map[string]any{
-				"model": "gpt-test", "modelProvider": "openai", "approvalPolicy": params.ApprovalPolicy, "sandbox": map[string]any{"type": "dangerFullAccess"}, "instructionSources": sources,
-				"thread": map[string]any{
-					"id":        "thread-1",
-					"ephemeral": true,
+			writeFakeAdapterResponse(*request.ID, fakeAdapterThreadStartResult{
+				Model:              "gpt-test",
+				ModelProvider:      "openai",
+				ApprovalPolicy:     params.ApprovalPolicy,
+				Sandbox:            fakeAdapterSandboxResult{Type: "dangerFullAccess"},
+				InstructionSources: sources,
+				Thread: fakeAdapterThreadResult{
+					ID:        "thread-1",
+					Ephemeral: true,
 				},
 			})
 		case "turn/start":
 			pacedMode := os.Getenv(fakeCodexAdapterPacedEnv)
 			if pacedMode != "" {
-				writeFakeAdapterResponse(*request.ID, map[string]any{"turn": map[string]any{"id": "turn-1"}})
+				writeFakeAdapterResponse(*request.ID, fakeAdapterTurnStartResult{Turn: fakeAdapterTurnResult{ID: "turn-1"}})
 				emitPacedAdapterTelemetry(pacedMode)
 				continue
 			}
@@ -358,7 +393,7 @@ func runFakeCodexAdapterServer() {
 					writeFakeAdapterNotification("server/flood", map[string]any{})
 				}
 			}
-			writeFakeAdapterResponse(*request.ID, map[string]any{"turn": map[string]any{"id": "turn-1"}})
+			writeFakeAdapterResponse(*request.ID, fakeAdapterTurnStartResult{Turn: fakeAdapterTurnResult{ID: "turn-1"}})
 			writeFakeAdapterNotification("item/started", fakeAdapterItemParams(map[string]any{
 				"id": "command-1", "type": "commandExecution", "command": "forj make:controller invoices", "commandActions": []any{}, "cwd": projectRoot, "status": "inProgress",
 			}))

@@ -115,6 +115,80 @@ type protocolError struct {
 	Data    json.RawMessage `json:"data,omitempty"`
 }
 
+// initializeParams keeps the handshake schema compile-time checked against the fake server.
+type initializeParams struct {
+	ClientInfo clientInfo `json:"clientInfo"`
+}
+
+// clientInfo keeps Atlas identity fields explicit as the app-server protocol evolves.
+type clientInfo struct {
+	Name    string `json:"name"`
+	Title   string `json:"title"`
+	Version string `json:"version"`
+}
+
+// initializeResult limits the handshake response to the attribution field Atlas consumes.
+type initializeResult struct {
+	UserAgent string `json:"userAgent"`
+}
+
+// threadStartParams makes every execution-policy input visible at the protocol boundary.
+type threadStartParams struct {
+	Model                      string         `json:"model"`
+	ModelProvider              string         `json:"modelProvider,omitempty"`
+	CWD                        string         `json:"cwd"`
+	ApprovalPolicy             string         `json:"approvalPolicy"`
+	Sandbox                    string         `json:"sandbox"`
+	ServiceName                string         `json:"serviceName"`
+	Ephemeral                  bool           `json:"ephemeral"`
+	Configuration              map[string]any `json:"config"`
+	DeveloperInstructions      string         `json:"developerInstructions"`
+	AllowProviderModelFallback bool           `json:"allowProviderModelFallback"`
+}
+
+// threadStartResult keeps effective-policy attribution typed instead of trusting an unstructured payload.
+type threadStartResult struct {
+	Model              string               `json:"model"`
+	ModelProvider      string               `json:"modelProvider"`
+	ApprovalPolicy     string               `json:"approvalPolicy"`
+	Sandbox            sandboxPolicyResult  `json:"sandbox"`
+	InstructionSources []string             `json:"instructionSources"`
+	Thread             threadIdentityResult `json:"thread"`
+}
+
+// sandboxPolicyResult preserves Codex's response spelling until policy normalization validates it.
+type sandboxPolicyResult struct {
+	Type string `json:"type"`
+}
+
+// threadIdentityResult keeps provider identity separate from Atlas's public Thread model.
+type threadIdentityResult struct {
+	ID        string `json:"id"`
+	Ephemeral bool   `json:"ephemeral"`
+}
+
+// turnStartParams constrains Atlas turns to the text-input variant the adapter supports.
+type turnStartParams struct {
+	ThreadID string          `json:"threadId"`
+	Input    []turnTextInput `json:"input"`
+}
+
+// turnTextInput keeps the supported input variant explicit at the protocol boundary.
+type turnTextInput struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// turnStartResult limits the response to the turn fields Atlas consumes.
+type turnStartResult struct {
+	Turn turnIdentityResult `json:"turn"`
+}
+
+// turnIdentityResult keeps provider identity separate from Atlas's public Turn model.
+type turnIdentityResult struct {
+	ID string `json:"id"`
+}
+
 // queuedNotification records the retained size of a lifecycle notification.
 type queuedNotification struct {
 	notification Notification
@@ -182,19 +256,15 @@ func Start(ctx context.Context, options StartOptions) (*Client, error) {
 	client.process = process
 	go client.read(stdoutRead)
 
-	var initialized struct {
-		UserAgent string `json:"userAgent"`
-	}
-	if err := client.request(ctx, "initialize", map[string]any{
-		"clientInfo": map[string]string{
-			"name":    "goforj_atlas_eval",
-			"title":   "GoForj Atlas Eval",
-			"version": "0.1.0",
-		},
-	}, &initialized); err != nil {
+	var initialized initializeResult
+	if err := client.request(ctx, "initialize", initializeParams{ClientInfo: clientInfo{
+		Name:    "goforj_atlas_eval",
+		Title:   "GoForj Atlas Eval",
+		Version: "0.1.0",
+	}}, &initialized); err != nil {
 		return nil, errors.Join(err, client.closeAfterStartFailure())
 	}
-	if err := client.notify("initialized", map[string]any{}); err != nil {
+	if err := client.notify("initialized", struct{}{}); err != nil {
 		return nil, errors.Join(err, client.closeAfterStartFailure())
 	}
 	client.userAgent = initialized.UserAgent
@@ -214,34 +284,19 @@ func (client *Client) StartThread(ctx context.Context, options ThreadOptions) (T
 	if options.Model == "" {
 		return Thread{}, fmt.Errorf("Codex model is required")
 	}
-	params := map[string]any{
-		"model":                      options.Model,
-		"cwd":                        options.Dir,
-		"approvalPolicy":             options.ApprovalPolicy,
-		"sandbox":                    options.Sandbox,
-		"serviceName":                options.ServiceName,
-		"ephemeral":                  options.Ephemeral,
-		"config":                     options.Configuration,
-		"developerInstructions":      options.DeveloperPrompt,
-		"allowProviderModelFallback": false,
+	params := threadStartParams{
+		Model:                      options.Model,
+		ModelProvider:              options.ModelProvider,
+		CWD:                        options.Dir,
+		ApprovalPolicy:             options.ApprovalPolicy,
+		Sandbox:                    options.Sandbox,
+		ServiceName:                options.ServiceName,
+		Ephemeral:                  options.Ephemeral,
+		Configuration:              options.Configuration,
+		DeveloperInstructions:      options.DeveloperPrompt,
+		AllowProviderModelFallback: false,
 	}
-	if options.ModelProvider != "" {
-		params["modelProvider"] = options.ModelProvider
-	}
-
-	var response struct {
-		Model          string `json:"model"`
-		ModelProvider  string `json:"modelProvider"`
-		ApprovalPolicy string `json:"approvalPolicy"`
-		Sandbox        struct {
-			Type string `json:"type"`
-		} `json:"sandbox"`
-		InstructionSources []string `json:"instructionSources"`
-		Thread             struct {
-			ID        string `json:"id"`
-			Ephemeral bool   `json:"ephemeral"`
-		} `json:"thread"`
-	}
+	var response threadStartResult
 	if err := client.request(ctx, "thread/start", params, &response); err != nil {
 		return Thread{}, err
 	}
@@ -290,16 +345,10 @@ func (client *Client) StartTurn(ctx context.Context, threadID string, prompt str
 	if prompt == "" {
 		return Turn{}, fmt.Errorf("Codex turn prompt is required")
 	}
-	var response struct {
-		Turn struct {
-			ID string `json:"id"`
-		} `json:"turn"`
-	}
-	if err := client.request(ctx, "turn/start", map[string]any{
-		"threadId": threadID,
-		"input": []map[string]string{
-			{"type": "text", "text": prompt},
-		},
+	var response turnStartResult
+	if err := client.request(ctx, "turn/start", turnStartParams{
+		ThreadID: threadID,
+		Input:    []turnTextInput{{Type: "text", Text: prompt}},
 	}, &response); err != nil {
 		return Turn{}, err
 	}
