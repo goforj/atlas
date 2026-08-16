@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/format"
 	"go/token"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -143,8 +145,51 @@ func runInvoiceBehaviorProbe(ctx context.Context, runner CommandRunner, root str
 	if err := session.WriteFile(relativePath, body); err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
 	}
-	command := []string{"go", "test", "./" + filepath.ToSlash(probe.relativeDirectory), "-run", "^TestAtlasInvoiceHTTPBehavior$", "-count=1"}
-	return runCheck(ctx, session, "invoice-behavior", command, "")
+	command := []string{"go", "test", "-json", "./" + filepath.ToSlash(probe.relativeDirectory), "-run", "^TestAtlasInvoiceHTTPBehavior$", "-count=1"}
+	output, err := session.Run(ctx, command)
+	if err != nil {
+		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
+	}
+	if err := proveInvoiceBehaviorTest(output); err != nil {
+		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
+	}
+	return EndpointResult{ID: "invoice-behavior", Status: EndpointPassed}
+}
+
+// proveInvoiceBehaviorTest requires the supervisor test itself to run and pass, preventing package-level success from masking an early process exit.
+func proveInvoiceBehaviorTest(output string) error {
+	const testName = "TestAtlasInvoiceHTTPBehavior"
+	decoder := json.NewDecoder(strings.NewReader(output))
+	ran := false
+	passed := false
+	for {
+		var event struct {
+			Action string
+			Test   string
+		}
+		if err := decoder.Decode(&event); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("decode invoice behavior test events: %w", err)
+		}
+		if event.Test != testName {
+			continue
+		}
+		switch event.Action {
+		case "run":
+			ran = true
+		case "pass":
+			passed = true
+		}
+	}
+	if !ran {
+		return fmt.Errorf("invoice behavior test %s did not run", testName)
+	}
+	if !passed {
+		return fmt.Errorf("invoice behavior test %s did not pass", testName)
+	}
+	return nil
 }
 
 // resolveInvoiceBehaviorProbe derives only names and placement while keeping expected behavior owned by the verifier contract.

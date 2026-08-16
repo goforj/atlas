@@ -48,6 +48,9 @@ func (runner *fakeCommandRunner) Run(_ context.Context, command []string) (strin
 	if len(command) > 1 && command[1] == "route:list" {
 		return "GET /api/v1/invoices/:id", nil
 	}
+	if len(command) > 2 && command[1] == "test" && command[2] == "-json" {
+		return "{\"Action\":\"run\",\"Test\":\"TestAtlasInvoiceHTTPBehavior\"}\n{\"Action\":\"pass\",\"Test\":\"TestAtlasInvoiceHTTPBehavior\"}\n", nil
+	}
 	return "ok", nil
 }
 
@@ -259,6 +262,9 @@ func TestAddHTTPControllerVerifierRejectsProtectedAndUnrelatedChanges(t *testing
 	}{
 		{name: "generated wire", path: "app/wire/wire_gen.go", wantID: "generated-file-ownership"},
 		{name: "unrelated readme", path: "README.md", wantID: "change-ownership"},
+		{name: "seeded service", path: "internal/invoices/service.go", wantID: "change-ownership"},
+		{name: "seeded repository", path: "internal/invoices/repository.go", wantID: "change-ownership"},
+		{name: "seeded model", path: "internal/invoices/invoice.go", wantID: "change-ownership"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			result, err := NewAddHTTPControllerVerifier(&fakeCommandRunner{}).Verify(context.Background(), VerificationInput{
