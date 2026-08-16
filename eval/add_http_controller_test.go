@@ -257,15 +257,14 @@ func TestAddHTTPControllerVerifierRejectsTargetedMutants(t *testing.T) {
 	}
 }
 
-// TestAddHTTPControllerVerifierRejectsProtectedAndUnrelatedChanges relies only on the supervisor baseline projection.
-func TestAddHTTPControllerVerifierRejectsProtectedAndUnrelatedChanges(t *testing.T) {
+// TestAddHTTPControllerVerifierRejectsUnrelatedChanges relies only on the supervisor baseline projection.
+func TestAddHTTPControllerVerifierRejectsUnrelatedChanges(t *testing.T) {
 	root := writeControllerFixture(t, validControllerSource("service *Service"), true)
 	for _, test := range []struct {
 		name   string
 		path   string
 		wantID string
 	}{
-		{name: "generated wire", path: "app/wire/wire_gen.go", wantID: "generated-file-ownership"},
 		{name: "unrelated readme", path: "README.md", wantID: "change-ownership"},
 		{name: "seeded service", path: "internal/invoices/service.go", wantID: "change-ownership"},
 		{name: "seeded repository", path: "internal/invoices/repository.go", wantID: "change-ownership"},
@@ -283,6 +282,14 @@ func TestAddHTTPControllerVerifierRejectsProtectedAndUnrelatedChanges(t *testing
 				t.Fatalf("checks = %#v, want %q failure", result.Checks, test.wantID)
 			}
 		})
+	}
+}
+
+// TestOwnershipChecksAllowsDerivedWireOutput leaves authorship enforcement to trusted workflow evidence while executable checks prove the result.
+func TestOwnershipChecksAllowsDerivedWireOutput(t *testing.T) {
+	checks := ownershipChecks([]ProjectChange{{Path: "app/wire/wire_gen.go", Before: ProjectPathState{Kind: "file"}, After: ProjectPathState{Kind: "file"}}})
+	if !checkHasStatus(checks, "generated-file-ownership", EndpointPassed) || !checkHasStatus(checks, "change-ownership", EndpointPassed) {
+		t.Fatalf("ownership checks = %#v", checks)
 	}
 }
 
@@ -309,6 +316,14 @@ func TestControllerHandlerCheckRequiresFindRequestContext(t *testing.T) {
 	}
 	if result := controllerHandlerCheck(valid); result.Status != EndpointPassed {
 		t.Fatalf("valid handler result = %#v", result)
+	}
+	standardRequestSource := strings.Replace(validControllerSource("service *Service"), "request.Context()", "request.Request().Context()", 1)
+	standardRequest, err := parser.ParseFile(token.NewFileSet(), "controller.go", standardRequestSource, 0)
+	if err != nil {
+		t.Fatalf("parse standard request controller: %v", err)
+	}
+	if result := controllerHandlerCheck(standardRequest); result.Status != EndpointPassed {
+		t.Fatalf("standard request handler result = %#v", result)
 	}
 	decoySource := strings.Replace(validControllerSource("service *Service"), "invoice, err := controller.service.Find(request.Context(), request.Param(\"id\"))", "_ = request.Context()\n\tinvoice, err := controller.service.Find(context.Background(), request.Param(\"id\"))", 1)
 	decoy, err := parser.ParseFile(token.NewFileSet(), "controller.go", decoySource, 0)

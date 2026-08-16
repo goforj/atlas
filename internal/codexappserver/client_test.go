@@ -15,6 +15,7 @@ const (
 	fakeAppServerEnv      = "ATLAS_FAKE_CODEX_APP_SERVER"
 	fakeFloodEnv          = "ATLAS_FAKE_CODEX_FLOOD_NOTIFICATIONS"
 	fakePolicyMismatchEnv = "ATLAS_FAKE_CODEX_POLICY_MISMATCH"
+	fakeStartupFailureEnv = "ATLAS_FAKE_CODEX_STARTUP_FAILURE"
 )
 
 // TestClientAttributesFreshThreads verifies the adapter records effective identity and instruction provenance from Codex.
@@ -148,6 +149,24 @@ func TestLockedBufferRetainsTail(t *testing.T) {
 	}
 }
 
+// TestStartReturnsCapturedStderr makes launcher and dependency failures actionable before a Client can be returned.
+func TestStartReturnsCapturedStderr(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := Start(ctx, StartOptions{
+		Executable: os.Args[0],
+		Arguments:  []string{"-test.run=TestFakeAppServerProcess"},
+		Dir:        t.TempDir(),
+		Env: []string{
+			fakeAppServerEnv + "=1",
+			fakeStartupFailureEnv + "=1",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "fixture startup failed") || !strings.Contains(err.Error(), "Codex stderr:") {
+		t.Fatalf("Start() error = %v, want captured startup stderr", err)
+	}
+}
+
 // TestClientRejectsMismatchedEffectivePolicy keeps a diagnostic session from silently weakening its requested policy.
 func TestClientRejectsMismatchedEffectivePolicy(t *testing.T) {
 	t.Setenv(fakePolicyMismatchEnv, "1")
@@ -261,6 +280,10 @@ func fakeThreadOptions(root string) ThreadOptions {
 
 // runFakeAppServer responds to the protocol methods required by deterministic client tests.
 func runFakeAppServer() {
+	if os.Getenv(fakeStartupFailureEnv) == "1" {
+		_, _ = fmt.Fprintln(os.Stderr, "fixture startup failed")
+		return
+	}
 	scanner := bufio.NewScanner(os.Stdin)
 	threadNumber := 0
 	turnNumber := 0

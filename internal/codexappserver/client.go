@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -262,13 +263,24 @@ func Start(ctx context.Context, options StartOptions) (*Client, error) {
 		Title:   "GoForj Atlas Eval",
 		Version: "0.1.0",
 	}}, &initialized); err != nil {
-		return nil, errors.Join(err, client.closeAfterStartFailure())
+		cleanupErr := client.closeAfterStartFailure()
+		return nil, errors.Join(client.startFailure(err), cleanupErr)
 	}
 	if err := client.notify("initialized", struct{}{}); err != nil {
-		return nil, errors.Join(err, client.closeAfterStartFailure())
+		cleanupErr := client.closeAfterStartFailure()
+		return nil, errors.Join(client.startFailure(err), cleanupErr)
 	}
 	client.userAgent = initialized.UserAgent
 	return client, nil
+}
+
+// startFailure includes bounded provider diagnostics when the protocol cannot initialize far enough to return a Client.
+func (client *Client) startFailure(err error) error {
+	stderr := strings.TrimSpace(client.Stderr())
+	if stderr == "" {
+		return err
+	}
+	return fmt.Errorf("%w\nCodex stderr:\n%s", err, stderr)
 }
 
 // UserAgent returns the provider version reported during the initialized protocol handshake.

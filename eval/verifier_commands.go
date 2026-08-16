@@ -92,15 +92,15 @@ func (runner VerifierCommands) Open(ctx context.Context, sourceRoot string) (Com
 		return nil, fmt.Errorf("create verifier Project: %w", err)
 	}
 	if err := copyVerifierProjectTree(ctx, sourceRoot, root); err != nil {
-		return nil, errors.Join(err, os.RemoveAll(root))
+		return nil, errors.Join(err, removeVerifierOwnedTree(root))
 	}
 	stateRoot, err := os.MkdirTemp(runner.WorkRoot, "atlas-verifier-state-")
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("create verifier state: %w", err), os.RemoveAll(root))
+		return nil, errors.Join(fmt.Errorf("create verifier state: %w", err), removeVerifierOwnedTree(root))
 	}
 	environment, err := privateVerifierEnvironment(runner.Environment, stateRoot)
 	if err != nil {
-		return nil, errors.Join(err, os.RemoveAll(root), os.RemoveAll(stateRoot))
+		return nil, errors.Join(err, removeVerifierOwnedTree(root), removeVerifierOwnedTree(stateRoot))
 	}
 	return &verifierCommandSession{
 		root:           root,
@@ -242,9 +242,29 @@ func (session *verifierCommandSession) Close(context.Context) error {
 		return nil
 	}
 	session.closeOnce.Do(func() {
-		session.closeErr = errors.Join(os.RemoveAll(session.root), os.RemoveAll(session.stateRoot))
+		session.closeErr = errors.Join(removeVerifierOwnedTree(session.root), removeVerifierOwnedTree(session.stateRoot))
 	})
 	return session.closeErr
+}
+
+// removeVerifierOwnedTree restores traversal only inside disposable verifier state before removing read-only module caches.
+func removeVerifierOwnedTree(root string) error {
+	if _, err := os.Lstat(root); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	walkErr := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return os.Chmod(path, 0o700)
+		}
+		return nil
+	})
+	return errors.Join(walkErr, os.RemoveAll(root))
 }
 
 // resolveVerifierExecutable pins each allowlisted command before any candidate source executes.
