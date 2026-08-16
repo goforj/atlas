@@ -1,0 +1,1 @@
+Extend user creation to publish a typed `users.created` event containing only the stable identity downstream work needs. Keep event publication behind an application-owned boundary, subscribe through the App lifecycle, propagate cancellation, and test delivery without coupling the feature to a concrete event driver.

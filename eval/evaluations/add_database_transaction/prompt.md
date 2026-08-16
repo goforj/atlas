@@ -1,0 +1,1 @@
+Add an account transfer workflow that moves a positive balance between two accounts atomically. Keep persistence in a repository, own the transaction boundary in the service, propagate cancellation, and prove both commit and rollback behavior through durable state.

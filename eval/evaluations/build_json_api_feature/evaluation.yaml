@@ -1,0 +1,11 @@
+schema_version: 1
+id: build-json-api-feature
+summary: Build a complete service-backed JSON API feature.
+suite: core
+project_scenario: json-api-route
+workflow: goforj-build-json-api-feature/v1
+verifier: build-json-api-feature/v1
+limits:
+  wall_time: 10m
+  commands: 60
+  shell_network: off

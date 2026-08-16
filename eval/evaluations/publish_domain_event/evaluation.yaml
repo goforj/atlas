@@ -1,0 +1,11 @@
+schema_version: 1
+id: publish-domain-event
+summary: Publish and handle a typed user-created event.
+suite: core
+project_scenario: users-created-event
+workflow: goforj-publish-domain-event/v1
+verifier: publish-domain-event/v1
+limits:
+  wall_time: 12m
+  commands: 80
+  shell_network: off

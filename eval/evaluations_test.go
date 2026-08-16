@@ -45,17 +45,31 @@ func TestPromotedMajorSurfaceEvaluationsResolve(t *testing.T) {
 	}
 	ids := []string{
 		"add-app-command",
+		"add-app-lifecycle-hook",
+		"add-cached-repository",
+		"add-database-transaction",
 		"add-event-subscriber",
 		"add-http-controller",
 		"add-job",
+		"add-mail-workflow",
 		"add-migration",
 		"add-named-app-route",
 		"add-named-cache",
 		"add-named-resource",
 		"add-named-storage",
+		"add-outbound-http-integration",
+		"add-route-middleware",
 		"add-schedule",
+		"add-upload-workflow",
+		"add-validated-write-endpoint",
+		"build-json-api-feature",
+		"create-additional-app",
 		"create-model",
+		"dispatch-event-followup-job",
+		"publish-domain-event",
+		"protect-route-with-auth",
 		"repair-wire-provider",
+		"schedule-existing-job",
 		"unknown-framework-shape",
 	}
 	for _, id := range ids {
@@ -80,7 +94,7 @@ func TestPromotedEvaluationIDsReturnsStableSuiteCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PromotedEvaluationIDs(): %v", err)
 	}
-	if len(ids) != 13 || ids[0] != "add-app-command" || ids[len(ids)-1] != "unknown-framework-shape" {
+	if len(ids) != 27 || ids[0] != "add-app-command" || ids[len(ids)-1] != "unknown-framework-shape" {
 		t.Fatalf("ids = %v", ids)
 	}
 }

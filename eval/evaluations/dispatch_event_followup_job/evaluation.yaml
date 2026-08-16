@@ -1,0 +1,11 @@
+schema_version: 1
+id: dispatch-event-followup-job
+summary: Dispatch typed report work from an event reaction.
+suite: core
+project_scenario: reports-generate-job
+workflow: goforj-dispatch-event-followup-job/v1
+verifier: dispatch-event-followup-job/v1
+limits:
+  wall_time: 12m
+  commands: 90
+  shell_network: off

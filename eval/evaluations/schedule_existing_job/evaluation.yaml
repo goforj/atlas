@@ -1,0 +1,11 @@
+schema_version: 1
+id: schedule-existing-job
+summary: Schedule recurring dispatch of an existing report job.
+suite: core
+project_scenario: reports-daily-schedule
+workflow: goforj-schedule-existing-job/v1
+verifier: schedule-existing-job/v1
+limits:
+  wall_time: 12m
+  commands: 90
+  shell_network: off

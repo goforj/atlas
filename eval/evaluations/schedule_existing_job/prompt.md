@@ -1,0 +1,1 @@
+Add a daily schedule that finds eligible report targets through a repository and dispatches the existing `reports:generate` job for each one. Use the schedule generator, keep timing on the schedule registration boundary, keep report generation out of scheduler bootstrap, propagate cancellation, and leave the App's schedule and Wire registration working.

@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-mail-workflow
+summary: Send application mail through the generated manager.
+suite: core
+project_scenario: invoice-receipt-mail
+workflow: goforj-add-mail-workflow/v1
+verifier: add-mail-workflow/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off

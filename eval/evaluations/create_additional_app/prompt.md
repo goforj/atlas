@@ -1,0 +1,1 @@
+Add a second App named `statuspage` for independently runnable public status traffic. Use GoForj's App workflow so it receives its own entrypoint, route and Wire boundaries, binary, and development watcher without replacing or coupling it to the default App. Enable the Web API surface and leave both Apps working.
