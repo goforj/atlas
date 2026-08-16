@@ -120,13 +120,13 @@ func ownershipChecks(changes []ProjectChange) []EndpointResult {
 	return []EndpointResult{{ID: "generated-file-ownership", Status: EndpointPassed}, {ID: "change-ownership", Status: EndpointPassed}}
 }
 
-// isAllowedControllerChange keeps seeded domain implementation immutable while allowing the controller and its two composition registrations.
+// isAllowedControllerChange keeps seeded domain implementation immutable while allowing controller implementation, focused tests, and its two composition registrations.
 func isAllowedControllerChange(path string) bool {
 	if path == "app/routes.go" || path == "app/wire/inject_http_controllers_app.go" {
 		return true
 	}
 	base := filepath.Base(path)
-	return strings.HasPrefix(path, "internal/") && (base == "controller.go" || strings.HasSuffix(base, "_controller.go"))
+	return strings.HasPrefix(path, "internal/") && (base == "controller.go" || base == "controller_test.go" || strings.HasSuffix(base, "_controller.go") || strings.HasSuffix(base, "_controller_test.go"))
 }
 
 // runCheck delegates executable behavior to the trusted verifier environment rather than the candidate's agent session.
@@ -277,11 +277,22 @@ func controllerRouteCheck(file *ast.File) EndpointResult {
 // controllerHandlerCheck verifies context propagation, ID extraction, application lookup, and success/not-found response handling.
 func controllerHandlerCheck(file *ast.File) EndpointResult {
 	required := map[string]bool{"Context": false, "Param": false, "Find": false, "JSON": false, "StatusOK": false, "StatusNotFound": false}
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Body == nil {
+			continue
+		}
+		if findCallUsesRequestContext(function) {
+			required["Context"] = true
+		}
+	}
 	ast.Inspect(file, func(node ast.Node) bool {
 		if call, ok := node.(*ast.CallExpr); ok {
 			if selector, ok := call.Fun.(*ast.SelectorExpr); ok {
-				if _, exists := required[selector.Sel.Name]; exists {
-					required[selector.Sel.Name] = true
+				if selector.Sel.Name != "Context" {
+					if _, exists := required[selector.Sel.Name]; exists {
+						required[selector.Sel.Name] = true
+					}
 				}
 			}
 		}
@@ -296,6 +307,44 @@ func controllerHandlerCheck(file *ast.File) EndpointResult {
 		}
 	}
 	return EndpointResult{ID: "invoice-handler", Status: EndpointPassed}
+}
+
+// findCallUsesRequestContext proves a Find invocation receives Context from one of its function's request parameters.
+func findCallUsesRequestContext(function *ast.FuncDecl) bool {
+	parameters := make(map[string]bool)
+	if function.Type.Params == nil {
+		return false
+	}
+	for _, field := range function.Type.Params.List {
+		for _, name := range field.Names {
+			parameters[name.Name] = true
+		}
+	}
+	usesRequestContext := false
+	ast.Inspect(function.Body, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok || len(call.Args) == 0 {
+			return true
+		}
+		find, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || find.Sel.Name != "Find" {
+			return true
+		}
+		contextCall, ok := call.Args[0].(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		contextSelector, ok := contextCall.Fun.(*ast.SelectorExpr)
+		if !ok || contextSelector.Sel.Name != "Context" {
+			return true
+		}
+		request, ok := contextSelector.X.(*ast.Ident)
+		if ok && parameters[request.Name] {
+			usesRequestContext = true
+		}
+		return true
+	})
+	return usesRequestContext
 }
 
 // selectorRegistrationCheck verifies an App-owned registration point references the discovered controller shape.

@@ -3,6 +3,8 @@ package eval
 import (
 	"context"
 	"errors"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -278,6 +280,40 @@ func TestAddHTTPControllerVerifierRejectsProtectedAndUnrelatedChanges(t *testing
 				t.Fatalf("checks = %#v, want %q failure", result.Checks, test.wantID)
 			}
 		})
+	}
+}
+
+// TestOwnershipChecksAllowsFocusedControllerTests permits candidate tests that exercise the controller without expanding the domain change budget.
+func TestOwnershipChecksAllowsFocusedControllerTests(t *testing.T) {
+	for _, path := range []string{
+		"internal/invoices/controller_test.go",
+		"internal/http/invoice_controller_test.go",
+	} {
+		t.Run(path, func(t *testing.T) {
+			checks := ownershipChecks([]ProjectChange{{Path: path, Before: ProjectPathState{Kind: "file"}, After: ProjectPathState{Kind: "file"}}})
+			if !checkHasStatus(checks, "change-ownership", EndpointPassed) {
+				t.Fatalf("ownership checks = %#v", checks)
+			}
+		})
+	}
+}
+
+// TestControllerHandlerCheckRequiresFindRequestContext rejects unrelated Context calls when Find receives a background context.
+func TestControllerHandlerCheckRequiresFindRequestContext(t *testing.T) {
+	valid, err := parser.ParseFile(token.NewFileSet(), "controller.go", validControllerSource("service *Service"), parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("parse valid controller: %v", err)
+	}
+	if result := controllerHandlerCheck(valid); result.Status != EndpointPassed {
+		t.Fatalf("valid handler result = %#v", result)
+	}
+	decoySource := strings.Replace(validControllerSource("service *Service"), "invoice, err := controller.service.Find(request.Context(), request.Param(\"id\"))", "_ = request.Context()\n\tinvoice, err := controller.service.Find(context.Background(), request.Param(\"id\"))", 1)
+	decoy, err := parser.ParseFile(token.NewFileSet(), "controller.go", decoySource, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("parse decoy controller: %v", err)
+	}
+	if result := controllerHandlerCheck(decoy); result.Status != EndpointFailed || !strings.Contains(result.Details, "Context") {
+		t.Fatalf("decoy handler result = %#v", result)
 	}
 }
 

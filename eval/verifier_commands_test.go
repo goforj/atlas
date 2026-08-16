@@ -171,10 +171,14 @@ func TestVerifierCommandsBoundsCandidateProcesses(t *testing.T) {
 	}
 }
 
-// TestVerifierCommandsExcludesCandidateTests prevents candidate TestMain from intercepting supervisor test execution.
+// TestVerifierCommandsExcludesCandidateTests prevents candidate TestMain from intercepting supervisor test execution, even when ownership permits the test file.
 func TestVerifierCommandsExcludesCandidateTests(t *testing.T) {
 	source := t.TempDir()
-	if err := os.WriteFile(filepath.Join(source, "candidate_test.go"), []byte("package fixture\nfunc TestMain() {}\n"), 0o644); err != nil {
+	candidateTest := filepath.Join(source, "internal", "invoices", "controller_test.go")
+	if err := os.MkdirAll(filepath.Dir(candidateTest), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(candidateTest, []byte("package invoices\nfunc TestMain() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), source)
@@ -183,7 +187,7 @@ func TestVerifierCommandsExcludesCandidateTests(t *testing.T) {
 	}
 	defer session.Close(context.Background())
 	concrete := session.(*verifierCommandSession)
-	if _, err := os.Stat(filepath.Join(concrete.root, "candidate_test.go")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(concrete.root, "internal", "invoices", "controller_test.go")); !os.IsNotExist(err) {
 		t.Fatalf("candidate test copied into verifier clone: %v", err)
 	}
 }
