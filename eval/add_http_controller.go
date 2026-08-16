@@ -108,24 +108,25 @@ func ownershipChecks(changes []ProjectChange) []EndpointResult {
 	if len(changes) == 0 {
 		return []EndpointResult{{ID: "change-ownership", Status: EndpointPassed}}
 	}
-	allowed := []string{"internal/invoices/", "internal/http/", "app/routes.go", "app/wire/inject_http_controllers_app.go"}
 	for _, change := range changes {
 		path := filepath.ToSlash(change.Path)
 		if filepath.Base(path) == "wire_gen.go" {
 			return []EndpointResult{{ID: "generated-file-ownership", Status: EndpointFailed, Details: fmt.Sprintf("candidate changed protected generated file %q", path)}}
 		}
-		permitted := false
-		for _, prefix := range allowed {
-			if strings.HasPrefix(path, prefix) || path == prefix {
-				permitted = true
-				break
-			}
-		}
-		if !permitted {
+		if !isAllowedControllerChange(path) {
 			return []EndpointResult{{ID: "change-ownership", Status: EndpointFailed, Details: fmt.Sprintf("candidate changed unrelated path %q", path)}}
 		}
 	}
 	return []EndpointResult{{ID: "generated-file-ownership", Status: EndpointPassed}, {ID: "change-ownership", Status: EndpointPassed}}
+}
+
+// isAllowedControllerChange keeps seeded domain implementation immutable while allowing the controller and its two composition registrations.
+func isAllowedControllerChange(path string) bool {
+	if path == "app/routes.go" || path == "app/wire/inject_http_controllers_app.go" {
+		return true
+	}
+	base := filepath.Base(path)
+	return strings.HasPrefix(path, "internal/") && (base == "controller.go" || strings.HasSuffix(base, "_controller.go"))
 }
 
 // runCheck delegates executable behavior to the trusted verifier environment rather than the candidate's agent session.

@@ -32,6 +32,7 @@ type VerifierCommands struct {
 // verifierCommandSession owns one private candidate clone and its allowlisted command identities.
 type verifierCommandSession struct {
 	root           string
+	stateRoot      string
 	goExecutable   string
 	forjExecutable string
 	environment    []string
@@ -91,12 +92,54 @@ func (runner VerifierCommands) Open(_ context.Context, sourceRoot string) (Comma
 	if err := copyProjectTree(sourceRoot, root); err != nil {
 		return nil, errors.Join(err, os.RemoveAll(root))
 	}
+	stateRoot, err := os.MkdirTemp(runner.WorkRoot, "atlas-verifier-state-")
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("create verifier state: %w", err), os.RemoveAll(root))
+	}
+	environment, err := privateVerifierEnvironment(runner.Environment, stateRoot)
+	if err != nil {
+		return nil, errors.Join(err, os.RemoveAll(root), os.RemoveAll(stateRoot))
+	}
 	return &verifierCommandSession{
 		root:           root,
+		stateRoot:      stateRoot,
 		goExecutable:   goExecutable,
 		forjExecutable: forjExecutable,
-		environment:    append([]string(nil), runner.Environment...),
+		environment:    environment,
 	}, nil
+}
+
+// privateVerifierEnvironment gives one verifier phase no reusable writable state from another phase or the supervisor.
+func privateVerifierEnvironment(base []string, stateRoot string) ([]string, error) {
+	if base == nil {
+		base = os.Environ()
+	}
+	paths := map[string]string{
+		"HOME":       filepath.Join(stateRoot, "home"),
+		"GOCACHE":    filepath.Join(stateRoot, "go-cache"),
+		"GOMODCACHE": filepath.Join(stateRoot, "go-mod-cache"),
+		"GOTMPDIR":   filepath.Join(stateRoot, "tmp"),
+		"TMPDIR":     filepath.Join(stateRoot, "tmp"),
+		"TEMP":       filepath.Join(stateRoot, "tmp"),
+		"TMP":        filepath.Join(stateRoot, "tmp"),
+	}
+	for _, path := range paths {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			return nil, fmt.Errorf("create private verifier state: %w", err)
+		}
+	}
+	environment := make([]string, 0, len(base)+len(paths))
+	for _, entry := range base {
+		name, _, found := strings.Cut(entry, "=")
+		if !found || paths[name] == "" {
+			continue
+		}
+		environment = append(environment, entry)
+	}
+	for _, name := range []string{"HOME", "GOCACHE", "GOMODCACHE", "GOTMPDIR", "TMPDIR", "TEMP", "TMP"} {
+		environment = append(environment, name+"="+paths[name])
+	}
+	return environment, nil
 }
 
 // Run executes one deadline- and output-bounded allowlisted process group, then cleans up its group and any descendants observed on supported hosts.
@@ -193,7 +236,7 @@ func (session *verifierCommandSession) Close(context.Context) error {
 		return nil
 	}
 	session.closeOnce.Do(func() {
-		session.closeErr = os.RemoveAll(session.root)
+		session.closeErr = errors.Join(os.RemoveAll(session.root), os.RemoveAll(session.stateRoot))
 	})
 	return session.closeErr
 }

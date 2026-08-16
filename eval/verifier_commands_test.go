@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -44,6 +45,82 @@ func TestVerifierCommandsUsesPrivateCloneAndAllowlistedTools(t *testing.T) {
 	}
 }
 
+// TestVerifierCommandsUsesPrivatePhaseState proves verifier phases cannot share writable user, Go, or temporary state.
+func TestVerifierCommandsUsesPrivatePhaseState(t *testing.T) {
+	source := t.TempDir()
+	runner := VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: os.Environ()}
+	first, err := runner.Open(context.Background(), source)
+	if err != nil {
+		t.Fatalf("Open() first phase: %v", err)
+	}
+	second, err := runner.Open(context.Background(), source)
+	if err != nil {
+		_ = first.Close(context.Background())
+		t.Fatalf("Open() second phase: %v", err)
+	}
+	firstSession := first.(*verifierCommandSession)
+	secondSession := second.(*verifierCommandSession)
+	firstEnvironment := verifierEnvironmentValues(firstSession.environment)
+	secondEnvironment := verifierEnvironmentValues(secondSession.environment)
+	for _, name := range []string{"HOME", "GOCACHE", "GOMODCACHE", "GOTMPDIR", "TMPDIR", "TEMP", "TMP"} {
+		if firstEnvironment[name] == "" || secondEnvironment[name] == "" {
+			t.Fatalf("%s is not private in environments %#v and %#v", name, firstEnvironment, secondEnvironment)
+		}
+		if firstEnvironment[name] == secondEnvironment[name] {
+			t.Fatalf("%s is shared by verifier phases: %q", name, firstEnvironment[name])
+		}
+	}
+	firstState := firstSession.stateRoot
+	secondState := secondSession.stateRoot
+	if err := first.Close(context.Background()); err != nil {
+		t.Fatalf("Close() first phase: %v", err)
+	}
+	if err := second.Close(context.Background()); err != nil {
+		t.Fatalf("Close() second phase: %v", err)
+	}
+	for _, state := range []string{firstState, secondState} {
+		if _, err := os.Stat(state); !os.IsNotExist(err) {
+			t.Fatalf("private verifier state remains at %q: %v", state, err)
+		}
+	}
+}
+
+// verifierEnvironmentValues returns the private environment names relevant to phase isolation.
+func verifierEnvironmentValues(environment []string) map[string]string {
+	values := make(map[string]string)
+	for _, entry := range environment {
+		name, value, found := strings.Cut(entry, "=")
+		if found {
+			values[name] = value
+		}
+	}
+	return values
+}
+
+// TestInvoiceBehaviorProbeRejectsProductionInitExit proves a candidate production init cannot bypass the oracle with os.Exit(0).
+func TestInvoiceBehaviorProbeRejectsProductionInitExit(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.test/initexit\n\ngo 1.25.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "production.go"), []byte("package initexit\nimport \"os\"\nfunc init() { os.Exit(0) }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "oracle_test.go"), []byte("package initexit\nimport \"testing\"\nfunc TestAtlasInvoiceHTTPBehavior(t *testing.T) {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("go", "test", "-json", ".", "-run", "^TestAtlasInvoiceHTTPBehavior$", "-count=1")
+	command.Dir = root
+	command.Env = append(os.Environ(), "GOCACHE=/tmp/gocache", "GOMODCACHE=/tmp/gomodcache")
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("go test unexpectedly failed: %v", err)
+	}
+	if err := proveInvoiceBehaviorTest(string(output)); err == nil || !strings.Contains(err.Error(), "did not run") {
+		t.Fatalf("production init os.Exit(0) bypass was accepted: %v; output = %s", err, output)
+	}
+}
+
 // TestVerifierCommandsBoundsCandidateProcesses proves a noisy or stalled candidate cannot retain verifier resources.
 func TestVerifierCommandsBoundsCandidateProcesses(t *testing.T) {
 	if os.Getenv("ATLAS_VERIFIER_HELPER") == "1" {
@@ -70,7 +147,11 @@ func TestVerifierCommandsBoundsCandidateProcesses(t *testing.T) {
 				t.Fatalf("Open(): %v", err)
 			}
 			defer session.Close(context.Background())
-			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			timeout := 100 * time.Millisecond
+			if test.mode == "noisy" {
+				timeout = 5 * time.Second
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 			_, err = session.Run(ctx, []string{"go", "-test.run=TestVerifierCommandsBoundsCandidateProcesses"})
 			if err == nil || !strings.Contains(err.Error(), test.want) {
