@@ -127,6 +127,7 @@ func verifySurfaceTextAbsent(root string, exclusion textExclusion) EndpointResul
 
 // verifySurfaceOwnership limits candidate changes while allowing regenerated Wire output as derived evidence.
 func verifySurfaceOwnership(changes []ProjectChange, patterns []string) EndpointResult {
+	var unrelated []string
 	for _, change := range changes {
 		path := filepath.ToSlash(change.Path)
 		if derivedSurfaceChange(path) {
@@ -140,8 +141,11 @@ func verifySurfaceOwnership(changes []ProjectChange, patterns []string) Endpoint
 			}
 		}
 		if !allowed {
-			return EndpointResult{ID: "change-ownership", Status: EndpointFailed, Details: fmt.Sprintf("candidate changed unrelated path %q", path)}
+			unrelated = append(unrelated, path)
 		}
+	}
+	if len(unrelated) > 0 {
+		return EndpointResult{ID: "change-ownership", Status: EndpointFailed, Details: fmt.Sprintf("candidate changed unrelated paths: %s", strings.Join(unrelated, ", "))}
 	}
 	return EndpointResult{ID: "change-ownership", Status: EndpointPassed}
 }
