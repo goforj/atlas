@@ -1,6 +1,6 @@
 schema_version: 1
 id: add-http-controller
-summary: Add an HTTP controller for existing invoice behavior
+summary: Add an HTTP controller for existing invoice behavior.
 suite: core
 project_scenario: invoice-http-route
 workflow: goforj-add-http-route/v1

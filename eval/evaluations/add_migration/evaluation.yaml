@@ -1,6 +1,6 @@
 schema_version: 1
 id: add-migration
-summary: Scaffold a database migration pair for an App
+summary: Scaffold a database migration pair for an App.
 suite: core
 project_scenario: invoice-status-migration
 workflow: goforj-add-migration/v1
