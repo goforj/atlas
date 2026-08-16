@@ -122,7 +122,7 @@ func ownershipChecks(changes []ProjectChange) []EndpointResult {
 	}
 	for _, change := range changes {
 		path := filepath.ToSlash(change.Path)
-		if derivedSurfaceChange(path) {
+		if derivedSurfaceProjectChange(change) {
 			continue
 		}
 		if !isAllowedControllerChange(path) {

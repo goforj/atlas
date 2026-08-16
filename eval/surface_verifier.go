@@ -131,7 +131,7 @@ func verifySurfaceOwnership(changes []ProjectChange, patterns []string) Endpoint
 	var unrelated []string
 	for _, change := range changes {
 		path := filepath.ToSlash(change.Path)
-		if derivedSurfaceChange(path) {
+		if derivedSurfaceProjectChange(change) {
 			continue
 		}
 		allowed := false
@@ -151,6 +151,19 @@ func verifySurfaceOwnership(changes []ProjectChange, patterns []string) Endpoint
 		return EndpointResult{ID: "change-ownership", Status: EndpointFailed, Details: fmt.Sprintf("candidate changed unrelated paths: %s", strings.Join(unrelated, ", "))}
 	}
 	return EndpointResult{ID: "change-ownership", Status: EndpointPassed}
+}
+
+// derivedSurfaceProjectChange accepts empty runtime storage directories without exempting source files in a package named storage.
+func derivedSurfaceProjectChange(change ProjectChange) bool {
+	path := filepath.ToSlash(change.Path)
+	if derivedSurfaceChange(path) {
+		return true
+	}
+	kind := change.After.Kind
+	if kind == "" {
+		kind = change.Before.Kind
+	}
+	return kind == "directory" && (strings.Contains(path, "/storage/") || strings.HasSuffix(path, "/storage"))
 }
 
 // derivedSurfaceChange identifies framework and Go tool outputs that are verified through isolated commands rather than authored ownership.

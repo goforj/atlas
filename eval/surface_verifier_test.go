@@ -91,12 +91,25 @@ func TestSurfaceVerifierAllowsToolDerivedOutputs(t *testing.T) {
 		{Path: "build/api_index.json"},
 		{Path: "storage", After: ProjectPathState{Kind: "directory"}},
 		{Path: "storage/app/private", After: ProjectPathState{Kind: "directory"}},
+		{Path: "internal/avatars/storage", After: ProjectPathState{Kind: "directory"}},
+		{Path: "internal/avatars/storage/app/private", After: ProjectPathState{Kind: "directory"}},
 		{Path: "app/wire/wire_gen.go"},
 		{Path: "internal/database/_data", After: ProjectPathState{Kind: "directory"}},
 		{Path: "internal/database/_data/sqlite/app.db"},
 	}, nil)
 	if result.Status != EndpointPassed {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+// TestSurfaceVerifierRejectsSourceInsideNestedRuntimeStorage proves the directory exception cannot hide an authored Go package.
+func TestSurfaceVerifierRejectsSourceInsideNestedRuntimeStorage(t *testing.T) {
+	result := verifySurfaceOwnership(
+		[]ProjectChange{{Path: "internal/avatars/storage/service.go", After: ProjectPathState{Kind: "file"}}},
+		[]string{"internal/avatars/avatar_storage.go"},
+	)
+	if result.Status != EndpointFailed {
+		t.Fatalf("ownership result = %#v, want nested storage source rejected", result)
 	}
 }
 
