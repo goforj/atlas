@@ -43,6 +43,13 @@ Those fields remove guesswork from guidance attribution and model identity.
 They also support later scripted clarification without resuming an unrelated
 session.
 
+The published app-server reference does not guarantee that `thread/start`
+echoes the effective approval policy or sandbox. Atlas therefore requires a
+versioned schema that supplies both fields in the returned thread: it rejects a
+missing or mismatched value before accepting a session. Until a pinned CLI
+schema proves that contract, the local Codex adapter fails closed rather than
+claiming its requested startup policy took effect.
+
 ## Adapter Decision
 
 Use `codex app-server` over its local stdio JSONL transport for the Atlas Codex
@@ -61,12 +68,18 @@ The adapter should:
 3. Complete `initialize` and `initialized` before any thread request.
 4. Start a new ephemeral thread with an explicit model, Project root, approval
    policy, and sandbox policy.
-5. Reject a response whose effective model, provider, instruction sources, or
-   sandbox differs from the resolved run plan.
+5. Reject a response whose effective model, provider, approval policy,
+   sandbox, or instruction sources differs from the resolved run plan.
 6. Start one turn, normalize supported events, and retain unknown events as
    inert diagnostic data.
 7. Interrupt the active turn before cancellation cleanup when possible.
 8. Terminate and verify the complete supervised job on every terminal path.
+
+The app-server reader retains at most 1,024 lifecycle notifications. It always
+continues reading request responses; when telemetry exceeds that bound, it
+counts discarded notifications and the adapter fails the affected turn with an
+explicit telemetry-overflow error rather than waiting for a possibly dropped
+terminal notification.
 
 On Linux, app-server interruption and its own process group are not sufficient
 for step 8. A live turn created a separate command process group, and a

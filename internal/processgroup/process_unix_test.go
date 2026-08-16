@@ -59,6 +59,45 @@ func TestWaitReturnsProcessFailure(t *testing.T) {
 	}
 }
 
+// TestTerminateReturnsAfterEscalationWithoutWaitingForCompletion ensures cleanup callers cannot leak behind an unreported process exit.
+func TestTerminateReturnsAfterEscalationWithoutWaitingForCompletion(t *testing.T) {
+	command := exec.Command("/bin/sh", "-c", "sleep 300")
+	configureProcessGroup(command)
+	if err := command.Start(); err != nil {
+		t.Fatalf("start process: %v", err)
+	}
+	defer command.Wait()
+
+	process := &Process{
+		command:       command,
+		done:          make(chan struct{}),
+		descendants:   emptyDescendantTracker{},
+		terminateDone: make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result := make(chan error, 1)
+	go func() {
+		result <- process.Terminate(ctx)
+	}()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Terminate() error = %v, want context cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Terminate() waited for a process completion signal after kill escalation")
+	}
+}
+
+// emptyDescendantTracker isolates the timeout regression from Linux process-table polling.
+type emptyDescendantTracker struct{}
+
+// Stop returns no separately grouped descendants for the controlled direct child used by this regression test.
+func (emptyDescendantTracker) Stop() processTargets {
+	return processTargets{}
+}
+
 // waitForChildPID waits for the helper shell to publish the descendant before cancellation begins.
 func waitForChildPID(t *testing.T, path string) int {
 	t.Helper()

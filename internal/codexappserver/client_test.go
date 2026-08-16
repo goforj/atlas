@@ -11,7 +11,11 @@ import (
 	"time"
 )
 
-const fakeAppServerEnv = "ATLAS_FAKE_CODEX_APP_SERVER"
+const (
+	fakeAppServerEnv      = "ATLAS_FAKE_CODEX_APP_SERVER"
+	fakeFloodEnv          = "ATLAS_FAKE_CODEX_FLOOD_NOTIFICATIONS"
+	fakePolicyMismatchEnv = "ATLAS_FAKE_CODEX_POLICY_MISMATCH"
+)
 
 // TestClientAttributesFreshThreads verifies the adapter records effective identity and instruction provenance from Codex.
 func TestClientAttributesFreshThreads(t *testing.T) {
@@ -40,6 +44,9 @@ func TestClientAttributesFreshThreads(t *testing.T) {
 	if !first.Ephemeral {
 		t.Fatal("thread was not ephemeral")
 	}
+	if first.ApprovalPolicy != "never" || first.Sandbox != "read-only" {
+		t.Fatalf("effective policy = approvalPolicy %q, sandbox %q", first.ApprovalPolicy, first.Sandbox)
+	}
 	if got := strings.Join(first.InstructionSources, ","); got != "/project/AGENTS.md" {
 		t.Fatalf("instruction sources = %q", got)
 	}
@@ -65,6 +72,40 @@ func TestClientStartsAndInterruptsTurn(t *testing.T) {
 	}
 	if err := client.InterruptTurn(ctx, thread.ID, turn.ID); err != nil {
 		t.Fatalf("interrupt turn: %v", err)
+	}
+}
+
+// TestClientDoesNotBlockResponsesBehindTelemetry proves notifications cannot prevent a request response from reaching its waiter.
+func TestClientDoesNotBlockResponsesBehindTelemetry(t *testing.T) {
+	t.Setenv(fakeFloodEnv, "1")
+	client := startFakeClient(t)
+	defer closeClient(t, client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	thread, err := client.StartThread(ctx, fakeThreadOptions(t.TempDir()))
+	if err != nil {
+		t.Fatalf("start thread: %v", err)
+	}
+	if _, err := client.StartTurn(ctx, thread.ID, "emit telemetry"); err != nil {
+		t.Fatalf("start turn after telemetry flood: %v", err)
+	}
+	if client.NotificationsDropped() == 0 {
+		t.Fatal("telemetry overflow was not recorded")
+	}
+}
+
+// TestClientRejectsMismatchedEffectivePolicy keeps a diagnostic session from silently weakening its requested policy.
+func TestClientRejectsMismatchedEffectivePolicy(t *testing.T) {
+	t.Setenv(fakePolicyMismatchEnv, "1")
+	client := startFakeClient(t)
+	defer closeClient(t, client)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, err := client.StartThread(ctx, fakeThreadOptions(t.TempDir()))
+	if err == nil || !strings.Contains(err.Error(), "effective policy") {
+		t.Fatalf("StartThread() error = %v, want effective policy mismatch", err)
 	}
 }
 
@@ -99,7 +140,11 @@ func startFakeClient(t *testing.T) *Client {
 		Executable: os.Args[0],
 		Arguments:  []string{"-test.run=TestFakeAppServerProcess"},
 		Dir:        t.TempDir(),
-		Env:        []string{fakeAppServerEnv + "=1"},
+		Env: []string{
+			fakeAppServerEnv + "=1",
+			fakeFloodEnv + "=" + os.Getenv(fakeFloodEnv),
+			fakePolicyMismatchEnv + "=" + os.Getenv(fakePolicyMismatchEnv),
+		},
 	})
 	if err != nil {
 		t.Fatalf("start fake app-server: %v", err)
@@ -150,17 +195,32 @@ func runFakeAppServer() {
 			result = map[string]any{"userAgent": "fake-codex/1"}
 		case "thread/start":
 			threadNumber++
+			var params struct {
+				ApprovalPolicy string `json:"approvalPolicy"`
+				Sandbox        string `json:"sandbox"`
+			}
+			_ = json.Unmarshal(request.Params, &params)
+			if os.Getenv(fakePolicyMismatchEnv) == "1" {
+				params.Sandbox = "danger-full-access"
+			}
 			result = map[string]any{
 				"model":              "gpt-test",
 				"modelProvider":      "openai",
 				"instructionSources": []string{"/project/AGENTS.md"},
 				"thread": map[string]any{
-					"id":        fmt.Sprintf("thread-%d", threadNumber),
-					"ephemeral": true,
+					"id":             fmt.Sprintf("thread-%d", threadNumber),
+					"ephemeral":      true,
+					"approvalPolicy": params.ApprovalPolicy,
+					"sandbox":        params.Sandbox,
 				},
 			}
 		case "turn/start":
 			turnNumber++
+			if os.Getenv(fakeFloodEnv) == "1" {
+				for range defaultNotificationLimit + 1 {
+					writeFakeNotification("item/started", map[string]any{"sequence": turnNumber})
+				}
+			}
 			result = map[string]any{"turn": map[string]any{"id": fmt.Sprintf("turn-%d", turnNumber)}}
 		case "turn/interrupt":
 			result = map[string]any{}
@@ -170,6 +230,12 @@ func runFakeAppServer() {
 		}
 		writeFakeResponse(*request.ID, result, nil)
 	}
+}
+
+// writeFakeNotification emits one JSONL notification without a response identifier.
+func writeFakeNotification(method string, params any) {
+	encoded, _ := json.Marshal(map[string]any{"method": method, "params": params})
+	_, _ = fmt.Fprintln(os.Stdout, string(encoded))
 }
 
 // writeFakeResponse emits one JSONL response without test-runner formatting.

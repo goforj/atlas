@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	defaultMessageLimit = 8 << 20
-	cleanupTimeout      = 5 * time.Second
+	defaultMessageLimit      = 8 << 20
+	defaultNotificationLimit = 1024
+	cleanupTimeout           = 5 * time.Second
 )
 
 // StartOptions configures one private Codex app-server process.
@@ -46,6 +47,8 @@ type Thread struct {
 	ID                 string
 	Model              string
 	ModelProvider      string
+	ApprovalPolicy     string
+	Sandbox            string
 	InstructionSources []string
 	Ephemeral          bool
 }
@@ -73,14 +76,16 @@ type Client struct {
 	pendingMu sync.Mutex
 	pending   map[uint64]chan protocolMessage
 
-	notifications chan Notification
-	readerDone    chan struct{}
-	readerMu      sync.Mutex
-	readerErr     error
-	stderr        lockedBuffer
-	closeOnce     sync.Once
-	closeDone     chan struct{}
-	closeErr      error
+	notifications        chan Notification
+	notificationMu       sync.Mutex
+	notificationsDropped uint64
+	readerDone           chan struct{}
+	readerMu             sync.Mutex
+	readerErr            error
+	stderr               lockedBuffer
+	closeOnce            sync.Once
+	closeDone            chan struct{}
+	closeErr             error
 }
 
 // protocolMessage captures the common JSONL envelope without binding Atlas to the complete Codex schema.
@@ -130,7 +135,7 @@ func Start(ctx context.Context, options StartOptions) (*Client, error) {
 		stdin:         stdinWrite,
 		nextID:        1,
 		pending:       map[uint64]chan protocolMessage{},
-		notifications: make(chan Notification, 1024),
+		notifications: make(chan Notification, defaultNotificationLimit),
 		readerDone:    make(chan struct{}),
 		closeDone:     make(chan struct{}),
 	}
@@ -203,8 +208,10 @@ func (client *Client) StartThread(ctx context.Context, options ThreadOptions) (T
 		ModelProvider      string   `json:"modelProvider"`
 		InstructionSources []string `json:"instructionSources"`
 		Thread             struct {
-			ID        string `json:"id"`
-			Ephemeral bool   `json:"ephemeral"`
+			ID             string `json:"id"`
+			Ephemeral      bool   `json:"ephemeral"`
+			ApprovalPolicy string `json:"approvalPolicy"`
+			Sandbox        string `json:"sandbox"`
 		} `json:"thread"`
 	}
 	if err := client.request(ctx, "thread/start", params, &response); err != nil {
@@ -213,10 +220,15 @@ func (client *Client) StartThread(ctx context.Context, options ThreadOptions) (T
 	if response.Thread.ID == "" {
 		return Thread{}, fmt.Errorf("Codex thread/start returned no thread id")
 	}
+	if response.Thread.ApprovalPolicy != options.ApprovalPolicy || response.Thread.Sandbox != options.Sandbox {
+		return Thread{}, fmt.Errorf("Codex thread/start effective policy = approvalPolicy %q, sandbox %q; want approvalPolicy %q, sandbox %q", response.Thread.ApprovalPolicy, response.Thread.Sandbox, options.ApprovalPolicy, options.Sandbox)
+	}
 	return Thread{
 		ID:                 response.Thread.ID,
 		Model:              response.Model,
 		ModelProvider:      response.ModelProvider,
+		ApprovalPolicy:     response.Thread.ApprovalPolicy,
+		Sandbox:            response.Thread.Sandbox,
 		InstructionSources: append([]string(nil), response.InstructionSources...),
 		Ephemeral:          response.Thread.Ephemeral,
 	}, nil
@@ -263,6 +275,13 @@ func (client *Client) InterruptTurn(ctx context.Context, threadID string, turnID
 // Notifications returns normalized server notifications in protocol order.
 func (client *Client) Notifications() <-chan Notification {
 	return client.notifications
+}
+
+// NotificationsDropped returns the number of lifecycle notifications discarded because the bounded telemetry queue was full.
+func (client *Client) NotificationsDropped() uint64 {
+	client.notificationMu.Lock()
+	defer client.notificationMu.Unlock()
+	return client.notificationsDropped
 }
 
 // Close terminates the complete app-server process group with a fresh cleanup budget.
@@ -366,13 +385,24 @@ func (client *Client) read(stdout *os.File) {
 			client.deliverResponse(*message.ID, message)
 			continue
 		}
-		client.notifications <- Notification{Method: message.Method, Params: append(json.RawMessage(nil), message.Params...)}
+		client.deliverNotification(Notification{Method: message.Method, Params: append(json.RawMessage(nil), message.Params...)})
 	}
 	if err := scanner.Err(); err != nil {
 		client.setReadError(fmt.Errorf("read Codex app-server output: %w", err))
 		return
 	}
 	client.setReadError(io.EOF)
+}
+
+// deliverNotification keeps protocol-response delivery independent from telemetry consumption.
+func (client *Client) deliverNotification(notification Notification) {
+	select {
+	case client.notifications <- notification:
+	default:
+		client.notificationMu.Lock()
+		client.notificationsDropped++
+		client.notificationMu.Unlock()
+	}
 }
 
 // deliverResponse removes a waiter before delivery so request cancellation cannot leave stale response state.

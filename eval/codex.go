@@ -255,6 +255,9 @@ func (session *session) Wait(ctx context.Context) (AgentResult, error) {
 	session.mu.Unlock()
 
 	for {
+		if dropped := session.client.NotificationsDropped(); dropped > 0 {
+			return AgentResult{}, fmt.Errorf("Codex telemetry overflow: discarded %d lifecycle notifications", dropped)
+		}
 		select {
 		case notification, ok := <-session.client.Notifications():
 			if !ok {
