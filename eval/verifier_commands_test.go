@@ -121,7 +121,7 @@ func TestInvoiceBehaviorProbeRejectsProductionInitExit(t *testing.T) {
 	}
 	command := exec.Command("go", "test", "-json", ".", "-run", "^TestAtlasInvoiceHTTPBehavior$", "-count=1")
 	command.Dir = root
-	command.Env = append(os.Environ(), "GOCACHE=/tmp/gocache", "GOMODCACHE=/tmp/gomodcache")
+	command.Env = append(os.Environ(), "GOCACHE=/tmp/gocache", "GOMODCACHE=/tmp/gomodcache", "GOWORK=off")
 	output, err := command.Output()
 	if err != nil {
 		t.Fatalf("go test unexpectedly failed: %v", err)
