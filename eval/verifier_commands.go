@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	verifierCommandTimeout = 30 * time.Second
+	// verifierCommandTimeout allows a generated Project to compile from a private cold build cache without permitting an indefinite child process.
+	verifierCommandTimeout = 2 * time.Minute
 	maxVerifierOutput      = 1 << 20
 	maxProjectTreeEntries  = 25_000
 	maxProjectTreeBytes    = int64(2 << 30)
