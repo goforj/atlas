@@ -85,7 +85,9 @@ func TestSurfaceVerifierRejectsOutOfScopeChanges(t *testing.T) {
 func TestSurfaceVerifierAllowsToolDerivedOutputs(t *testing.T) {
 	result := verifySurfaceOwnership([]ProjectChange{
 		{Path: "go.sum"},
+		{Path: "bin"},
 		{Path: "bin/app"},
+		{Path: "build"},
 		{Path: "build/api_index.json"},
 		{Path: "app/wire/wire_gen.go"},
 	}, nil)

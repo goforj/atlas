@@ -155,7 +155,7 @@ func derivedSurfaceChange(path string) bool {
 	if path == "go.sum" || filepath.Base(path) == "wire_gen.go" {
 		return true
 	}
-	return strings.HasPrefix(path, "bin/") || strings.HasPrefix(path, "build/")
+	return path == "bin" || path == "build" || strings.HasPrefix(path, "bin/") || strings.HasPrefix(path, "build/")
 }
 
 // verifySurfaceSource finds syntax-bearing facts without counting comments as implementation evidence.
