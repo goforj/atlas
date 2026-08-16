@@ -14,12 +14,13 @@ import (
 
 // fakePreparer records whether preflight reached Project mutation.
 type fakePreparer struct {
-	capabilities PreparationCapabilities
-	plan         ResolvedPreparationPlan
-	planDigests  []string
-	project      *fakePreparedProject
-	resolveCalls int
-	prepareCalls int
+	capabilities  PreparationCapabilities
+	plan          ResolvedPreparationPlan
+	planDigests   []string
+	project       *fakePreparedProject
+	resolveCalls  int
+	prepareCalls  int
+	guidanceCalls int
 }
 
 // fakeGuidanceResolver returns one attributable treatment after Project preparation.
@@ -59,6 +60,15 @@ func (preparer *fakePreparer) Prepare(_ context.Context, _ PreparationRequest, p
 	preparer.project.result.ResolutionID = plan.ResolutionID
 	preparer.project.result.PlanDigest = plan.PlanDigest
 	return preparer.project, nil
+}
+
+// MaterializeGuidance records the Project-owned treatment boundary used by runner tests.
+func (preparer *fakePreparer) MaterializeGuidance(_ context.Context, project PreparedProject, guidance Guidance) (Guidance, error) {
+	preparer.guidanceCalls++
+	if project == nil || project.Result().ProjectRoot == "" {
+		return Guidance{}, errors.New("prepared Project is required")
+	}
+	return guidance, nil
 }
 
 // fakePreparedProject owns one deterministic preparation result.

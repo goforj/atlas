@@ -20,6 +20,9 @@ const (
 // TestAdapterRunsFreshAttributedDiagnosticSession exercises guidance attribution and event normalization through the real protocol client.
 func TestAdapterRunsFreshAttributedDiagnosticSession(t *testing.T) {
 	projectRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(projectRoot, "AGENTS.md"), []byte("Use GoForj generators.\n"), 0o644); err != nil {
+		t.Fatalf("write project guidance: %v", err)
+	}
 	homeRoot := t.TempDir()
 	credential := filepath.Join(t.TempDir(), "auth.json")
 	if err := os.WriteFile(credential, []byte(`{"token":"fixture"}`), 0o600); err != nil {
@@ -128,21 +131,19 @@ func TestAdapterRejectsUnexpectedInstructionSources(t *testing.T) {
 	}
 }
 
-// TestAdapterPrepareRollsBackGuidanceOnCredentialFailure prevents a failed treatment setup from contaminating a later attempt.
-func TestAdapterPrepareRollsBackGuidanceOnCredentialFailure(t *testing.T) {
+// TestAdapterPrepareDoesNotMutateGuidanceOnCredentialFailure keeps native Project treatment ownership outside the provider adapter.
+func TestAdapterPrepareDoesNotMutateGuidanceOnCredentialFailure(t *testing.T) {
 	projectRoot := t.TempDir()
 	adapter, err := NewCodexAgent(CodexOptions{Executable: os.Args[0], Model: "gpt-test", CredentialSource: filepath.Join(t.TempDir(), "missing-auth.json")})
 	if err != nil {
 		t.Fatalf("NewCodexAgent(): %v", err)
 	}
-	_, err = adapter.Prepare(context.Background(), RunEnvironment{ProjectRoot: projectRoot, HomeRoot: t.TempDir()}, Guidance{
-		Files: map[string][]byte{".agent/AGENTS.md": []byte("fixture")},
-	})
+	_, err = adapter.Prepare(context.Background(), RunEnvironment{ProjectRoot: projectRoot, HomeRoot: t.TempDir()}, Guidance{Files: map[string][]byte{".agent/AGENTS.md": []byte("fixture")}})
 	if err == nil {
 		t.Fatal("Prepare() succeeded without a credential")
 	}
 	if _, statErr := os.Stat(filepath.Join(projectRoot, ".agent")); !os.IsNotExist(statErr) {
-		t.Fatalf("failed preparation retained guidance state: %v", statErr)
+		t.Fatalf("provider adapter mutated project guidance: %v", statErr)
 	}
 }
 

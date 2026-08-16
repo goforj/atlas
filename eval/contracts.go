@@ -207,6 +207,7 @@ type ProjectPreparer interface {
 	Capabilities(context.Context) (PreparationCapabilities, error)
 	Resolve(context.Context, PreparationRequest) (ResolvedPreparationPlan, error)
 	Prepare(context.Context, PreparationRequest, ResolvedPreparationPlan) (PreparedProject, error)
+	MaterializeGuidance(context.Context, PreparedProject, Guidance) (Guidance, error)
 }
 
 // Guidance is the exact native instructions, skills, and MCP selection installed for one treatment.
