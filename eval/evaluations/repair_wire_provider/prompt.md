@@ -1,0 +1,1 @@
+The App no longer builds after its report controller began requiring the existing report service. Diagnose the dependency-injection failure and repair the owning source configuration. Do not hand-edit derived output. Leave the report route visible and the Project working.

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,7 +22,37 @@ import (
 var promotedEvaluationFiles embed.FS
 
 var promotedEvaluationDirectories = map[string]string{
-	"add-http-controller": "evaluations/add_http_controller",
+	"add-app-command":         "evaluations/add_app_command",
+	"add-event-subscriber":    "evaluations/add_event_subscriber",
+	"add-http-controller":     "evaluations/add_http_controller",
+	"add-job":                 "evaluations/add_job",
+	"add-named-app-route":     "evaluations/add_named_app_route",
+	"add-named-cache":         "evaluations/add_named_cache",
+	"add-named-resource":      "evaluations/add_named_resource",
+	"add-named-storage":       "evaluations/add_named_storage",
+	"add-schedule":            "evaluations/add_schedule",
+	"create-model":            "evaluations/create_model",
+	"repair-wire-provider":    "evaluations/repair_wire_provider",
+	"unknown-framework-shape": "evaluations/unknown_framework_shape",
+}
+
+// PromotedEvaluationIDs returns promoted evaluation IDs in stable order, optionally limited to one suite.
+func PromotedEvaluationIDs(suite string) ([]string, error) {
+	ids := make([]string, 0, len(promotedEvaluationDirectories))
+	for id := range promotedEvaluationDirectories {
+		if strings.TrimSpace(suite) != "" {
+			definition, err := LoadPromotedDefinition(id)
+			if err != nil {
+				return nil, err
+			}
+			if definition.Suite != suite {
+				continue
+			}
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids, nil
 }
 
 const evaluationManifestSchemaVersion = 1

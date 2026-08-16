@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-app-command
+summary: Add a context-aware command that invokes existing invoice behavior.
+suite: core
+project_scenario: invoice-app-command
+workflow: goforj-add-app-command/v1
+verifier: add-app-command/v1
+limits:
+  wall_time: 8m
+  commands: 40
+  shell_network: off

@@ -1,0 +1,11 @@
+schema_version: 1
+id: repair-wire-provider
+summary: Diagnose and repair a missing report service provider.
+suite: core
+project_scenario: repair-report-wire-provider
+workflow: goforj-repair-wire-provider/v1
+verifier: repair-wire-provider/v1
+limits:
+  wall_time: 8m
+  commands: 40
+  shell_network: off

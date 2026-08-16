@@ -31,6 +31,8 @@ const (
 	CapabilityVerifierIsolation Capability = "verifier_isolation"
 	// CapabilityArtifactIsolation proves candidate processes cannot read signing authority or mutate retained evidence.
 	CapabilityArtifactIsolation Capability = "artifact_isolation"
+	// CapabilityFinalResponseCapture proves the adapter returns the provider's exact terminal response to the verifier.
+	CapabilityFinalResponseCapture Capability = "final_response_capture"
 )
 
 // EvaluationDefinition is one resolved manifest and its adjacent natural-language prompt.
@@ -122,6 +124,8 @@ type VerificationInput struct {
 	// Changes is the supervisor-computed, path-level projection of the sealed Project delta.
 	Changes []ProjectChange
 	Events  []Event
+	// FinalResponse is the exact terminal provider response captured by the adapter.
+	FinalResponse string
 }
 
 // ProjectPathState identifies one Project path at a sealed snapshot. A zero value means the path was absent.
@@ -143,6 +147,7 @@ type VerificationResult struct {
 	FrameworkOutcome    EndpointResult   `json:"framework_outcome"`
 	WorkflowConformance EndpointResult   `json:"workflow_conformance"`
 	Contract            *EndpointResult  `json:"contract,omitempty"`
+	Abstention          *EndpointResult  `json:"abstention,omitempty"`
 	Checks              []EndpointResult `json:"checks,omitempty"`
 }
 

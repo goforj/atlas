@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-named-app-route
+summary: Add an audit endpoint to the additional admin App.
+suite: core
+project_scenario: admin-audit-route
+workflow: goforj-add-named-app-route/v1
+verifier: add-named-app-route/v1
+limits:
+  wall_time: 8m
+  commands: 45
+  shell_network: off

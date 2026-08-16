@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-schedule
+summary: Add hourly invoice reconciliation through the scheduler.
+suite: core
+project_scenario: invoice-reconcile-schedule
+workflow: goforj-add-schedule/v1
+verifier: add-schedule/v1
+limits:
+  wall_time: 8m
+  commands: 40
+  shell_network: off

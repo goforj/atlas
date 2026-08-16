@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -73,7 +74,7 @@ func TestAdapterRunsFreshAttributedDiagnosticSession(t *testing.T) {
 		t.Fatalf("NewCodexAgent(): %v", err)
 	}
 	capabilities, err := adapter.Properties(context.Background())
-	if err != nil || len(capabilities.Properties) != 0 {
+	if err != nil || !reflect.DeepEqual(capabilities.Properties, []Capability{CapabilityFinalResponseCapture}) {
 		t.Fatalf("Properties() = %#v, %v", capabilities, err)
 	}
 	prepared, err := adapter.Prepare(context.Background(), RunEnvironment{ProjectRoot: projectRoot, HomeRoot: homeRoot}, Guidance{

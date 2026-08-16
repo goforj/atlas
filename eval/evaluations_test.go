@@ -35,3 +35,51 @@ func TestAddHTTPControllerEvaluationLoads(t *testing.T) {
 		}
 	}
 }
+
+// TestPromotedMajorSurfaceEvaluationsResolve keeps every shipped manifest joined to reviewed workflow and verifier contracts.
+func TestPromotedMajorSurfaceEvaluationsResolve(t *testing.T) {
+	runner := &fakeCommandRunner{}
+	registry, err := NewRegistry(PromotedWorkflows(), PromotedVerifiers(runner))
+	if err != nil {
+		t.Fatalf("NewRegistry(): %v", err)
+	}
+	ids := []string{
+		"add-app-command",
+		"add-event-subscriber",
+		"add-http-controller",
+		"add-job",
+		"add-named-app-route",
+		"add-named-cache",
+		"add-named-resource",
+		"add-named-storage",
+		"add-schedule",
+		"create-model",
+		"repair-wire-provider",
+		"unknown-framework-shape",
+	}
+	for _, id := range ids {
+		t.Run(id, func(t *testing.T) {
+			definition, err := LoadPromotedDefinition(id)
+			if err != nil {
+				t.Fatalf("LoadPromotedDefinition(): %v", err)
+			}
+			if definition.ID != id || definition.PromptDigest == "" || definition.Suite != "core" {
+				t.Fatalf("definition = %#v", definition)
+			}
+			if _, err := registry.Resolve(definition); err != nil {
+				t.Fatalf("Resolve(): %v", err)
+			}
+		})
+	}
+}
+
+// TestPromotedEvaluationIDsReturnsStableSuiteCatalog keeps CLI discovery aligned with embedded manifests.
+func TestPromotedEvaluationIDsReturnsStableSuiteCatalog(t *testing.T) {
+	ids, err := PromotedEvaluationIDs("core")
+	if err != nil {
+		t.Fatalf("PromotedEvaluationIDs(): %v", err)
+	}
+	if len(ids) != 12 || ids[0] != "add-app-command" || ids[len(ids)-1] != "unknown-framework-shape" {
+		t.Fatalf("ids = %v", ids)
+	}
+}

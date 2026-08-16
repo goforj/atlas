@@ -446,11 +446,12 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		return result, fmt.Errorf("project change projection: %w", err)
 	}
 	verification, err := resolved.Verifier.Verify(ctx, VerificationInput{
-		ProjectRoot:  sealed.Root,
-		BaselineTree: baselineTree,
-		FinalTree:    sealed.TreeDigest,
-		Changes:      changes,
-		Events:       supervisorEvents,
+		ProjectRoot:   sealed.Root,
+		BaselineTree:  baselineTree,
+		FinalTree:     sealed.TreeDigest,
+		Changes:       changes,
+		Events:        supervisorEvents,
+		FinalResponse: agentResult.Message,
 	})
 	if err != nil {
 		result.EvaluationStatus = EvaluationEvaluatorError
@@ -460,6 +461,9 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	verification.WorkflowConformance = workflow
 	verification.Checks = append(verification.Checks, workflowChecks...)
 	result.Verification = &verification
+	if verification.Abstention != nil && verification.Abstention.Status == EndpointPassed {
+		result.AgentOutcome = AgentAbstained
+	}
 	if request.Intent == IntentDiagnostic {
 		verification.FrameworkOutcome = EndpointResult{ID: verification.FrameworkOutcome.ID, Status: EndpointIneligible, Details: "diagnostic backend cannot establish an authoritative framework outcome"}
 		if verification.Contract != nil {
@@ -724,8 +728,11 @@ func intersectCapabilities(groups ...[]Capability) []Capability {
 // effectiveBackendCapabilities keeps backend observation authoritative while requiring the adapter to prove properties it can weaken.
 func effectiveBackendCapabilities(backendCapabilities, agentProperties []Capability) []Capability {
 	available := intersectCapabilities(backendCapabilities)
+	if capabilityAvailable(agentProperties, CapabilityFinalResponseCapture) {
+		available = append(available, CapabilityFinalResponseCapture)
+	}
 	if capabilityAvailable(agentProperties, CapabilityCredentialIsolation) {
-		return available
+		return sortedUniqueCapabilities(available)
 	}
 	filtered := available[:0]
 	for _, capability := range available {
@@ -733,7 +740,22 @@ func effectiveBackendCapabilities(backendCapabilities, agentProperties []Capabil
 			filtered = append(filtered, capability)
 		}
 	}
-	return filtered
+	return sortedUniqueCapabilities(filtered)
+}
+
+// sortedUniqueCapabilities keeps composite backend and adapter properties stable for preflight and reports.
+func sortedUniqueCapabilities(capabilities []Capability) []Capability {
+	seen := make(map[Capability]bool, len(capabilities))
+	result := make([]Capability, 0, len(capabilities))
+	for _, capability := range capabilities {
+		if seen[capability] {
+			continue
+		}
+		seen[capability] = true
+		result = append(result, capability)
+	}
+	sort.Slice(result, func(left, right int) bool { return result[left] < result[right] })
+	return result
 }
 
 // capabilityAvailable reports whether one component explicitly claims a capability.

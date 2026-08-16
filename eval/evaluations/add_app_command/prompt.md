@@ -1,0 +1,1 @@
+Add an `invoices:show` App command that accepts an invoice ID, loads it through the existing invoice application behavior, and prints the invoice ID and total. Preserve cancellation from command invocation and leave the Project working.
