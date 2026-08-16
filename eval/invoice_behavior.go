@@ -15,7 +15,7 @@ import (
 	"text/template"
 )
 
-const invoiceBehaviorSuccessExitCode = 86
+const invoiceBehaviorIneligibleDetails = "candidate production and the hidden oracle share one process, so successful test completion has no independent provenance"
 
 // invoiceControllerSource retains the semantic controller and its path without imposing the golden package placement.
 type invoiceControllerSource struct {
@@ -46,7 +46,6 @@ type invoiceBehaviorTemplateData struct {
 	BoundaryField      string
 	BoundaryExpression string
 	HandlerName        string
-	SuccessExitCode    int
 }
 
 const invoiceBehaviorProbeTemplate = `package {{.PackageName}}
@@ -58,7 +57,6 @@ import (
 	"encoding/json"
 	{{.HTTPImport}}
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/goforj/web/webtest"
@@ -66,13 +64,6 @@ import (
 	{{.InvoiceImport}}
 {{- end}}
 )
-// TestMain reserves a nonzero process status as the hidden test's completion signal.
-func TestMain(m *testing.M) {
-	if m.Run() == 0 {
-		os.Exit({{.SuccessExitCode}})
-	}
-	os.Exit(1)
-}
 {{if .UsesBoundaryStub}}
 // atlasInvoiceQueryStub isolates transport behavior from candidate-authored tests while preserving the expected application boundary.
 type atlasInvoiceQueryStub struct{}
@@ -155,11 +146,17 @@ func runInvoiceBehaviorProbe(ctx context.Context, runner CommandRunner, root str
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
 	}
 	const testName = "TestAtlasInvoiceHTTPBehavior"
-	_, err = session.RunTestBinary(ctx, "./"+filepath.ToSlash(probe.relativeDirectory), testName, invoiceBehaviorSuccessExitCode)
+	command := []string{"go", "test", "./" + filepath.ToSlash(probe.relativeDirectory), "-run", "^" + testName + "$", "-count=1"}
+	_, err = session.Run(ctx, command)
+	return invoiceBehaviorExecutionResult(err)
+}
+
+// invoiceBehaviorExecutionResult retains failures as diagnostics without promoting same-process success to authoritative evidence.
+func invoiceBehaviorExecutionResult(err error) EndpointResult {
 	if err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
 	}
-	return EndpointResult{ID: "invoice-behavior", Status: EndpointPassed}
+	return EndpointResult{ID: "invoice-behavior", Status: EndpointIneligible, Details: invoiceBehaviorIneligibleDetails}
 }
 
 // resolveInvoiceBehaviorProbe derives only names and placement while keeping expected behavior owned by the verifier contract.
@@ -318,7 +315,6 @@ func renderInvoiceBehaviorProbe(probe invoiceBehaviorProbe) ([]byte, error) {
 		BoundaryField:      probe.boundaryField,
 		BoundaryExpression: boundaryExpression,
 		HandlerName:        probe.handlerName,
-		SuccessExitCode:    invoiceBehaviorSuccessExitCode,
 	}); err != nil {
 		return nil, fmt.Errorf("execute invoice behavior probe: %w", err)
 	}
