@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-route-middleware
+summary: Add application-owned middleware around an existing route.
+suite: core
+project_scenario: invoice-token-middleware
+workflow: goforj-add-route-middleware/v1
+verifier: add-route-middleware/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off

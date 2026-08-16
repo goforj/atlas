@@ -1,0 +1,1 @@
+Protect the invoice lookup route with an `X-Invoice-Token` policy. Resolve `INVOICE_HTTP_TOKEN` once during application composition, reject missing or unconfigured tokens, keep the policy out of invoice business behavior, and test both rejected and accepted requests.

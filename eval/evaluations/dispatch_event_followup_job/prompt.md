@@ -1,0 +1,1 @@
+Move the user-created report reaction onto a typed `reports:generate` job. The payload should carry the user identity needed to reload current state, the handler should invoke the report application service, and queue and storage drivers should remain behind GoForj abstractions. Use the job generator and keep registration, context propagation, and tests working.

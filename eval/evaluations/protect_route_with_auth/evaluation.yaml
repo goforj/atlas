@@ -1,0 +1,11 @@
+schema_version: 1
+id: protect-route-with-auth
+summary: Protect an application route through generated Auth composition.
+suite: core
+project_scenario: protect-invoice-route
+workflow: goforj-protect-route-with-auth/v1
+verifier: protect-route-with-auth/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off

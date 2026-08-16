@@ -1,0 +1,1 @@
+Add an App readiness hook that verifies the existing invoice application behavior before startup completes. Wire the required service through the existing lifecycle registry, honor startup cancellation, return useful failure context, and keep I/O out of constructors and runtime bootstrap.

@@ -1,0 +1,1 @@
+Add `POST /api/v1/invoices`. Reject malformed JSON separately from decoded invalid input, return stable field-level validation codes, normalize the customer identifier, and keep creation behavior behind the existing invoice service and repository. Add focused tests and keep the existing invoice lookup endpoint working.

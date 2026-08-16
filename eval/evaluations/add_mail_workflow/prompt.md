@@ -1,0 +1,1 @@
+Add an invoice receipt delivery service. It should load the current invoice, construct deterministic receipt content, send through the App's configured default mailer, preserve caller cancellation, and remain independent from SMTP or provider SDKs. Add focused tests without contacting a real provider.

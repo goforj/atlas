@@ -1,0 +1,1 @@
+Add `GET /api/v1/users/:id` to this App. Use the framework's normal controller workflow, keep HTTP translation thin, and put user lookup behind application behavior that remains testable without starting the server. Return a useful not-found response and leave the route, Wire graph, and Project working.

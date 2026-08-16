@@ -1,0 +1,11 @@
+schema_version: 1
+id: add-upload-workflow
+summary: Add a validated upload workflow backed by named storage.
+suite: core
+project_scenario: file-upload-storage
+workflow: goforj-add-upload-workflow/v1
+verifier: add-upload-workflow/v1
+limits:
+  wall_time: 10m
+  commands: 70
+  shell_network: off

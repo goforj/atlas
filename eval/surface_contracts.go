@@ -109,6 +109,137 @@ func promotedSurfaceContracts() []surfaceContract {
 			},
 			commands: append(standardSurfaceCommands(), commandContract{id: "report-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/reports"}),
 		},
+		{
+			id:             "build-json-api-feature/v1",
+			allowedChanges: []string{"internal/users/*.go", "app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"},
+			sources: []sourceContract{
+				{id: "users-application-boundary", paths: []string{"internal/users/service.go", "internal/users/controller.go"}, identifiers: []string{"User", "Service", "Find", "Controller", "Show", "Routes"}, selectorCalls: []string{"Find", "Param", "JSON", "NewRoute"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"/users/:id"}},
+				{id: "users-registration", paths: []string{"app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewController", "NewService"}},
+			},
+			commands: append(standardSurfaceCommands(), commandContract{id: "users-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/users/:id"}),
+		},
+		{
+			id:             "create-additional-app/v1",
+			allowedChanges: []string{".env", ".env.example", ".env.local", ".goforj.yml", "Dockerfile", "Makefile", "app/statuspage/**", "cmd/statuspage/**", "internal/runtime/apps.go", "internal/runtime/apps_test.go"},
+			sources: []sourceContract{
+				{id: "statuspage-project-config", paths: []string{".goforj.yml"}, text: []string{"statuspage:", "./bin/statuspage"}},
+				{id: "statuspage-entrypoint", paths: []string{"cmd/statuspage/main.go"}, identifiers: []string{"main"}, selectorCalls: []string{"LaunchApplication"}},
+				{id: "statuspage-app-boundary", paths: []string{"app/statuspage/routes.go", "app/statuspage/wire/*.go"}, identifiers: []string{"ProvideRoutes", "InitializeApplication"}},
+			},
+			commands: append(standardSurfaceCommands(), commandContract{id: "statuspage-build", arguments: []string{"forj", "statuspage", "build"}}),
+		},
+		{
+			id:             "add-app-lifecycle-hook/v1",
+			allowedChanges: []string{"app/lifecycle.go"},
+			sources: []sourceContract{
+				{id: "application-readiness-hook", paths: []string{"app/lifecycle.go"}, identifiers: []string{"LifecycleRegistry", "NewLifecycleRegistry", "Register", "BeforeStartup", "Service"}, selectorCalls: []string{"On", "Find"}, forbiddenCalls: []string{"Background", "TODO"}, text: []string{"runtime.BeforeStartup"}},
+			},
+			commands: standardSurfaceCommands(),
+		},
+		{
+			id:             "add-outbound-http-integration/v1",
+			allowedChanges: []string{"go.mod", "go.sum", "internal/taxrates/*.go", "app/wire/inject_services_app.go"},
+			sources: []sourceContract{
+				{id: "typed-http-client", paths: []string{"internal/taxrates/client.go"}, identifiers: []string{"Rate", "Client", "NewClient", "Find", "GetCtx"}, selectorCalls: []string{"PathEscape"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "http-client-provider", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"provideTaxRateClient", "NewClient"}, selectorCalls: []string{"Get"}},
+			},
+			commands: standardSurfaceCommands(commandContract{id: "integration-tests", arguments: []string{"go", "test", "./internal/taxrates"}}),
+		},
+		{
+			id:             "add-validated-write-endpoint/v1",
+			allowedChanges: []string{"internal/invoices/*.go"},
+			sources: []sourceContract{
+				{id: "validated-request-boundary", paths: []string{"internal/invoices/controller.go"}, identifiers: []string{"createInvoiceRequest", "validationErrorResponse", "Store", "CreateInput", "MethodPost"}, selectorCalls: []string{"Bind", "Create", "JSON"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"/invoices", "invalid_payload", "validation_failed", "customer_id", "total_cents"}},
+				{id: "invoice-create-behavior", paths: []string{"internal/invoices/repository.go", "internal/invoices/service.go"}, identifiers: []string{"Repository", "Create", "CreateInput"}, forbiddenCalls: []string{"Background", "TODO"}},
+			},
+			commands: append(standardSurfaceCommands(), commandContract{id: "invoice-write-route", arguments: []string{"forj", "route:list"}, contains: "/api/v1/invoices"}),
+		},
+		{
+			id:             "add-route-middleware/v1",
+			allowedChanges: []string{"internal/invoices/controller.go", "internal/invoices/middleware.go", "internal/invoices/middleware_test.go", "app/wire/inject_http_controllers_app.go"},
+			sources: []sourceContract{
+				{id: "invoice-token-policy", paths: []string{"internal/invoices/middleware.go", "internal/invoices/controller.go"}, identifiers: []string{"RequireToken"}, selectorCalls: []string{"Request", "Get", "JSON", "NewRoute"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"X-Invoice-Token", "unauthorized"}, text: []string{"RequireToken(controller.token)"}},
+				{id: "resolved-token-provider", paths: []string{"app/wire/inject_http_controllers_app.go"}, identifiers: []string{"provideInvoiceController", "NewController"}, selectorCalls: []string{"Get"}, stringLiterals: []string{"INVOICE_HTTP_TOKEN"}},
+			},
+			commands: standardSurfaceCommands(commandContract{id: "middleware-tests", arguments: []string{"go", "test", "./internal/invoices", "-run", "TestRequireToken"}}),
+		},
+		{
+			id:             "add-database-transaction/v1",
+			allowedChanges: []string{"go.mod", "go.sum", "internal/accounts/*.go", "app/wire/inject_services_app.go"},
+			sources: []sourceContract{
+				{id: "transaction-bound-repository", paths: []string{"internal/accounts/repository.go"}, identifiers: []string{"Repository", "WithTransaction", "AdjustBalance"}, selectorCalls: []string{"WithContext", "Transaction", "UpdateColumn"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, selectorCalls: []string{"WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "account-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewRepository", "NewService"}},
+			},
+			commands: standardSurfaceCommands(commandContract{id: "transaction-tests", arguments: []string{"go", "test", "./internal/accounts", "-run", "TestTransferCommitsOrRollsBack"}}),
+		},
+		{
+			id:             "add-mail-workflow/v1",
+			allowedChanges: []string{"internal/invoices/receipt_mailer.go", "internal/invoices/receipt_mailer_test.go", "app/wire/inject_services_app.go"},
+			sources: []sourceContract{
+				{id: "receipt-mail-service", paths: []string{"internal/invoices/receipt_mailer.go"}, identifiers: []string{"ReceiptMailer", "NewReceiptMailer", "Send", "Manager"}, selectorCalls: []string{"Find", "Default", "Message", "To", "Subject", "Text", "Send"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "receipt-mail-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewReceiptMailer"}},
+			},
+			forbiddenText: []textExclusion{{id: "no-provider-sdk", paths: []string{"internal/invoices/receipt_mailer.go"}, text: "smtp"}},
+			commands:      standardSurfaceCommands(commandContract{id: "receipt-tests", arguments: []string{"go", "test", "./internal/invoices", "-run", "TestReceiptContent"}}),
+		},
+		{
+			id:             "protect-route-with-auth/v1",
+			allowedChanges: []string{".env", ".env.example", ".env.local", "app/routes.go"},
+			sources: []sourceContract{
+				{id: "generated-auth-composition", paths: []string{"app/routes.go"}, identifiers: []string{"publicRoutes", "protectedRoutes", "invoicesController", "authService", "RequireAuth"}, selectorCalls: []string{"NewRouteGroup"}},
+			},
+			forbiddenText: []textExclusion{{id: "invoice-not-public", paths: []string{"app/routes.go"}, text: "authController.Routes(),\n\t\tinvoicesController.Routes(),"}},
+			commands:      append(standardSurfaceCommands(), commandContract{id: "protected-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/invoices/:id"}),
+		},
+		{
+			id:             "add-cached-repository/v1",
+			allowedChanges: []string{".env", ".env.example", "internal/caches/*_gen.go", "internal/users/*.go", "app/wire/inject_services_app.go"},
+			sources: []sourceContract{
+				{id: "cache-aside-repository", paths: []string{"internal/users/repository.go", "internal/users/service.go"}, identifiers: []string{"UserRepository", "MemoryUserRepository", "CachedUserRepository", "Get", "Set"}, selectorCalls: []string{"WithContext", "Find"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "profiles-cache-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewCachedUserRepository"}, selectorCalls: []string{"Profiles"}},
+			},
+			commands: standardSurfaceCommands(),
+		},
+		{
+			id:             "add-upload-workflow/v1",
+			allowedChanges: []string{".env", ".env.example", "go.mod", "internal/storages/*_gen.go", "internal/uploads/*.go", "app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"},
+			sources: []sourceContract{
+				{id: "upload-boundary", paths: []string{"internal/uploads/service.go", "internal/uploads/controller.go"}, identifiers: []string{"StoreInput", "StoredUpload", "Service", "Controller", "Store", "Routes"}, selectorCalls: []string{"Bind", "Store", "NewRoute"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"/uploads"}},
+				{id: "uploads-storage-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}, selectorCalls: []string{"Uploads"}},
+			},
+			commands: append(standardSurfaceCommands(), commandContract{id: "uploads-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/uploads"}),
+		},
+		{
+			id:             "publish-domain-event/v1",
+			allowedChanges: []string{"internal/events/*.go", "internal/users/*.go", "internal/notifications/*.go", "app/routes.go", "app/lifecycle.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"},
+			sources: []sourceContract{
+				{id: "typed-user-event", paths: []string{"internal/events/*.go"}, identifiers: []string{"UserCreated", "UserID", "Topic"}, stringLiterals: []string{"users.created"}},
+				{id: "domain-event-publication", paths: []string{"internal/users/events.go", "internal/users/service.go"}, identifiers: []string{"UserEvents", "UserEventPublisher", "PublishCreated"}, selectorCalls: []string{"Publish", "WithContext"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "event-reaction", paths: []string{"internal/notifications/subscribers.go", "app/lifecycle.go"}, identifiers: []string{"Subscribers", "Register", "Startup"}, selectorCalls: []string{"Subscribe"}, forbiddenCalls: []string{"Background", "TODO"}},
+			},
+			commands: standardSurfaceCommands(),
+		},
+		{
+			id:             "dispatch-event-followup-job/v1",
+			allowedChanges: []string{".env", ".env.example", "internal/jobs/*.go", "internal/reports/*.go", "internal/notifications/*.go", "internal/storages/*_gen.go", "app/lifecycle.go", "app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"},
+			sources: []sourceContract{
+				{id: "typed-report-job", paths: []string{"internal/reports/service.go", "internal/reports/generate_job.go"}, identifiers: []string{"GeneratePayload", "GenerateJob", "GenerateJobTypeName", "HandleTask", "ReportQueue"}, selectorCalls: []string{"Dispatch", "Bind", "GenerateForUser"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:generate"}},
+				{id: "event-job-boundary", paths: []string{"internal/notifications/service.go"}, identifiers: []string{"HandleUserCreated", "ReportQueue"}, selectorCalls: []string{"Queue"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "report-job-registration", paths: []string{"app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewGenerateJob", "NewService"}},
+			},
+			commands: standardSurfaceCommands(),
+		},
+		{
+			id:             "schedule-existing-job/v1",
+			allowedChanges: []string{"internal/reports/*.go", "internal/users/*.go", "app/wire/inject_schedules_app.go", "app/wire/inject_services_app.go"},
+			sources: []sourceContract{
+				{id: "scheduled-job-dispatch", paths: []string{"internal/reports/daily.go", "internal/reports/daily_schedule.go"}, identifiers: []string{"DailyTarget", "DailyTargetRepository", "DailyRunner", "DailySchedule", "Interval", "Handle"}, selectorCalls: []string{"ListDailyReportTargets", "Queue", "Run"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:daily"}},
+				{id: "daily-target-repository", paths: []string{"internal/users/*.go"}, identifiers: []string{"ListDailyReportTargets"}},
+				{id: "daily-schedule-registration", paths: []string{"app/wire/inject_schedules_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewDailySchedule", "NewDailyRunner"}},
+			},
+			commands: standardSurfaceCommands(),
+		},
 	}
 }
 

@@ -1,0 +1,1 @@
+Add a typed client for the configured tax-rate service. Keep the remote HTTP contract in a focused package, propagate cancellation from callers, return useful error context, keep deployment configuration at the provider boundary, and test it with a local HTTP fixture rather than the external network.

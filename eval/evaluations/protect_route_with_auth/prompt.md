@@ -1,0 +1,1 @@
+Require generated App authentication for the existing invoice lookup route. Keep Auth endpoints public, use the existing generated middleware and route-group composition, and do not copy credential or session checks into the invoice controller.

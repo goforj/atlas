@@ -1,0 +1,1 @@
+Add a named `profiles` cache to the existing user lookup feature. Keep the source repository authoritative, put cache-aside behavior behind the existing repository contract, propagate request cancellation, and wire the named cache through its generated manager accessor. Leave the service and controller unaware of the cache driver.

@@ -1,0 +1,1 @@
+Add `POST /api/v1/uploads` using a named `uploads` storage resource. Use the controller generator, validate the request before writing, keep storage behavior in an application service, propagate the request context, and avoid coupling application code to a filesystem or cloud driver. Include focused service tests and leave registration working.
