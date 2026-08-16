@@ -74,7 +74,7 @@ func (*SafeAbstentionVerifier) Verify(_ context.Context, input VerificationInput
 // hasAuthoredSurfaceChange separates speculative edits from build artifacts created while inspecting local framework behavior.
 func hasAuthoredSurfaceChange(changes []ProjectChange) bool {
 	for _, change := range changes {
-		if !derivedSurfaceChange(change.Path) {
+		if !derivedSurfaceProjectChange(change) {
 			return true
 		}
 	}
