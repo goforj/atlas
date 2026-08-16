@@ -89,6 +89,8 @@ func TestSurfaceVerifierAllowsToolDerivedOutputs(t *testing.T) {
 		{Path: "bin/app"},
 		{Path: "build"},
 		{Path: "build/api_index.json"},
+		{Path: "storage", After: ProjectPathState{Kind: "directory"}},
+		{Path: "storage/app/private", After: ProjectPathState{Kind: "directory"}},
 		{Path: "app/wire/wire_gen.go"},
 		{Path: "internal/database/_data", After: ProjectPathState{Kind: "directory"}},
 		{Path: "internal/database/_data/sqlite/app.db"},

@@ -19,7 +19,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 		},
 		promotedGeneratorWorkflow("goforj-add-app-command/v1", "generate-invoice-command", "make:command", "invoices:show"),
 		promotedGeneratorWorkflow("goforj-add-job/v1", "generate-receipt-job", "make:job", "invoices:receipt"),
-		promotedGeneratorWorkflow("goforj-add-migration/v1", "generate-invoice-status-migration", "make:migration", "add_status_to_invoices", "--no-open"),
+		promotedGeneratorWorkflow("goforj-add-migration/v1", "generate-invoice-status-migration", "make:migration", "add_status_to_invoices"),
 		promotedGeneratorWorkflow("goforj-add-schedule/v1", "generate-reconcile-schedule", "make:schedule", "invoices:reconcile", "--every", "1h"),
 		{
 			ID: "goforj-add-event-subscriber/v1",
