@@ -91,7 +91,7 @@ func (runner VerifierCommands) Open(ctx context.Context, sourceRoot string) (Com
 	if err != nil {
 		return nil, fmt.Errorf("create verifier Project: %w", err)
 	}
-	if err := copyProjectTree(ctx, sourceRoot, root); err != nil {
+	if err := copyVerifierProjectTree(ctx, sourceRoot, root); err != nil {
 		return nil, errors.Join(err, os.RemoveAll(root))
 	}
 	stateRoot, err := os.MkdirTemp(runner.WorkRoot, "atlas-verifier-state-")
@@ -270,8 +270,20 @@ func resolveVerifierExecutable(candidate, fallback string) (string, error) {
 	return path, nil
 }
 
-// copyProjectTree preserves regular files, directories, modes, and safe internal symlinks in the verifier-owned clone.
+// copyProjectTree preserves every supported candidate path in a bounded, cancellation-aware snapshot.
 func copyProjectTree(ctx context.Context, sourceRoot, destinationRoot string) error {
+	return copyProjectTreeWithFilter(ctx, sourceRoot, destinationRoot, func(string) bool { return false })
+}
+
+// copyVerifierProjectTree excludes candidate tests because verifier phases execute only supervisor-authored tests.
+func copyVerifierProjectTree(ctx context.Context, sourceRoot, destinationRoot string) error {
+	return copyProjectTreeWithFilter(ctx, sourceRoot, destinationRoot, func(relative string) bool {
+		return strings.HasSuffix(relative, "_test.go")
+	})
+}
+
+// copyProjectTreeWithFilter preserves regular files, directories, modes, and safe internal symlinks in a private clone.
+func copyProjectTreeWithFilter(ctx context.Context, sourceRoot, destinationRoot string, skipFile func(string) bool) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -308,9 +320,7 @@ func copyProjectTree(ctx context.Context, sourceRoot, destinationRoot string) er
 		case info.IsDir():
 			return os.Mkdir(destinationPath, info.Mode().Perm())
 		case info.Mode().IsRegular():
-			// Candidate tests, especially TestMain, are executable candidate control
-			// flow. The verifier runs only supervisor-authored tests in its clone.
-			if strings.HasSuffix(relative, "_test.go") {
+			if skipFile(relative) {
 				return nil
 			}
 			if info.Size() < 0 || info.Size() > remainingBytes {

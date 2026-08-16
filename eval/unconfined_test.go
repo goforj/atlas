@@ -96,3 +96,43 @@ func TestUnconfinedLocalOwnsOnlyPrivateAgentState(t *testing.T) {
 		t.Fatalf("backend removed preparer-owned Project: %v", err)
 	}
 }
+
+// TestUnconfinedLocalSealPreservesCandidateTests keeps the sealed final identity independent of verifier-only filtering.
+func TestUnconfinedLocalSealPreservesCandidateTests(t *testing.T) {
+	projectRoot := t.TempDir()
+	files := map[string]string{
+		"internal/invoices/service_test.go":    "package invoices\n",
+		"internal/invoices/controller_test.go": "package invoices\n",
+	}
+	for relative, body := range files {
+		path := filepath.Join(projectRoot, relative)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("create test directory: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write candidate test: %v", err)
+		}
+	}
+	environment, err := (UnconfinedLocal{WorkRoot: t.TempDir()}).Open(context.Background(), BackendRequest{Project: preparedProjectFixture{result: PreparationResult{ProjectRoot: projectRoot}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer environment.Close(context.Background())
+	sealed, err := environment.Seal(context.Background())
+	if err != nil {
+		t.Fatalf("Seal(): %v", err)
+	}
+	for relative, want := range files {
+		body, err := os.ReadFile(filepath.Join(sealed.Root, relative))
+		if err != nil || string(body) != want {
+			t.Fatalf("sealed %s = %q, %v", relative, body, err)
+		}
+	}
+	wantDigest, err := digestProjectTree(projectRoot)
+	if err != nil {
+		t.Fatalf("digest candidate: %v", err)
+	}
+	if sealed.TreeDigest != wantDigest {
+		t.Fatalf("sealed digest = %s, want %s", sealed.TreeDigest, wantDigest)
+	}
+}
