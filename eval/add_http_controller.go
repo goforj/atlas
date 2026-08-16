@@ -182,7 +182,7 @@ func findInvoiceController(root string) (invoiceControllerSource, error) {
 		if controller.file != nil || entry.IsDir() || filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 		if err != nil {
 			return nil
 		}

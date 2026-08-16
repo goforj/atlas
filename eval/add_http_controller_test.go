@@ -303,7 +303,7 @@ func TestOwnershipChecksAllowsFocusedControllerTests(t *testing.T) {
 
 // TestControllerHandlerCheckRequiresFindRequestContext rejects unrelated Context calls when Find receives a background context.
 func TestControllerHandlerCheckRequiresFindRequestContext(t *testing.T) {
-	valid, err := parser.ParseFile(token.NewFileSet(), "controller.go", validControllerSource("service *Service"), parser.SkipObjectResolution)
+	valid, err := parser.ParseFile(token.NewFileSet(), "controller.go", validControllerSource("service *Service"), 0)
 	if err != nil {
 		t.Fatalf("parse valid controller: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestControllerHandlerCheckRequiresFindRequestContext(t *testing.T) {
 		t.Fatalf("valid handler result = %#v", result)
 	}
 	decoySource := strings.Replace(validControllerSource("service *Service"), "invoice, err := controller.service.Find(request.Context(), request.Param(\"id\"))", "_ = request.Context()\n\tinvoice, err := controller.service.Find(context.Background(), request.Param(\"id\"))", 1)
-	decoy, err := parser.ParseFile(token.NewFileSet(), "controller.go", decoySource, parser.SkipObjectResolution)
+	decoy, err := parser.ParseFile(token.NewFileSet(), "controller.go", decoySource, 0)
 	if err != nil {
 		t.Fatalf("parse decoy controller: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestControllerHandlerCheckRejectsRouteBoundHardCodedResponse(t *testing.T) 
 `
 	unusedCompliantMethod := strings.Replace(valid[strings.Index(valid, "func (controller *Controller) Show"):], "Show", "LookupInvoice", 1)
 	mutant := valid[:strings.Index(valid, "func (controller *Controller) Show")] + hardCodedShow + "\n" + unusedCompliantMethod
-	file, err := parser.ParseFile(token.NewFileSet(), "controller.go", mutant, parser.SkipObjectResolution)
+	file, err := parser.ParseFile(token.NewFileSet(), "controller.go", mutant, 0)
 	if err != nil {
 		t.Fatalf("parse hard-coded response mutant: %v", err)
 	}
@@ -341,7 +341,7 @@ func TestControllerHandlerCheckRejectsRouteBoundHardCodedResponse(t *testing.T) 
 // TestInvoiceRouteOwnerRejectsDecoyReceiver prevents a compliant decoy handler from substituting for the handler registered by Routes.
 func TestInvoiceRouteOwnerRejectsDecoyReceiver(t *testing.T) {
 	fileSet := token.NewFileSet()
-	file, err := parser.ParseFile(fileSet, "controller.go", decoyReceiverControllerSource(), parser.SkipObjectResolution)
+	file, err := parser.ParseFile(fileSet, "controller.go", decoyReceiverControllerSource(), 0)
 	if err != nil {
 		t.Fatalf("parse decoy receiver controller: %v", err)
 	}
@@ -360,6 +360,29 @@ func TestInvoiceRouteOwnerRejectsDecoyReceiver(t *testing.T) {
 	writeFixtureFile(t, root, "internal/invoices/controller.go", decoyReceiverControllerSource())
 	if _, err := resolveInvoiceBehaviorProbe(root); err == nil {
 		t.Fatal("behavior probe resolved a handler that Routes does not invoke on its receiver")
+	}
+}
+
+// TestInvoiceRouteOwnerRejectsShadowedReceiver prevents a same-spelling local from impersonating the Routes receiver.
+func TestInvoiceRouteOwnerRejectsShadowedReceiver(t *testing.T) {
+	source := strings.Replace(decoyReceiverControllerSource(), `func (controller *Controller) Routes() []Route {
+	return []Route{NewRoute(http.MethodGet, "/invoices/:id", controller.decoy.Show)}
+}`, `func (controller *Controller) Routes() []Route {
+	{
+		controller := controller.decoy
+		return []Route{NewRoute(http.MethodGet, "/invoices/:id", controller.Show)}
+	}
+}`, 1)
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, "controller.go", source, 0)
+	if err != nil {
+		t.Fatalf("parse shadowed receiver controller: %v", err)
+	}
+	if _, err := (&types.Config{Importer: importer.Default()}).Check("invoices", fileSet, []*ast.File{file}, nil); err != nil {
+		t.Fatalf("type-check shadowed receiver controller: %v", err)
+	}
+	if ownerName, handlerName := invoiceRouteOwner(file); ownerName != "" || handlerName != "" {
+		t.Fatalf("shadowed route owner = %q, handler = %q", ownerName, handlerName)
 	}
 }
 
