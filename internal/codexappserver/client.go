@@ -204,10 +204,12 @@ func (client *Client) StartThread(ctx context.Context, options ThreadOptions) (T
 	}
 
 	var response struct {
-		Model              string   `json:"model"`
-		ModelProvider      string   `json:"modelProvider"`
-		ApprovalPolicy     string   `json:"approvalPolicy"`
-		Sandbox            string   `json:"sandbox"`
+		Model          string `json:"model"`
+		ModelProvider  string `json:"modelProvider"`
+		ApprovalPolicy string `json:"approvalPolicy"`
+		Sandbox        struct {
+			Type string `json:"type"`
+		} `json:"sandbox"`
 		InstructionSources []string `json:"instructionSources"`
 		Thread             struct {
 			ID        string `json:"id"`
@@ -220,18 +222,38 @@ func (client *Client) StartThread(ctx context.Context, options ThreadOptions) (T
 	if response.Thread.ID == "" {
 		return Thread{}, fmt.Errorf("Codex thread/start returned no thread id")
 	}
-	if response.ApprovalPolicy != options.ApprovalPolicy || response.Sandbox != options.Sandbox {
-		return Thread{}, fmt.Errorf("Codex thread/start effective policy = approvalPolicy %q, sandbox %q; want approvalPolicy %q, sandbox %q", response.ApprovalPolicy, response.Sandbox, options.ApprovalPolicy, options.Sandbox)
+	effectiveSandbox, err := normalizeSandboxPolicy(response.Sandbox.Type)
+	if err != nil {
+		return Thread{}, err
+	}
+	if response.ApprovalPolicy != options.ApprovalPolicy || effectiveSandbox != options.Sandbox {
+		return Thread{}, fmt.Errorf("Codex thread/start effective policy = approvalPolicy %q, sandbox %q; want approvalPolicy %q, sandbox %q", response.ApprovalPolicy, effectiveSandbox, options.ApprovalPolicy, options.Sandbox)
 	}
 	return Thread{
 		ID:                 response.Thread.ID,
 		Model:              response.Model,
 		ModelProvider:      response.ModelProvider,
 		ApprovalPolicy:     response.ApprovalPolicy,
-		Sandbox:            response.Sandbox,
+		Sandbox:            effectiveSandbox,
 		InstructionSources: append([]string(nil), response.InstructionSources...),
 		Ephemeral:          response.Thread.Ephemeral,
 	}, nil
+}
+
+// normalizeSandboxPolicy maps the typed app-server response back to the CLI policy names accepted by ThreadOptions.
+func normalizeSandboxPolicy(policyType string) (string, error) {
+	switch policyType {
+	case "dangerFullAccess":
+		return "danger-full-access", nil
+	case "readOnly":
+		return "read-only", nil
+	case "workspaceWrite":
+		return "workspace-write", nil
+	case "externalSandbox":
+		return "external-sandbox", nil
+	default:
+		return "", fmt.Errorf("Codex thread/start returned unknown sandbox policy type %q", policyType)
+	}
 }
 
 // StartTurn submits one natural-language task to a fresh evaluation thread.

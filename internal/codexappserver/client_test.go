@@ -207,7 +207,7 @@ func runFakeAppServer() {
 				"model":              "gpt-test",
 				"modelProvider":      "openai",
 				"approvalPolicy":     params.ApprovalPolicy,
-				"sandbox":            params.Sandbox,
+				"sandbox":            map[string]any{"type": fakeSandboxPolicyType(params.Sandbox)},
 				"instructionSources": []string{"/project/AGENTS.md"},
 				"thread": map[string]any{
 					"id":        fmt.Sprintf("thread-%d", threadNumber),
@@ -229,6 +229,20 @@ func runFakeAppServer() {
 			continue
 		}
 		writeFakeResponse(*request.ID, result, nil)
+	}
+}
+
+// fakeSandboxPolicyType mirrors the generated app-server response schema rather than the request's CLI spelling.
+func fakeSandboxPolicyType(policy string) string {
+	switch policy {
+	case "danger-full-access":
+		return "dangerFullAccess"
+	case "read-only":
+		return "readOnly"
+	case "workspace-write":
+		return "workspaceWrite"
+	default:
+		return policy
 	}
 }
 
