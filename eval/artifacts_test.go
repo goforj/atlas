@@ -2,6 +2,7 @@ package eval
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -304,6 +305,53 @@ func TestVerifyArtifactManifestRejectsUnsafeManifestFiles(t *testing.T) {
 	})
 }
 
+// TestVerifyArtifactManifestRejectsEntryOverflow bounds directory enumeration to the fixed artifact surface.
+func TestVerifyArtifactManifestRejectsEntryOverflow(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	directory := finalizedArtifactDirectory(t, key)
+	for index := 0; index < maxArtifactDirectoryEntries; index++ {
+		name := filepath.Join(directory, fmt.Sprintf("overflow-%02d", index))
+		if err := os.WriteFile(name, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := fmt.Sprintf("exceeds %d entries", maxArtifactDirectoryEntries)
+	if _, err := VerifyArtifactManifest(directory, key); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("VerifyArtifactManifest() error = %v, want bounded-entry rejection", err)
+	}
+}
+
+// TestArtifactOperationsRejectUnknownFiles keeps finalization and verification on the declared evidence surface.
+func TestArtifactOperationsRejectUnknownFiles(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef")
+	t.Run("finalize", func(t *testing.T) {
+		root := filepath.Join(t.TempDir(), "artifacts")
+		store, err := NewArtifactStore(root, key, NewRedactor(nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		artifacts, err := store.Begin("unknown-finalize")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(artifacts.directory, "unknown.txt"), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err == nil || !strings.Contains(err.Error(), "allowed artifact surface") {
+			t.Fatalf("Finalize() error = %v, want unknown-file rejection", err)
+		}
+	})
+	t.Run("verify", func(t *testing.T) {
+		directory := finalizedArtifactDirectory(t, key)
+		if err := os.WriteFile(filepath.Join(directory, "unknown.txt"), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := VerifyArtifactManifest(directory, key); err == nil || !strings.Contains(err.Error(), "allowed artifact surface") {
+			t.Fatalf("VerifyArtifactManifest() error = %v, want unknown-file rejection", err)
+		}
+	})
+}
+
 // finalizedArtifactDirectory creates one authenticated fixture whose manifest can be adversarially replaced.
 func finalizedArtifactDirectory(t *testing.T, key []byte) string {
 	t.Helper()
@@ -353,7 +401,7 @@ func TestArtifactStoreCanaryRejectsRegisteredSecretsBeforeFinalization(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "attempt-05", "bypassed.txt"), []byte(secret), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "attempt-05", "summary.txt"), []byte(secret), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err == nil || strings.Contains(err.Error(), secret) {
