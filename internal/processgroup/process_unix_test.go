@@ -146,6 +146,30 @@ func TestTerminateSkipsReapedLeader(t *testing.T) {
 	}
 }
 
+// TestSignalLinuxTargetsRejectsStaleIdentity proves a pidfd is not enough unless the observed creation identity still matches.
+func TestSignalLinuxTargetsRejectsStaleIdentity(t *testing.T) {
+	command := exec.Command("/bin/sh", "-c", "exec sleep 300")
+	if err := command.Start(); err != nil {
+		t.Fatalf("start process: %v", err)
+	}
+	defer func() {
+		_ = command.Process.Kill()
+		_ = command.Wait()
+	}()
+	process, ok := readLinuxProcess(command.Process.Pid)
+	if !ok {
+		t.Fatalf("read process identity for %d", command.Process.Pid)
+	}
+	stale := process.processIdentity
+	stale.StartTime++
+	if err := signalLinuxTargets(processTargets{Processes: []processIdentity{stale}}, syscall.SIGTERM); err != nil {
+		t.Fatalf("signal stale identity: %v", err)
+	}
+	if !processAlive(command.Process.Pid) {
+		t.Fatal("stale identity signaled the live process")
+	}
+}
+
 // emptyDescendantTracker isolates the timeout regression from Linux process-table polling.
 type emptyDescendantTracker struct{}
 
