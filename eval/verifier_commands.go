@@ -113,9 +113,6 @@ func (runner VerifierCommands) Open(ctx context.Context, sourceRoot string) (Com
 
 // privateVerifierEnvironment gives one verifier phase no reusable writable state from another phase or the supervisor.
 func privateVerifierEnvironment(base []string, stateRoot string) ([]string, error) {
-	if base == nil {
-		base = os.Environ()
-	}
 	paths := map[string]string{
 		"HOME":            filepath.Join(stateRoot, "home"),
 		"GOCACHE":         filepath.Join(stateRoot, "go-cache"),
