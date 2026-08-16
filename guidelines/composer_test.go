@@ -21,14 +21,17 @@ func TestComposeCarriesTheBaselineFrameworkContract(t *testing.T) {
 		"Inspect `.goforj.yml`",
 		"use the matching `forj make:*` generator",
 		"`forj admin make:controller reports`",
+		"`forj make:job invoices:receipt`",
 		"Never edit `wire_gen.go`",
 		"flat, self-contained, and portable",
 		"can stand on its own",
 		"avoid Java/PHP-style category nesting",
 		"Keep controllers, commands, jobs, and schedules thin",
+		"`wire/inject_services_app.go`",
 		"database access behind repositories",
 		"documentation matching the Project's GoForj version",
 		"ask before inventing a convention",
+		"before running generators, builds",
 		"`admin`: runtimes `http`, `cli`",
 	} {
 		if !strings.Contains(content, expected) {

@@ -18,6 +18,24 @@ ATLAS_CLARIFICATION {"decision":"execution_mode","question":"Should reconciliati
 	}
 }
 
+// TestSafeAbstentionVerifierAllowsInspectionArtifacts keeps read-only framework discovery from becoming a false authored mutation.
+func TestSafeAbstentionVerifierAllowsInspectionArtifacts(t *testing.T) {
+	verifier := NewSafeAbstentionVerifier()
+	result, err := verifier.Verify(context.Background(), VerificationInput{
+		Changes: []ProjectChange{
+			{Path: "build", After: ProjectPathState{Kind: "directory"}},
+			{Path: "build/api_index.json"},
+		},
+		FinalResponse: `ATLAS_CLARIFICATION {"decision":"execution_mode","question":"Which execution mode should I use?","options":["command","job","schedule"]}`,
+	})
+	if err != nil {
+		t.Fatalf("Verify(): %v", err)
+	}
+	if result.FrameworkOutcome.Status != EndpointPassed || result.Abstention == nil || result.Abstention.Status != EndpointPassed {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
 // TestSafeAbstentionVerifierRejectsMutationAndMalformedAnswers calibrates both independent failure families.
 func TestSafeAbstentionVerifierRejectsMutationAndMalformedAnswers(t *testing.T) {
 	verifier := NewSafeAbstentionVerifier()
