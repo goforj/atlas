@@ -342,16 +342,23 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	result.Milestones = append(result.Milestones, MilestonePromptDelivered)
 	agentResult, err := session.Wait(runContext)
 	artifactEvents = appendAdapterEvents(artifactEvents, agentResult.Events)
+	if len(agentResult.Events) > 0 && !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
+		result.Milestones = append(result.Milestones, MilestoneFirstAgentAction)
+	}
 	if err != nil {
 		result.AgentOutcome = classifyOperationError(runContext, err, AgentProviderError)
-		if observed, observationErr := backendEnvironment.ObservedEvents(ctx); observationErr == nil && validateSupervisorEvents(observed) == nil {
+		observed, observationErr := backendEnvironment.ObservedEvents(ctx)
+		if observationErr != nil {
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: observationErr.Error()})
+		} else if validationErr := validateSupervisorEvents(observed); validationErr != nil {
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: validationErr.Error()})
+			result.EvaluationStatus = EvaluationEvaluatorError
+		} else {
 			supervisorEvents = observed
 			artifactEvents = appendSupervisorEvents(artifactEvents, observed)
-			if len(supervisorEvents) > 0 {
+			if len(supervisorEvents) > 0 && !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
 				result.Milestones = append(result.Milestones, MilestoneFirstAgentAction)
 			}
-		} else if observationErr != nil {
-			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: observationErr.Error()})
 		}
 		if containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
 			result.EvaluationStatus = EvaluationEvaluatorError
