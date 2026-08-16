@@ -1,4 +1,4 @@
-// Package processgroup runs a subprocess in an owned operating-system process group.
+// Package processgroup runs a subprocess with identity-safe leader and qualified descendant cleanup.
 package processgroup
 
 import (
@@ -22,7 +22,7 @@ type Options struct {
 	Stderr io.Writer
 }
 
-// Process owns one subprocess and the operating-system process group created for it.
+// Process owns one subprocess and any descendants observed by the platform tracker.
 type Process struct {
 	command *exec.Cmd
 	done    chan struct{}
@@ -86,7 +86,7 @@ func (process *Process) Wait(ctx context.Context) error {
 	}
 }
 
-// Terminate asks the complete process group to stop and escalates when the cleanup budget expires.
+// Terminate stops the retained leader identity and every qualified observed descendant before the cleanup budget expires.
 func (process *Process) Terminate(ctx context.Context) error {
 	if process == nil || process.PID() == 0 {
 		return nil
