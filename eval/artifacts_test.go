@@ -506,6 +506,103 @@ func TestNewArtifactStoreRequiresAuthenticationKey(t *testing.T) {
 	}
 }
 
+// TestArtifactStoreRegistersAuthenticationKeyForRedaction prevents integrity authority from becoming durable evidence.
+func TestArtifactStoreRegistersAuthenticationKeyForRedaction(t *testing.T) {
+	key := []byte("0123456789abcdef0123456789abcdef\n")
+	store, err := NewArtifactStore(filepath.Join(t.TempDir(), "artifacts"), key, NewRedactor(nil))
+	if err != nil {
+		t.Fatalf("NewArtifactStore(): %v", err)
+	}
+	artifacts, err := store.Begin("attempt-key-redaction")
+	if err != nil {
+		t.Fatalf("Begin(): %v", err)
+	}
+	if err := artifacts.WriteText("summary.txt", "raw="+string(key)+"trimmed="+strings.TrimSpace(string(key))); err != nil {
+		t.Fatalf("WriteText(): %v", err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+		t.Fatalf("Finalize(): %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(artifacts.directory, "summary.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), string(key)) || strings.Contains(string(body), strings.TrimSpace(string(key))) {
+		t.Fatalf("artifact retained authentication key: %q", body)
+	}
+	if _, err := VerifyArtifactManifest(artifacts.directory, key); err != nil {
+		t.Fatalf("VerifyArtifactManifest(): %v", err)
+	}
+}
+
+// TestAttemptArtifactsRemainAnchoredAcrossPathReplacement keeps supervisor writes bound to the directory created by Begin.
+func TestAttemptArtifactsRemainAnchoredAcrossPathReplacement(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "artifacts")
+	key := []byte("0123456789abcdef0123456789abcdef")
+	store, err := NewArtifactStore(root, key, NewRedactor(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := store.Begin("attempt-anchored")
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved := artifacts.directory + "-moved"
+	if err := os.Rename(artifacts.directory, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(artifacts.directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := artifacts.WriteText("summary.txt", "anchored"); err != nil {
+		t.Fatalf("WriteText(): %v", err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err == nil || !strings.Contains(err.Error(), "path changed") {
+		t.Fatalf("Finalize() error = %v, want path replacement rejection", err)
+	}
+	if _, err := os.Stat(filepath.Join(artifacts.directory, "summary.txt")); !os.IsNotExist(err) {
+		t.Fatalf("replacement directory received supervisor output: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(moved, "summary.txt"))
+	if err != nil || string(body) != "anchored" {
+		t.Fatalf("anchored summary = %q, %v", body, err)
+	}
+	if _, err := os.Stat(filepath.Join(moved, artifactManifestName)); !os.IsNotExist(err) {
+		t.Fatalf("replaced artifact path received a signed manifest: %v", err)
+	}
+}
+
+// TestAttemptArtifactsRefuseArtifactSymlinkReplacement prevents a fixed artifact name from redirecting writes.
+func TestAttemptArtifactsRefuseArtifactSymlinkReplacement(t *testing.T) {
+	store, err := NewArtifactStore(filepath.Join(t.TempDir(), "artifacts"), []byte("0123456789abcdef0123456789abcdef"), NewRedactor(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := store.Begin("attempt-symlink")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if !artifacts.closed {
+			_, _ = artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final")
+		}
+	})
+	external := filepath.Join(t.TempDir(), "external")
+	if err := os.WriteFile(external, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(artifacts.directory, "summary.txt")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := artifacts.WriteText("summary.txt", "redirected"); err == nil {
+		t.Fatal("WriteText() accepted an existing symlink")
+	}
+	body, err := os.ReadFile(external)
+	if err != nil || string(body) != "original" {
+		t.Fatalf("external file = %q, %v", body, err)
+	}
+}
+
 // TestVerifyArtifactManifestRequiresAuthenticationKey rejects verification keys that cannot safely authenticate evidence.
 func TestVerifyArtifactManifestRequiresAuthenticationKey(t *testing.T) {
 	for _, key := range [][]byte{nil, []byte("short"), []byte("0123456789abcdef0123456789abc")} {
@@ -579,5 +676,14 @@ func TestRedactorRemovesProviderPrefixedAssignments(t *testing.T) {
 	redacted := NewRedactor(nil).Text("OPENAI_API_KEY=provider-secret")
 	if strings.Contains(redacted, "provider-secret") || !strings.Contains(redacted, redactedValue) {
 		t.Fatalf("prefixed credential assignment survived redaction: %q", redacted)
+	}
+}
+
+// TestRedactorRemovesExactSecretsBeforeHeuristics keeps punctuation-bearing suffixes from surviving partial pattern matches.
+func TestRedactorRemovesExactSecretsBeforeHeuristics(t *testing.T) {
+	secret := "abc:def/ghi"
+	redacted := NewRedactor([]string{secret}).Text("Authorization: Bearer " + secret)
+	if strings.Contains(redacted, secret) || strings.Contains(redacted, ":def/ghi") {
+		t.Fatalf("registered secret survived heuristic redaction: %q", redacted)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -83,7 +84,9 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	var err error
 	defer func() {
 		result.FinishedAt = now().UTC()
-		finalizeAttemptArtifacts(artifacts, request, &result, artifactEvents, agentProperties.Properties, backendCapabilities, planDigest, baselineTree, finalTree)
+		if err := finalizeAttemptArtifacts(artifacts, request, &result, artifactEvents, agentProperties.Properties, backendCapabilities, planDigest, baselineTree, finalTree); err != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("finalize attempt artifacts: %w", err))
+		}
 		if runErr == nil && result.EvaluationStatus == EvaluationEvaluatorError {
 			runErr = fmt.Errorf("evaluation integrity failed during deferred cleanup or artifact finalization")
 		}
@@ -100,7 +103,11 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	}
 	result.Backend = runner.Backend.Name()
 	result.Agent = runner.Agent.Name()
-	if pathsOverlap(runner.Artifacts.root, request.Preparation.DestinationRoot) {
+	overlap, err := pathsOverlap(runner.Artifacts.root, request.Preparation.DestinationRoot)
+	if err != nil {
+		return result, fmt.Errorf("resolve artifact and Project roots: %w", err)
+	}
+	if overlap {
 		return result, fmt.Errorf("artifact root and Project destination must not overlap")
 	}
 	if request.Preparation.ScenarioID != request.Definition.ProjectScenario {
@@ -331,21 +338,21 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.AgentOutcome = classifyOperationError(runContext, err, AgentProviderError)
 		observed, observationErr := backendEnvironment.ObservedEvents(ctx)
 		if observationErr != nil {
-			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: observationErr.Error()})
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: observationErr.Error(), Cause: observationErr})
 		} else if validationErr := validateSupervisorEvents(observed, requiresSupervisorTerminal(backendCapabilities)); validationErr != nil {
 			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: validationErr.Error()})
 			result.EvaluationStatus = EvaluationEvaluatorError
 		} else {
 			supervisorEvents = observed
 			artifactEvents = appendSupervisorEvents(artifactEvents, observed)
-			if len(supervisorEvents) > 0 && !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
+			if firstAgentActionObserved(supervisorEvents, agentResult.Message, available) && !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
 				result.Milestones = append(result.Milestones, MilestoneFirstAgentAction)
 			}
 		}
 		if containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
 			result.EvaluationStatus = EvaluationEvaluatorError
 		}
-		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "agent_terminal", Message: err.Error()})
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "agent_terminal", Message: err.Error(), Cause: err})
 		return result, fmt.Errorf("wait for agent: %w", err)
 	}
 	supervisorEvents, err = backendEnvironment.ObservedEvents(ctx)
@@ -363,7 +370,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("agent exceeded command limit %d", request.Definition.Limits.Commands)
 	}
-	if len(supervisorEvents) > 0 && !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
+	if firstAgentActionObserved(supervisorEvents, agentResult.Message, available) && !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
 		result.Milestones = append(result.Milestones, MilestoneFirstAgentAction)
 	}
 	result.AgentOutcome = agentResult.Outcome
@@ -397,7 +404,7 @@ func retainPostPromptFinalState(backend BackendEnvironment, baseline projectDiff
 	defer cancel()
 	sealed, err := backend.Seal(cleanupContext)
 	if err != nil {
-		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "final_state", Message: err.Error()})
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "final_state", Message: err.Error(), Cause: err})
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return
 	}
@@ -410,12 +417,12 @@ func retainPostPromptFinalState(backend BackendEnvironment, baseline projectDiff
 	*finalTree = sealed.TreeDigest
 	diff, err := buildProjectDiff(baseline, sealed.Root)
 	if err != nil {
-		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: err.Error()})
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: err.Error(), Cause: err})
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return
 	}
 	if err := artifacts.WriteText("diff.patch", diff); err != nil {
-		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: err.Error()})
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: err.Error(), Cause: err})
 		result.EvaluationStatus = EvaluationEvaluatorError
 	}
 }
@@ -490,6 +497,14 @@ func (runner Runner) preflightAttempt(ctx context.Context, request AttemptReques
 	}, false, nil
 }
 
+// firstAgentActionObserved records supervisor evidence, or an adapter-proven exact terminal response.
+func firstAgentActionObserved(events []Event, terminalResponse string, capabilities []Capability) bool {
+	if len(events) > 0 {
+		return true
+	}
+	return capabilityAvailable(capabilities, CapabilityFinalResponseCapture) && strings.TrimSpace(terminalResponse) != ""
+}
+
 // verifySealedAttempt projects the immutable candidate tree into outcome and workflow results.
 func verifySealedAttempt(ctx context.Context, sealed SealedProject, baselineDiff projectDiffSnapshot, baselineTests []TrustedTestFile, baselineTree string, events []Event, finalResponse, forjDigest string, available []Capability, resolved ResolvedEvaluation, intent RunIntent, artifacts *AttemptArtifacts, result *AttemptResult) error {
 	if strings.TrimSpace(sealed.Root) == "" || strings.TrimSpace(sealed.TreeDigest) == "" {
@@ -499,10 +514,10 @@ func verifySealedAttempt(ctx context.Context, sealed SealedProject, baselineDiff
 	result.FinalTree = sealed.TreeDigest
 	diff, diffErr := buildProjectDiff(baselineDiff, sealed.Root)
 	if diffErr != nil {
-		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: diffErr.Error()})
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: diffErr.Error(), Cause: diffErr})
 		result.EvaluationStatus = EvaluationEvaluatorError
 	} else if err := artifacts.WriteText("diff.patch", diff); err != nil {
-		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: err.Error()})
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: err.Error(), Cause: err})
 		result.EvaluationStatus = EvaluationEvaluatorError
 	}
 	changes, err := projectChanges(baselineDiff, sealed.Root)
@@ -549,38 +564,47 @@ func verifySealedAttempt(ctx context.Context, sealed SealedProject, baselineDiff
 }
 
 // finalizeAttemptArtifacts keeps terminal evidence repair independent from the execution state machine.
-func finalizeAttemptArtifacts(artifacts *AttemptArtifacts, request AttemptRequest, result *AttemptResult, events []Event, agentProperties []Capability, backendCapabilities []Capability, planDigest, baselineTree, finalTree string) {
+func finalizeAttemptArtifacts(artifacts *AttemptArtifacts, request AttemptRequest, result *AttemptResult, events []Event, agentProperties []Capability, backendCapabilities []Capability, planDigest, baselineTree, finalTree string) error {
 	if artifacts == nil {
-		return
+		return nil
 	}
 	normalizedEvents := normalizeArtifactEvents(events)
 	recordAttemptEvents(result, artifacts, normalizedEvents)
 	failures := writeAttemptReportArtifacts(artifacts, request, *result, normalizedEvents, agentProperties, backendCapabilities)
 	result.SecondaryFailures = append(result.SecondaryFailures, failures...)
+	var finalizationErr error
+	for _, failure := range result.SecondaryFailures {
+		finalizationErr = errors.Join(finalizationErr, failure.Cause)
+	}
 	if len(failures) > 0 {
 		result.EvaluationStatus = EvaluationEvaluatorError
 	}
 	if err := artifacts.WriteJSON("run.json", result); err != nil {
-		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_run", Message: err.Error()})
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_run", Message: err.Error(), Cause: err})
+		finalizationErr = errors.Join(finalizationErr, err)
 		result.EvaluationStatus = EvaluationEvaluatorError
 	}
 	if result.Verification != nil {
 		if err := artifacts.WriteJSON("verification.json", result.Verification); err != nil {
-			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_verification", Message: err.Error()})
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_verification", Message: err.Error(), Cause: err})
+			finalizationErr = errors.Join(finalizationErr, err)
 			result.EvaluationStatus = EvaluationEvaluatorError
 		}
 	}
 	if attemptNeedsTriage(*result) {
 		if err := artifacts.WriteJSON("triage.json", TriageRecord{State: TriageUnreviewed}); err != nil {
-			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_triage", Message: err.Error()})
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_triage", Message: err.Error(), Cause: err})
+			finalizationErr = errors.Join(finalizationErr, err)
 			result.EvaluationStatus = EvaluationEvaluatorError
 		}
 	}
 	if _, err := artifacts.Finalize(planDigest, baselineTree, finalTree); err != nil {
-		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_manifest", Message: err.Error()})
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_manifest", Message: err.Error(), Cause: err})
 		result.EvaluationStatus = EvaluationEvaluatorError
 		repairFinalizationArtifacts(artifacts, request, result)
+		return errors.Join(finalizationErr, err)
 	}
+	return finalizationErr
 }
 
 // adapterCommandCount uses the adapter's complete observed count when bounded retention omitted result events.
@@ -692,20 +716,51 @@ func countCommandEvents(events []Event) int {
 }
 
 // pathsOverlap rejects evidence roots that an agent could reach through its writable Project tree.
-func pathsOverlap(left, right string) bool {
+func pathsOverlap(left, right string) (bool, error) {
 	if strings.TrimSpace(left) == "" || strings.TrimSpace(right) == "" {
-		return false
+		return false, nil
 	}
-	left, leftErr := filepath.Abs(left)
-	right, rightErr := filepath.Abs(right)
-	if leftErr != nil || rightErr != nil {
-		return true
+	left, err := canonicalPathForOverlap(left)
+	if err != nil {
+		return false, err
+	}
+	right, err = canonicalPathForOverlap(right)
+	if err != nil {
+		return false, err
 	}
 	within := func(parent, child string) bool {
 		relative, err := filepath.Rel(parent, child)
 		return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 	}
-	return within(left, right) || within(right, left)
+	return within(left, right) || within(right, left), nil
+}
+
+// canonicalPathForOverlap resolves every existing ancestor while retaining a missing leaf path.
+func canonicalPathForOverlap(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	abs = filepath.Clean(abs)
+	missing := []string{}
+	for current := abs; ; current = filepath.Dir(current) {
+		_, err := os.Lstat(current)
+		if err == nil {
+			resolved, err := filepath.EvalSymlinks(current)
+			if err != nil {
+				return "", fmt.Errorf("resolve existing ancestor %q: %w", current, err)
+			}
+			return filepath.Join(append([]string{resolved}, missing...)...), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", fmt.Errorf("inspect path ancestor %q: %w", current, err)
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", fmt.Errorf("resolve path ancestor %q: %w", current, err)
+		}
+		missing = append([]string{filepath.Base(current)}, missing...)
+	}
 }
 
 // containsScenarioSchema reports whether a preparer explicitly negotiated the resolved schema.
@@ -730,7 +785,7 @@ func (runner Runner) validate() error {
 func recordAttemptEvents(result *AttemptResult, artifacts *AttemptArtifacts, events []Event) {
 	for _, event := range events {
 		if err := artifacts.AppendEvent(event); err != nil {
-			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: err.Error()})
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "event_capture", Message: err.Error(), Cause: err})
 			result.EvaluationStatus = EvaluationEvaluatorError
 			return
 		}
@@ -978,7 +1033,7 @@ func closeEvaluationResource(phase string, close func(context.Context) error) []
 	cleanupContext, cancel := context.WithTimeout(context.Background(), evaluationCleanupTimeout)
 	defer cancel()
 	if err := close(cleanupContext); err != nil {
-		return []SecondaryFailure{{Phase: phase, Message: err.Error()}}
+		return []SecondaryFailure{{Phase: phase, Message: err.Error(), Cause: err}}
 	}
 	return nil
 }

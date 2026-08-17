@@ -88,6 +88,10 @@ func PromotedWorkflows() []WorkflowExpectation {
 			Requirements: []WorkflowRequirement{qualityInspection("inspect-wire-diagnostics", "Inspect the Wire failure and owning provider set before editing.", "app/wire/**", "internal/reports/**")},
 		},
 		{
+			ID:           "goforj-runtime-observability/v1",
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-observability-surfaces", "Inspect generated metrics, inspect capture, and Lighthouse operator surfaces before reporting runtime readiness.", ".env.local", "internal/metrics/**", "internal/inspects/**")},
+		},
+		{
 			ID:           "goforj-clarify-unknown-shape/v1",
 			Requirements: []WorkflowRequirement{qualityInspection("inspect-project", "Inspect the existing application boundaries before requesting a decision.", ".goforj.yml", "app/**", "internal/**")},
 		},

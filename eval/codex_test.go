@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -286,6 +287,50 @@ func TestAdapterFreezesCredentialBeforeTreatments(t *testing.T) {
 	redacted := adapter.credential.Redactor(NewRedactor(nil)).Text(string(original) + " " + string(replacement))
 	if strings.Contains(redacted, "first-treatment-secret") || !strings.Contains(redacted, "replacement-secret") {
 		t.Fatalf("frozen redaction did not match frozen authority: %q", redacted)
+	}
+}
+
+// TestCodexCredentialRedactsEveryStringLeaf keeps provider-extension authority out of every redacted output shape.
+func TestCodexCredentialRedactsEveryStringLeaf(t *testing.T) {
+	credential, err := NewCodexCredential([]byte(`{"provider":"custom-provider","oauth_token":"extension-secret","nested":{"cookie":"session-secret","chain":["array-secret",{"token":"deep-secret"}]}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	redactor := credential.Redactor(NewRedactor(nil))
+	for _, value := range []string{"custom-provider", "extension-secret", "session-secret", "array-secret", "deep-secret"} {
+		if redacted := redactor.Text("bare " + value); strings.Contains(redacted, value) {
+			t.Fatalf("credential leaf %q survived text redaction: %q", value, redacted)
+		}
+		if redacted := redactor.Event(Event{Fields: map[string]string{"value": value}}); strings.Contains(redacted.Fields["value"], value) {
+			t.Fatalf("credential leaf %q survived event redaction: %#v", value, redacted)
+		}
+		redactedJSON := redactor.JSONValue(map[string]any{"value": value}).(map[string]any)
+		if strings.Contains(redactedJSON["value"].(string), value) {
+			t.Fatalf("credential leaf %q survived JSON redaction: %#v", value, redactedJSON)
+		}
+	}
+}
+
+// TestCodexCredentialRedactsTopLevelAndArrayStrings keeps the schema-independent walker complete for every JSON value shape.
+func TestCodexCredentialRedactsTopLevelAndArrayStrings(t *testing.T) {
+	for _, test := range []struct {
+		body   string
+		secret string
+	}{
+		{body: `"top-level-secret"`, secret: "top-level-secret"},
+		{body: `["array-secret",{"nested":["deep-secret"]}]`, secret: "array-secret"},
+		{body: `["array-secret",{"nested":["deep-secret"]}]`, secret: "deep-secret"},
+	} {
+		credential, err := NewCodexCredential([]byte(test.body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(credential.redactionSecrets, test.secret) {
+			t.Fatalf("credential secrets = %q, want %q", credential.redactionSecrets, test.secret)
+		}
+		if redacted := credential.Redactor(NewRedactor(nil)).Text("value=" + test.secret); strings.Contains(redacted, test.secret) {
+			t.Fatalf("credential leaf %q survived redaction: %q", test.secret, redacted)
+		}
 	}
 }
 

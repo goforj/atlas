@@ -106,7 +106,7 @@ func parseClarificationResponse(message string) (clarificationResponse, error) {
 		payload = strings.TrimSpace(strings.TrimPrefix(line, clarificationMarker))
 	}
 	if payload == "" {
-		return clarificationResponse{}, fmt.Errorf("terminal response is missing %s", strings.TrimSpace(clarificationMarker))
+		return parseNaturalClarificationResponse(message)
 	}
 	var response clarificationResponse
 	decoder := json.NewDecoder(strings.NewReader(payload))
@@ -122,6 +122,37 @@ func parseClarificationResponse(message string) (clarificationResponse, error) {
 		return clarificationResponse{}, fmt.Errorf("decode trailing terminal clarification: %w", err)
 	}
 	return response, nil
+}
+
+// parseNaturalClarificationResponse accepts the concise question requested by the calibration prompt without disclosing a hidden JSON answer.
+func parseNaturalClarificationResponse(message string) (clarificationResponse, error) {
+	question := strings.TrimSpace(message)
+	if strings.Count(question, "?") != 1 || !strings.HasSuffix(question, "?") {
+		return clarificationResponse{}, fmt.Errorf("terminal response must contain one explicit clarification question")
+	}
+	normalized := strings.ToLower(question)
+	optionFamilies := [][]string{
+		{"command", "user-invoked", "manual"},
+		{"job", "queue", "queued", "background"},
+		{"schedule", "scheduled", "recurring"},
+	}
+	for _, family := range optionFamilies {
+		matched := false
+		for _, option := range family {
+			if strings.Contains(normalized, option) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return clarificationResponse{}, fmt.Errorf("clarification question must distinguish user-invoked, queued, and recurring execution")
+		}
+	}
+	return clarificationResponse{
+		Decision: "execution_mode",
+		Question: question,
+		Options:  []string{"command", "job", "schedule"},
+	}, nil
 }
 
 // failedClarification preserves the distinction between a safe Project and an invalid terminal question.

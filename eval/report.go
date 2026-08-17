@@ -33,12 +33,12 @@ func writeAttemptReportArtifacts(artifacts *AttemptArtifacts, request AttemptReq
 	var failures []SecondaryFailure
 	writeText := func(name, phase, content string) {
 		if err := artifacts.WriteText(name, content); err != nil {
-			failures = append(failures, SecondaryFailure{Phase: phase, Message: err.Error()})
+			failures = append(failures, SecondaryFailure{Phase: phase, Message: err.Error(), Cause: err})
 		}
 	}
 	writeJSON := func(name, phase string, value any) {
 		if err := artifacts.WriteJSON(name, value); err != nil {
-			failures = append(failures, SecondaryFailure{Phase: phase, Message: err.Error()})
+			failures = append(failures, SecondaryFailure{Phase: phase, Message: err.Error(), Cause: err})
 		}
 	}
 	writeText("summary.txt", "artifact_summary", attemptSummary(request, result))

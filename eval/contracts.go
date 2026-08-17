@@ -522,6 +522,8 @@ const (
 type SecondaryFailure struct {
 	Phase   string `json:"phase"`
 	Message string `json:"message"`
+	// Cause retains operational identity for callers without serializing host error details.
+	Cause error `json:"-"`
 }
 
 // AttemptResult is the complete lifecycle result for one stochastic attempt.

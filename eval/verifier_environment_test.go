@@ -20,7 +20,7 @@ func TestPrivateVerifierEnvironmentTreatsNilAndEmptyAsClean(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			stateRoot := filepath.Join(t.TempDir(), "state")
-			environment, err := privateVerifierEnvironment(test.base, stateRoot)
+			environment, err := privateVerifierEnvironment(test.base, stateRoot, "")
 			if err != nil {
 				t.Fatalf("privateVerifierEnvironment(): %v", err)
 			}
@@ -40,7 +40,7 @@ func TestPrivateVerifierEnvironmentTreatsNilAndEmptyAsClean(t *testing.T) {
 // TestPrivateVerifierEnvironmentPreservesExplicitAllowlist keeps host integrations in control of non-secret tool settings.
 func TestPrivateVerifierEnvironmentPreservesExplicitAllowlist(t *testing.T) {
 	stateRoot := filepath.Join(t.TempDir(), "state")
-	environment, err := privateVerifierEnvironment([]string{"PATH=/trusted/tools", "LANG=en_US.UTF-8"}, stateRoot)
+	environment, err := privateVerifierEnvironment([]string{"PATH=/trusted/tools", "LANG=en_US.UTF-8"}, stateRoot, "")
 	if err != nil {
 		t.Fatalf("privateVerifierEnvironment(): %v", err)
 	}

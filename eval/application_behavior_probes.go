@@ -1,5 +1,40 @@
 package eval
 
+const runtimeObservabilityBehaviorProbe = `package inspects
+
+import (
+	"bufio"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// TestAtlasLocalInspectCaptureBehavior proves the generated local configuration enables the inspect manager Lighthouse uses.
+func TestAtlasLocalInspectCaptureBehavior(t *testing.T) {
+	file, err := os.Open(filepath.Join("..", "..", ".env.local"))
+	if err != nil {
+		t.Fatalf("open .env.local: %v", err)
+	}
+	defer file.Close()
+	value := ""
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		key, candidate, found := strings.Cut(scanner.Text(), "=")
+		if found && key == "LIGHTHOUSE_INSPECT_ENABLED" {
+			value = candidate
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("read .env.local: %v", err)
+	}
+	t.Setenv("LIGHTHOUSE_INSPECT_ENABLED", value)
+	if !NewConfig().Enabled {
+		t.Fatalf("LIGHTHOUSE_INSPECT_ENABLED=%q leaves local inspect capture disabled", value)
+	}
+}
+`
+
 const lifecycleReadinessBehaviorProbe = `package app
 
 import (
@@ -238,6 +273,14 @@ func TestAtlasUploadWorkflowBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("storages.NewManager(): %v", err)
 	}
+	var managerPutContext context.Context
+	var managerPutPath string
+	manager.WithObserver(storages.ObserverFunc(func(observed context.Context, event storages.StorageOpEvent) {
+		if event.Operation == "put" {
+			managerPutContext = observed
+			managerPutPath = event.Path
+		}
+	}))
 	t.Cleanup(func() {
 		if err := manager.Close(); err != nil {
 			t.Errorf("manager.Close(): %v", err)
@@ -255,6 +298,12 @@ func TestAtlasUploadWorkflowBehavior(t *testing.T) {
 		}
 		if directStorage && (disk.putContext != ctx || disk.path != upload.Path || string(disk.body) != "hello") {
 			t.Fatalf("storage write = context preserved %v path %q body %q", disk.putContext == ctx, disk.path, disk.body)
+		}
+		if !directStorage {
+			body, err := manager.Uploads().Get(upload.Path)
+			if err != nil || string(body) != "hello" || managerPutContext != ctx || managerPutPath != upload.Path {
+				t.Fatalf("manager upload = bytes %q err %v context preserved %v path %q", body, err, managerPutContext == ctx, managerPutPath)
+			}
 		}
 	}
 	if !directStorage {

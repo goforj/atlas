@@ -66,11 +66,11 @@ gate:
 
 | Gate | Evidence |
 | --- | --- |
-| Adapter feasibility | `TestLiveCodexAppServerFeasibility`, `TestAdapterRunsFreshAttributedDiagnosticSession`, and the process-group tests prove fresh-thread attribution, isolated agent state, interruption, and descendant termination. |
+| Adapter feasibility | `TestLiveCodexAppServerFeasibility`, `TestAdapterRunsFreshAttributedDiagnosticSession`, and the process-group tests prove fresh-thread attribution, isolated agent state, interruption, and cleanup of the owned leader plus descendants observed by the supported host tracker. The Linux tracker samples ancestry and other local backends do not claim complete descendant isolation, so authoritative cleanup remains a Phase 3 backend property. |
 | GoForj preparation | Scenario decoder, plan, preparation, clone, tree, and documentation-parity tests cover strict v2 YAML, unchanged v1 behavior, dependency ordering, target omission, symlink rejection, independent writable copies, and lexical tree identities. Tagged calibration covers the core golden Projects, targeted mutants, and safe abstention. |
 | Atlas evaluation core | Runner, artifact, manifest, diff, authenticated report, diagnostic, workflow, and isolation tests cover capability preflight, baseline timing, cancellation, timeout, cleanup, repairable finalization, sealing before verification, redaction, and HMAC-backed post-run tamper evidence for artifacts, plus separate outcome and conformance endpoints. Verifier phases keep separate writable Go state while using the supervisor's prepared module archives as a local proxy before falling back to the declared upstream. This HMAC evidence is not adversarial authentication when an unconfined candidate and the supervisor share a UID, because that candidate can read the signing key or replace retained files. |
 | Guidance ownership | Guidance reconciliation tests cover every native target, managed-block ownership, stable target selection, and legacy inference. Tagged `TestBaselineGuidanceSurvivesProjectLifecycle` proves baseline guidance survives render, build, and a representative generator workflow. |
-| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 30 versioned contracts and classify them as scaffold, feature, repair, or abstention measurements. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. Newer application-shaped cases add golden and targeted-mutant calibration without presenting calibration as live treatment evidence. Behavior-sensitive feature contracts now add verifier-owned runtime probes or observable command output for transactions, caching, storage, image revalidation, payload validation, route policy, commands, controllers, lifecycle readiness, outbound HTTP, mail, uploads, JSON APIs, auth registration, events, jobs, and schedules. Scaffold contracts intentionally remain source, registration, compilation, or route-visibility measurements. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
+| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 31 versioned contracts and classify them as scaffold, feature, repair, abstention, or runtime-observability measurements. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. Newer application-shaped cases add golden and targeted-mutant calibration without presenting calibration as live treatment evidence. Behavior-sensitive feature contracts now add verifier-owned runtime probes or observable command output for transactions, caching, storage, image revalidation, payload validation, route policy, commands, controllers, lifecycle readiness, outbound HTTP, mail, uploads, JSON APIs, auth registration, events, jobs, schedules, and runtime observability. Scaffold contracts intentionally remain source, registration, compilation, or route-visibility measurements. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
 
 Live calibration found real harness defects rather than being rerun until
 green. A valid transport-package controller exposed constructor-name
@@ -157,7 +157,7 @@ Codex run can satisfy the diagnostic adapter boundary:
 2. Capture the resolved CLI and model identity.
 3. Keep provider credentials and delegated transport out of child shell
    environments.
-4. Observe process lifecycle and terminate the complete descendant job.
+4. Observe process lifecycle and terminate the owned process group plus every descendant the local host tracker can qualify; do not treat sampled local cleanup as an authoritative containment claim.
 5. Retain stdout, stderr, exit state, duration, and final filesystem changes.
 6. Record which properties remain unavailable without an authoritative
    sandbox.
@@ -295,14 +295,17 @@ use the local workspace run as the final release-qualified evidence.
 
 ## Deferred Until Measured
 
-Do not add persistent Project caching, shared writable dependency caches,
-parallel live trials, release thresholds, an LLM judge, or additional provider
-adapters in the first slice. Repeated Project preparation may use a private
-ephemeral base copied into each trial. Persistent content-addressed caching is
-promoted only after representative preparation measurements justify its
-security and maintenance cost. Disposable verifier phases may read prepared Go
-module archives through a local proxy, but continue to receive independent
-writable module and build caches.
+Do not add persistent cross-command Project caching, shared writable dependency
+caches, release thresholds, an LLM judge, or additional provider adapters in
+the first slice. The implemented command-local scheduler runs bounded complete
+treatment pairs concurrently while preserving sequential treatment order
+inside each pair. Repeated Project preparation may use a private ephemeral base
+copied into each trial. Persistent content-addressed caching is promoted only
+after representative preparation measurements justify its security and
+maintenance cost. Disposable verifier phases may read prepared Go module
+archives through a local proxy, but continue to receive independent writable
+module and build caches. Concurrent local diagnostics remain non-authoritative
+until the Phase 3 backend supplies real same-user isolation.
 
 The promoted `/v1` workflows record exact successful GoForj generator
 invocations. That is sufficient to describe the intended local workflow while

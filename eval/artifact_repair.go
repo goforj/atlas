@@ -16,12 +16,12 @@ func repairFinalizationArtifacts(artifacts *AttemptArtifacts, request AttemptReq
 	}
 	root, err := openArtifactRepairRoot(artifacts)
 	if err != nil {
-		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_repair", Message: err.Error()})
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_repair", Message: err.Error(), Cause: err})
 		return
 	}
 	defer root.Close()
 	if err := root.Remove(artifactManifestName); err != nil && !errors.Is(err, os.ErrNotExist) {
-		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_manifest_cleanup", Message: err.Error()})
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_manifest_cleanup", Message: err.Error(), Cause: err})
 	}
 	repairTextArtifact(root, artifacts, result, "summary.txt", "artifact_summary_repair", attemptSummary(request, *result))
 	repairJSONArtifact(root, artifacts, result, "scorecard.json", "artifact_scorecard_repair", attemptScorecard(*result))
@@ -102,7 +102,7 @@ func recordArtifactRepairFailure(root *os.Root, result *AttemptResult, name, pha
 	if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 		message = errors.Join(err, fmt.Errorf("remove stale %s: %w", name, removeErr)).Error()
 	}
-	result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: phase, Message: message})
+	result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: phase, Message: message, Cause: errors.Join(err, removeErr)})
 }
 
 // replaceArtifactAtomically keeps a failed terminal repair from truncating the last complete report in place.

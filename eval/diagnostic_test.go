@@ -2,8 +2,11 @@ package eval
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -64,6 +67,69 @@ func TestRunGuidanceDiagnosticValidatesBothEnvironmentsBeforeMutation(t *testing
 	}
 	if preparer.resolveCalls != 0 || preparer.prepareCalls != 0 {
 		t.Fatalf("preparer mutated after invalid preflight: resolve=%d prepare=%d", preparer.resolveCalls, preparer.prepareCalls)
+	}
+}
+
+// TestRunGuidanceDiagnosticRetainsUnserializedAttemptCause keeps operational error identity available to callers without adding it to reports.
+func TestRunGuidanceDiagnosticRetainsUnserializedAttemptCause(t *testing.T) {
+	runner, _, _, _, agent := newFakeRunner(t)
+	cause := errors.New("command fatal")
+	agent.session.waitErr = cause
+	definition, err := LoadPromotedDefinition("add-http-controller")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.RunGuidanceDiagnostic(context.Background(), GuidanceDiagnosticRequest{
+		LogicalTrialID:  "diagnostic-01",
+		Definition:      definition,
+		DestinationRoot: "/private/projects",
+		ForjExecutable:  "/tools/forj",
+		Environments: map[string][]string{
+			GuidanceProfileNone:   os.Environ(),
+			GuidanceProfileAgents: os.Environ(),
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunGuidanceDiagnostic(): %v", err)
+	}
+	if len(result.Attempts) != 2 || !errors.Is(result.Attempts[0].Cause, cause) || !errors.Is(result.Attempts[1].Cause, cause) {
+		t.Fatalf("attempts = %#v, want both underlying causes", result.Attempts)
+	}
+	body, err := json.Marshal(result.Attempts[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "Cause") || strings.Contains(string(body), "cause\":") {
+		t.Fatalf("serialized attempt exposed Cause: %s", body)
+	}
+}
+
+// TestRunGuidanceDiagnosticStopsAfterResourceExhaustion avoids consuming the shared disk again for the second treatment.
+func TestRunGuidanceDiagnosticStopsAfterResourceExhaustion(t *testing.T) {
+	runner, _, preparer, _, agent := newFakeRunner(t)
+	agent.session.waitErr = &os.PathError{Op: "write", Path: "artifact", Err: syscall.ENOSPC}
+	definition, err := LoadPromotedDefinition("add-http-controller")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runner.RunGuidanceDiagnostic(context.Background(), GuidanceDiagnosticRequest{
+		LogicalTrialID:  "diagnostic-01",
+		Definition:      definition,
+		DestinationRoot: "/private/projects",
+		ForjExecutable:  "/tools/forj",
+		Environments: map[string][]string{
+			GuidanceProfileNone:   os.Environ(),
+			GuidanceProfileAgents: os.Environ(),
+		},
+	})
+	if !errors.Is(err, syscall.ENOSPC) {
+		t.Fatalf("RunGuidanceDiagnostic() error = %v, want ENOSPC", err)
+	}
+	if len(result.Attempts) != 1 || !errors.Is(result.Attempts[0].Cause, syscall.ENOSPC) {
+		t.Fatalf("attempts = %#v, want only the exhausted control treatment", result.Attempts)
+	}
+	if preparer.prepareCalls != 1 || agent.startCalls != 1 {
+		t.Fatalf("resource exhaustion ran another treatment: prepare=%d start=%d", preparer.prepareCalls, agent.startCalls)
 	}
 }
 

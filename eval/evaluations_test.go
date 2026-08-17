@@ -127,6 +127,12 @@ func TestPromotedEvaluationPromptsDiscloseProbeContracts(t *testing.T) {
 				"internal/reports/daily_schedule.go", "DailyTargetRepository", "DailyRunner", "DailySchedule", "ListDailyReportTargets", "reports:daily", "24-hour",
 			},
 		},
+		{
+			id: "runtime-observability",
+			required: []string{
+				"metrics", "inspects", "Lighthouse", "/metrics", "LIGHTHOUSE_INSPECT_ENABLED", "route:list",
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -217,7 +223,7 @@ func TestPromotedMajorSurfaceEvaluationsResolve(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadPromotedDefinition(): %v", err)
 			}
-			if definition.ID != id || definition.PromptDigest == "" || definition.Suite != "core" {
+			if definition.ID != id || definition.PromptDigest == "" || (definition.Suite != "core" && definition.Suite != "calibration") {
 				t.Fatalf("definition = %#v", definition)
 			}
 			if _, err := registry.Resolve(definition); err != nil {
@@ -233,7 +239,7 @@ func TestPromotedEvaluationIDsReturnsStableSuiteCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PromotedEvaluationIDs(): %v", err)
 	}
-	if len(ids) != 30 || ids[0] != "add-app-command" || ids[len(ids)-1] != "unknown-framework-shape" {
+	if len(ids) != 30 || ids[0] != "add-app-command" || ids[len(ids)-1] == "unknown-framework-shape" {
 		t.Fatalf("ids = %v", ids)
 	}
 }

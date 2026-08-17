@@ -24,6 +24,7 @@ const maxWireOutputFiles = 64
 type surfaceContract struct {
 	id                  string
 	allowedChanges      []string
+	requiredChanges     []string
 	qualityTestPatterns []string
 	sources             []sourceContract
 	forbiddenText       []textExclusion
@@ -39,19 +40,27 @@ type textExclusion struct {
 
 // sourceContract requires syntax-bearing facts from one or more candidate-owned files.
 type sourceContract struct {
-	id                string
-	paths             []string
-	identifiers       []string
-	identifierChoices [][]string
-	selectorCalls     []string
-	forbiddenCalls    []string
-	stringLiterals    []string
-	forbiddenLiterals []string
-	declarations      []declarationContract
-	assignments       []assignmentContract
-	text              []string
-	normalizedText    []string
-	commentOnly       bool
+	id                 string
+	paths              []string
+	identifiers        []string
+	identifierChoices  [][]string
+	selectorCalls      []string
+	forbiddenCalls     []string
+	stringLiterals     []string
+	forbiddenLiterals  []string
+	declarations       []declarationContract
+	assignments        []assignmentContract
+	text               []string
+	normalizedText     []string
+	commentOnly        bool
+	providerConnection *providerConnectionContract
+}
+
+// providerConnectionContract requires an accessor-using provider to be registered in an App Wire set.
+type providerConnectionContract struct {
+	accessor            string
+	managerImportSuffix string
+	wirePaths           []string
 }
 
 // assignmentContract relates a named local value to the calls and identifiers used to build it.
@@ -66,6 +75,7 @@ type assignmentContract struct {
 type declarationContract struct {
 	name                 string
 	nameChoices          []string
+	anyName              bool
 	receiver             string
 	identifiers          []string
 	forbiddenIdentifiers []string
@@ -203,6 +213,9 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 	}
 	ownedPatterns := append(append([]string(nil), verifier.contract.allowedChanges...), verifier.contract.qualityTestPatterns...)
 	checks := []EndpointResult{verifySurfaceOwnership(input.Changes, ownedPatterns)}
+	if len(verifier.contract.requiredChanges) > 0 {
+		checks = append(checks, verifyRequiredSurfaceChanges(input.Changes, verifier.contract.requiredChanges))
+	}
 	if len(verifier.contract.qualityTestPatterns) > 0 {
 		checks = append(checks, verifyCandidateTestQuality(input.ProjectRoot, input.Changes, verifier.contract.qualityTestPatterns))
 	}
@@ -236,6 +249,27 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		WorkflowConformance: EndpointResult{ID: "workflow-owned-by-runner", Status: EndpointIneligible},
 		Checks:              checks,
 	}, nil
+}
+
+// verifyRequiredSurfaceChanges proves the candidate connected behavior to framework-owned registration points without prescribing application names.
+func verifyRequiredSurfaceChanges(changes []ProjectChange, patterns []string) EndpointResult {
+	for _, pattern := range patterns {
+		matched := false
+		for _, change := range changes {
+			if change.After.Kind == "" {
+				continue
+			}
+			candidate := filepath.ToSlash(change.Path)
+			if ok, _ := filepath.Match(pattern, candidate); ok {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return EndpointResult{ID: "required-registration-change", Status: EndpointFailed, Details: fmt.Sprintf("required Project change %q is absent", pattern)}
+		}
+	}
+	return EndpointResult{ID: "required-registration-change", Status: EndpointPassed}
 }
 
 // runStandardProjectChecks proves generated parity and compilation in one isolated phase without sharing state with hidden probes.
@@ -281,20 +315,20 @@ func verifyCandidateTestQuality(root string, changes []ProjectChange, patterns [
 			if matched {
 				file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(root, filepath.FromSlash(candidatePath)), nil, 0)
 				if err != nil {
-					return EndpointResult{ID: "focused-tests-added", Kind: RequirementQuality, Status: EndpointFailed, Details: fmt.Sprintf("parse focused test %q: %v", candidatePath, err)}
+					return EndpointResult{ID: "test-function-added", Kind: RequirementQuality, Status: EndpointFailed, Details: fmt.Sprintf("parse focused test %q: %v", candidatePath, err)}
 				}
 				for _, declaration := range file.Decls {
 					function, ok := declaration.(*ast.FuncDecl)
 					if ok && isGoTestFunction(file, function) {
-						return EndpointResult{ID: "focused-tests-added", Kind: RequirementQuality, Status: EndpointPassed}
+						return EndpointResult{ID: "test-function-added", Kind: RequirementQuality, Status: EndpointPassed}
 					}
 				}
-				return EndpointResult{ID: "focused-tests-added", Kind: RequirementQuality, Status: EndpointFailed, Details: fmt.Sprintf("focused test %q does not declare a Go test function", candidatePath)}
+				return EndpointResult{ID: "test-function-added", Kind: RequirementQuality, Status: EndpointFailed, Details: fmt.Sprintf("focused test %q does not declare a Go test function", candidatePath)}
 			}
 		}
 	}
 	return EndpointResult{
-		ID:      "focused-tests-added",
+		ID:      "test-function-added",
 		Kind:    RequirementQuality,
 		Status:  EndpointFailed,
 		Details: "candidate did not add or update a focused test in the evaluated surface",
@@ -495,10 +529,22 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 				break
 			}
 		}
+		if scope == nil && declaration.anyName {
+			for candidate, candidateScope := range declarations {
+				if declaration.receiver != "" && !strings.HasPrefix(candidate, declaration.receiver+".") {
+					continue
+				}
+				if declarationFactsMismatch(candidateScope, declaration) == "" {
+					key = candidate
+					scope = candidateScope
+					break
+				}
+			}
+		}
 		if scope == nil {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required declaration %q is absent", names)}
 		}
-		if details := verifySourceFacts(*scope, declaration.identifiers, nil, declaration.selectorCalls, declaration.forbiddenCalls, declaration.stringLiterals, declaration.forbiddenLiterals); details != "" {
+		if details := declarationFactsMismatch(scope, declaration); details != "" {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q: %s", key, details)}
 		}
 		for _, identifier := range declaration.forbiddenIdentifiers {
@@ -545,7 +591,197 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 	if contract.commentOnly && !sqlCommentsOnly(text.String()) {
 		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: "migration must not contain executable SQL"}
 	}
+	if contract.providerConnection != nil {
+		if details := verifyProviderConnection(root, paths, contract.providerConnection); details != "" {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details}
+		}
+	}
 	return EndpointResult{ID: contract.id, Status: EndpointPassed}
+}
+
+// verifyProviderConnection finds an application-owned provider that resolves the named resource and confirms App Wire registers that same provider.
+func verifyProviderConnection(root string, sourcePaths []string, contract *providerConnectionContract) string {
+	providers := namedResourceProviders(root, sourcePaths, contract)
+	if len(providers) == 0 {
+		return fmt.Sprintf("no provider resolves named accessor %q", contract.accessor)
+	}
+	wirePaths, err := matchingSurfacePaths(root, contract.wirePaths)
+	if err != nil {
+		return err.Error()
+	}
+	for _, path := range wirePaths {
+		body, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr.Error()
+		}
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, body, 0)
+		if parseErr != nil {
+			return fmt.Sprintf("parse %s: %v", filepath.ToSlash(path), parseErr)
+		}
+		if wireSetReferencesProvider(file, providers) {
+			return ""
+		}
+	}
+	return fmt.Sprintf("no provider resolving %q is registered in App wire.NewSet", contract.accessor)
+}
+
+// namedResourceProviders returns function declarations that directly resolve the selected named resource.
+func namedResourceProviders(root string, paths []string, contract *providerConnectionContract) []namedResourceProvider {
+	providers := make([]namedResourceProvider, 0)
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") || filepath.Ext(path) != ".go" {
+			continue
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, body, 0)
+		if err != nil {
+			continue
+		}
+		imports := wireImportPaths(file)
+		for _, declaration := range file.Decls {
+			function, ok := declaration.(*ast.FuncDecl)
+			if !ok || function.Recv != nil || !functionCallsAccessor(function, contract.accessor) || !functionReceivesManager(function, imports, contract.managerImportSuffix) {
+				continue
+			}
+			directory, relativeErr := filepath.Rel(root, filepath.Dir(path))
+			if relativeErr != nil {
+				continue
+			}
+			providers = append(providers, namedResourceProvider{name: function.Name.Name, directory: filepath.ToSlash(directory)})
+		}
+	}
+	return providers
+}
+
+// functionReceivesManager binds the accessor call to the generated manager dependency rather than an unrelated method with the same name.
+func functionReceivesManager(function *ast.FuncDecl, imports map[string]string, importSuffix string) bool {
+	if function == nil || function.Type.Params == nil || importSuffix == "" {
+		return false
+	}
+	for _, field := range function.Type.Params.List {
+		pointer, ok := field.Type.(*ast.StarExpr)
+		if !ok {
+			continue
+		}
+		selector, ok := pointer.X.(*ast.SelectorExpr)
+		if !ok || selector.Sel.Name != "Manager" {
+			continue
+		}
+		packageName, ok := selector.X.(*ast.Ident)
+		if ok && strings.HasSuffix(imports[packageName.Name], importSuffix) {
+			return true
+		}
+	}
+	return false
+}
+
+// namedResourceProvider identifies a provider by its declaration name and application package directory.
+type namedResourceProvider struct {
+	name      string
+	directory string
+}
+
+// functionCallsAccessor identifies providers by their resource use rather than an application-specific function name.
+func functionCallsAccessor(function *ast.FuncDecl, accessor string) bool {
+	found := false
+	ast.Inspect(function, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if ok && callName(call) == accessor {
+			found = true
+			return false
+		}
+		return !found
+	})
+	return found
+}
+
+// wireSetReferencesProvider proves that a provider discovered from resource use is an argument to an App services wire.NewSet call.
+func wireSetReferencesProvider(file *ast.File, providers []namedResourceProvider) bool {
+	imports := wireImportPaths(file)
+	found := false
+	ast.Inspect(file, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok || !isWireNewSet(call) {
+			return true
+		}
+		for _, argument := range call.Args {
+			if wireArgumentReferencesProvider(argument, imports, providers) {
+				found = true
+				return false
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+// wireImportPaths maps the local import spelling to its source path so identically named providers in sibling packages cannot satisfy the connection.
+func wireImportPaths(file *ast.File) map[string]string {
+	imports := map[string]string{}
+	for _, imported := range file.Imports {
+		importPath := strings.Trim(imported.Path.Value, "\"")
+		name := ""
+		if imported.Name == nil {
+			name = filepath.Base(importPath)
+		} else {
+			name = imported.Name.Name
+		}
+		imports[name] = importPath
+	}
+	return imports
+}
+
+// wireArgumentReferencesProvider compares both the provider name and its imported application package.
+func wireArgumentReferencesProvider(argument ast.Expr, imports map[string]string, providers []namedResourceProvider) bool {
+	selector, ok := argument.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	packageName, ok := selector.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	importPath := imports[packageName.Name]
+	for _, provider := range providers {
+		if provider.name == selector.Sel.Name && strings.HasSuffix(importPath, "/"+provider.directory) {
+			return true
+		}
+	}
+	return false
+}
+
+// isWireNewSet recognizes the framework's provider-set constructor without accepting unrelated NewSet helpers.
+func isWireNewSet(call *ast.CallExpr) bool {
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != "NewSet" {
+		return false
+	}
+	packageName, ok := selector.X.(*ast.Ident)
+	return ok && packageName.Name == "wire"
+}
+
+// declarationFactsMismatch keeps named and structurally selected declarations on the same evidence contract.
+func declarationFactsMismatch(scope *sourceFacts, declaration declarationContract) string {
+	if scope == nil {
+		return "declaration is absent"
+	}
+	if details := verifySourceFacts(*scope, declaration.identifiers, nil, declaration.selectorCalls, declaration.forbiddenCalls, declaration.stringLiterals, declaration.forbiddenLiterals); details != "" {
+		return details
+	}
+	for _, identifier := range declaration.forbiddenIdentifiers {
+		if scope.identifiers[identifier] {
+			return fmt.Sprintf("contains forbidden identifier %q", identifier)
+		}
+	}
+	for _, nested := range declaration.nestedCalls {
+		if !scope.nestedCalls[nested.outer+">"+nested.inner] {
+			return fmt.Sprintf("does not call %q within %q", nested.inner, nested.outer)
+		}
+	}
+	return ""
 }
 
 // normalizeSurfaceText tolerates presentation spacing around configuration separators without merging distinct tokens.

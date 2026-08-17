@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -92,7 +91,7 @@ func TestVerifierCommandsUsesPrivatePhaseState(t *testing.T) {
 		t.Fatal(err)
 	}
 	baseEnvironment := append(os.Environ(), "GOMODCACHE="+moduleCache, "GOPROXY=https://proxy.golang.org,direct")
-	runner := VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: baseEnvironment}
+	runner := VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: baseEnvironment, ModuleProxy: "http://127.0.0.1:12345/proxy"}
 	first, err := runner.Open(context.Background(), VerifierProject{Root: source})
 	if err != nil {
 		t.Fatalf("Open() first phase: %v", err)
@@ -117,10 +116,10 @@ func TestVerifierCommandsUsesPrivatePhaseState(t *testing.T) {
 	if firstEnvironment["GOWORK"] != "off" || secondEnvironment["GOWORK"] != "off" {
 		t.Fatalf("verifier workspace policy = %q and %q, want off", firstEnvironment["GOWORK"], secondEnvironment["GOWORK"])
 	}
-	wantProxyPrefix := (&url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(moduleCache, "cache", "download"))}).String() + ","
 	for _, environment := range []map[string]string{firstEnvironment, secondEnvironment} {
-		if !strings.HasPrefix(environment["GOPROXY"], wantProxyPrefix) || !strings.HasSuffix(environment["GOPROXY"], "https://proxy.golang.org,direct") {
-			t.Fatalf("verifier module proxy = %q, want local preparation mirror before upstream", environment["GOPROXY"])
+		wantProxy := runner.ModuleProxy
+		if environment["GOPROXY"] != wantProxy || strings.Contains(environment["GOPROXY"], "file:") {
+			t.Fatalf("verifier module proxy environment = %#v, want %q without backing path", environment, wantProxy)
 		}
 	}
 	marker := filepath.Join(firstEnvironment["HOME"], "phase-marker")
@@ -145,19 +144,21 @@ func TestVerifierCommandsUsesPrivatePhaseState(t *testing.T) {
 	}
 }
 
-// TestVerifierModuleProxyRequiresPreparedArchives avoids routing dependency requests through an empty or absent host cache.
-func TestVerifierModuleProxyRequiresPreparedArchives(t *testing.T) {
+// TestPrivateVerifierEnvironmentUsesOnlyAnExplicitModuleProxy prevents trusted host paths from reaching verifier children.
+func TestPrivateVerifierEnvironmentUsesOnlyAnExplicitModuleProxy(t *testing.T) {
 	moduleCache := t.TempDir()
-	environment := []string{"GOMODCACHE=" + moduleCache, "GOPROXY=https://proxy.golang.org,direct"}
-	if proxy := verifierModuleProxy(environment); proxy != "" {
-		t.Fatalf("verifierModuleProxy() = %q before preparation, want empty", proxy)
+	proxy := "http://127.0.0.1:12345"
+	environment, err := privateVerifierEnvironment([]string{"GOMODCACHE=" + moduleCache, "GOPROXY=https://credential@proxy.golang.org,direct"}, t.TempDir(), proxy)
+	if err != nil {
+		t.Fatalf("privateVerifierEnvironment(): %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(moduleCache, "cache", "download"), 0o700); err != nil {
-		t.Fatal(err)
+	values := verifierEnvironmentValues(environment)
+	wantProxy := proxy
+	if values["GOPROXY"] != wantProxy {
+		t.Fatalf("GOPROXY = %q, want %q", values["GOPROXY"], wantProxy)
 	}
-	proxy := verifierModuleProxy(environment)
-	if !strings.HasPrefix(proxy, "file:") || !strings.HasSuffix(proxy, ",https://proxy.golang.org,direct") {
-		t.Fatalf("verifierModuleProxy() = %q, want local mirror with upstream fallback", proxy)
+	if strings.Contains(strings.Join(environment, "\n"), moduleCache) || strings.Contains(strings.Join(environment, "\n"), "file://") || strings.Contains(strings.Join(environment, "\n"), "credential") {
+		t.Fatalf("private environment exposes a trusted backing path: %#v", environment)
 	}
 }
 

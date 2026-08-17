@@ -622,40 +622,30 @@ func materializeCredential(homeRoot string, body []byte) error {
 	return nil
 }
 
-// codexCredentialSecrets collects secret-bearing string values and the exact serialized authority for report redaction.
+// codexCredentialSecrets treats every string leaf as authority because provider extensions are not a closed schema.
 func codexCredentialSecrets(value any, serialized string) []string {
 	secrets := []string{serialized}
 	seen := map[string]bool{serialized: true}
 	var visit func(any)
 	visit = func(current any) {
 		switch typed := current.(type) {
+		case string:
+			if typed != "" && !seen[typed] {
+				seen[typed] = true
+				secrets = append(secrets, typed)
+			}
 		case []any:
 			for _, item := range typed {
 				visit(item)
 			}
 		case map[string]any:
-			for key, item := range typed {
-				if secret, ok := item.(string); ok && secret != "" && codexCredentialSecretField(key) && !seen[secret] {
-					seen[secret] = true
-					secrets = append(secrets, secret)
-				}
+			for _, item := range typed {
 				visit(item)
 			}
 		}
 	}
 	visit(value)
 	return secrets
-}
-
-// codexCredentialSecretField recognizes authority values supported by Codex auth documents and provider extensions.
-func codexCredentialSecretField(key string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(key))
-	switch normalized {
-	case "access_token", "token", "id_token", "refresh_token", "api_key", "client_secret", "password", "secret":
-		return true
-	default:
-		return strings.HasSuffix(normalized, "_api_key") || strings.HasSuffix(normalized, "_access_token") || strings.HasSuffix(normalized, "_refresh_token")
-	}
 }
 
 // privateProcessEnvironment isolates home and Codex configuration while retaining an explicit caller allowlist.
