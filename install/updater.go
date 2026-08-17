@@ -32,8 +32,7 @@ func (u Updater) Update(ctx context.Context, opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	applySurfaceSelections(&opts)
-	explicitSurfaces := opts.GuidelinesSelection != nil || opts.SkillsSelection != nil || opts.MCPSelection != nil || opts.Guidelines || opts.Skills || opts.MCP
+	explicitSurfaces := opts.Guidelines || opts.Skills || opts.MCP
 	if !explicitSurfaces {
 		opts.Guidelines = cfg.Features.Guidelines
 		opts.Skills = cfg.Features.Skills
@@ -42,5 +41,5 @@ func (u Updater) Update(ctx context.Context, opts Options) (Result, error) {
 	if !opts.Discover && !opts.AllAgents && len(opts.Agents) == 0 {
 		opts.Agents = append([]string(nil), cfg.Agents...)
 	}
-	return u.Installer.install(ctx, opts, &cfg, explicitSurfaces)
+	return u.Installer.install(ctx, opts, &cfg, explicitSurfaces, true)
 }
