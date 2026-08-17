@@ -86,3 +86,21 @@ func TestPromotedWorkflowReturnsCopies(t *testing.T) {
 		t.Fatalf("promoted workflow was mutated: %#v", second)
 	}
 }
+
+// TestDispatchFollowupWorkflowUsesConventionalJobPlacement keeps workflow evidence aligned with the generator's feature-owned default package.
+func TestDispatchFollowupWorkflowUsesConventionalJobPlacement(t *testing.T) {
+	var found *WorkflowExpectation
+	for _, workflow := range PromotedWorkflows() {
+		if workflow.ID == "goforj-dispatch-event-followup-job/v1" {
+			found = &workflow
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("dispatch follow-up workflow is absent")
+	}
+	want := []string{"make:job", "reports:generate"}
+	if len(found.Generators) != 1 || !reflect.DeepEqual(found.Generators[0].Arguments, want) {
+		t.Fatalf("dispatch generator arguments = %#v, want %#v", found.Generators, want)
+	}
+}

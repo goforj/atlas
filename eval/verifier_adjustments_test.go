@@ -241,6 +241,17 @@ func NewPostRepo() {}
 	}
 }
 
+// TestModelRelationshipContractRejectsWrongLocalKey ensures spacing tolerance does not weaken relationship direction or key identity.
+func TestModelRelationshipContractRejectsWrongLocalKey(t *testing.T) {
+	root := t.TempDir()
+	writeVerifierFile(t, root, ".db-relationships.yaml", "users:\n  - 1-many wrong -> posts:user_id\n")
+	contract := promotedSourceContract(t, "model-relationships/v1", "relationship-contract")
+	result := verifySurfaceSource(root, contract)
+	if result.Status != EndpointFailed || !strings.Contains(result.Details, "1-many id -> posts:user_id") {
+		t.Fatalf("wrong local key result = %#v", result)
+	}
+}
+
 // TestAvatarContractAcceptsHeaderAccessAndControllerRegistration keeps the static gate neutral to equivalent request and Wire composition APIs.
 func TestAvatarContractAcceptsHeaderAccessAndControllerRegistration(t *testing.T) {
 	root := t.TempDir()

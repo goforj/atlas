@@ -50,6 +50,7 @@ type sourceContract struct {
 	declarations      []declarationContract
 	assignments       []assignmentContract
 	text              []string
+	compactText       []string
 	commentOnly       bool
 }
 
@@ -535,10 +536,26 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required configuration %q is absent", required)}
 		}
 	}
+	compact := compactSurfaceText(text.String())
+	for _, required := range contract.compactText {
+		if !strings.Contains(compact, compactSurfaceText(required)) {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required configuration %q is absent", required)}
+		}
+	}
 	if contract.commentOnly && !sqlCommentsOnly(text.String()) {
 		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: "migration must not contain executable SQL"}
 	}
 	return EndpointResult{ID: contract.id, Status: EndpointPassed}
+}
+
+// compactSurfaceText removes presentation-only spacing so configuration contracts can verify one complete semantic expression.
+func compactSurfaceText(source string) string {
+	return strings.Map(func(value rune) rune {
+		if unicode.IsSpace(value) {
+			return -1
+		}
+		return value
+	}, source)
 }
 
 // sqlCommentsOnly accepts SQL comment syntax without treating a generator's particular comment wording as an outcome requirement.
