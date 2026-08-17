@@ -330,7 +330,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "protect-route-with-auth/v1",
 			allowedChanges: generatedEnvironmentChanges(".env.local", "app/routes.go"),
 			sources: []sourceContract{
-				{id: "generated-auth-composition", paths: []string{"app/routes.go"}, identifiers: []string{"publicRoutes", "protectedRoutes", "invoicesController", "authService", "RequireAuth"}, selectorCalls: []string{"NewRouteGroup"}, assignments: []assignmentContract{{name: "publicRoutes", forbiddenIdentifiers: []string{"invoicesController"}}, {name: "protectedRoutes", identifiers: []string{"invoicesController"}, selectorCalls: []string{"Routes"}}}},
+				{id: "generated-auth-composition", paths: []string{"app/routes.go"}, identifiers: []string{"publicRoutes", "protectedRoutes", "invoicesController", "authService", "RequireAuth"}, selectorCalls: []string{"NewRouteGroup"}, assignments: []assignmentContract{{name: "publicRoutes", forbiddenIdentifiers: []string{"invoicesController"}}, {name: "protectedRoutes", identifiers: []string{"invoicesController"}, selectorCalls: []string{"Routes"}}}, routeGroups: []routeGroupContract{{routesIdentifier: "protectedRoutes", middlewareSelector: "RequireAuth"}}},
 			},
 			commands: append(standardSurfaceCommands(),
 				commandContract{id: "protected-route-visible", arguments: []string{"forj", "route:list"}, contains: []string{"/api/v1/invoices/:id"}},

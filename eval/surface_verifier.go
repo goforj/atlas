@@ -50,6 +50,7 @@ type sourceContract struct {
 	forbiddenLiterals  []string
 	declarations       []declarationContract
 	assignments        []assignmentContract
+	routeGroups        []routeGroupContract
 	text               []string
 	normalizedText     []string
 	commentOnly        bool
@@ -77,6 +78,12 @@ type assignmentContract struct {
 	identifiers          []string
 	forbiddenIdentifiers []string
 	selectorCalls        []string
+}
+
+// routeGroupContract requires one route group to join the intended route slice and middleware.
+type routeGroupContract struct {
+	routesIdentifier   string
+	middlewareSelector string
 }
 
 // declarationContract requires related syntax to occur inside one named declaration instead of anywhere in a package.
@@ -639,7 +646,35 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details}
 		}
 	}
+	for _, routeGroup := range contract.routeGroups {
+		if !sourceHasRouteGroup(facts.routeGroupCalls, routeGroup) {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("route group does not join %q with middleware %q", routeGroup.routesIdentifier, routeGroup.middlewareSelector)}
+		}
+	}
 	return EndpointResult{ID: contract.id, Status: EndpointPassed}
+}
+
+// sourceHasRouteGroup reports whether one NewRouteGroup call applies the required middleware to the required route slice.
+func sourceHasRouteGroup(calls []*ast.CallExpr, contract routeGroupContract) bool {
+	for _, call := range calls {
+		if callName(call) != "NewRouteGroup" {
+			continue
+		}
+		foundRoutes := false
+		foundMiddleware := false
+		for _, argument := range call.Args {
+			if identifier, ok := argument.(*ast.Ident); ok && identifier.Name == contract.routesIdentifier {
+				foundRoutes = true
+			}
+			if expressionCallName(argument) == contract.middlewareSelector {
+				foundMiddleware = true
+			}
+		}
+		if foundRoutes && foundMiddleware {
+			return true
+		}
+	}
+	return false
 }
 
 // verifyProviderConnection finds an application-owned provider that resolves the named resource and confirms App Wire registers that same provider.
@@ -1045,10 +1080,11 @@ func isSQLTokenCharacter(value byte) bool {
 
 // sourceFacts retains the syntax classes used by promoted surface contracts.
 type sourceFacts struct {
-	identifiers    map[string]bool
-	selectorCalls  map[string]bool
-	stringLiterals map[string]bool
-	nestedCalls    map[string]bool
+	identifiers     map[string]bool
+	selectorCalls   map[string]bool
+	stringLiterals  map[string]bool
+	nestedCalls     map[string]bool
+	routeGroupCalls []*ast.CallExpr
 }
 
 // newSourceFacts creates one isolated syntax evidence set.
@@ -1269,6 +1305,9 @@ func collectNodeFacts(node ast.Node, facts *sourceFacts) {
 		case *ast.Ident:
 			facts.identifiers[value.Name] = true
 		case *ast.CallExpr:
+			if callName(value) == "NewRouteGroup" {
+				facts.routeGroupCalls = append(facts.routeGroupCalls, value)
+			}
 			outer := callName(value)
 			if outer != "" {
 				facts.selectorCalls[outer] = true
