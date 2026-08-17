@@ -93,7 +93,7 @@ type callArgumentFlowContract struct {
 type commandContract struct {
 	id              string
 	arguments       []string
-	contains        string
+	contains        []string
 	supervisorFiles []supervisorFile
 	probe           func(context.Context, CommandRunner, VerifierProject) EndpointResult
 	standard        bool
@@ -906,14 +906,16 @@ func runIsolatedCommand(ctx context.Context, runner CommandRunner, project Verif
 		}
 	}
 	arguments := append([]string(nil), contract.arguments...)
-	contains := contract.contains
+	contains := append([]string(nil), contract.contains...)
 	if len(contract.supervisorFiles) > 0 {
-		arguments, contains, err = installSupervisorCompletionMarker(session, contract.supervisorFiles[0], arguments)
+		var marker string
+		arguments, marker, err = installSupervisorCompletionMarker(session, contract.supervisorFiles[0], arguments)
 		if err != nil {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("install supervisor completion marker: %v", err)}
 		}
+		contains = append(contains, marker)
 	}
-	return runCheck(ctx, session, contract.id, arguments, contains)
+	return runCheck(ctx, session, contract.id, arguments, contains...)
 }
 
 // installSupervisorCompletionMarker rejects bare successful exits; adversarial anti-forgery remains the authoritative backend's responsibility.

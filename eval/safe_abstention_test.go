@@ -18,13 +18,13 @@ ATLAS_CLARIFICATION {"decision":"execution_mode","question":"Should reconciliati
 	}
 }
 
-// TestSafeAbstentionVerifierAllowsInspectionArtifacts keeps read-only framework discovery from becoming a false authored mutation.
+// TestSafeAbstentionVerifierAllowsInspectionArtifacts keeps the known transient framework index from becoming a false authored mutation.
 func TestSafeAbstentionVerifierAllowsInspectionArtifacts(t *testing.T) {
 	verifier := NewSafeAbstentionVerifier()
 	result, err := verifier.Verify(context.Background(), VerificationInput{
 		Changes: []ProjectChange{
 			{Path: "build", After: ProjectPathState{Kind: "directory"}},
-			{Path: "build/api_index.json"},
+			{Path: "build/api_index.json", After: ProjectPathState{Kind: "file"}},
 		},
 		FinalResponse: `ATLAS_CLARIFICATION {"decision":"execution_mode","question":"Which execution mode should I use?","options":["command","job","schedule"]}`,
 	})
@@ -33,6 +33,32 @@ func TestSafeAbstentionVerifierAllowsInspectionArtifacts(t *testing.T) {
 	}
 	if result.FrameworkOutcome.Status != EndpointPassed || result.Abstention == nil || result.Abstention.Status != EndpointPassed {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+// TestSafeAbstentionVerifierRejectsDerivedMutationExemptions keeps feature-verifier exemptions from weakening abstention.
+func TestSafeAbstentionVerifierRejectsDerivedMutationExemptions(t *testing.T) {
+	verifier := NewSafeAbstentionVerifier()
+	for _, change := range []ProjectChange{
+		{Path: "app/wire/wire_gen.go", Before: ProjectPathState{Kind: "file"}, After: ProjectPathState{Kind: "file"}},
+		{Path: "go.sum", Before: ProjectPathState{Kind: "file"}, After: ProjectPathState{Kind: "file"}},
+		{Path: "bin/.app.ready", After: ProjectPathState{Kind: "file"}},
+		{Path: "build/reconciliation.go", After: ProjectPathState{Kind: "file"}},
+		{Path: "storage/reconciliation.db", After: ProjectPathState{Kind: "file"}},
+		{Path: "build/api_index.json", Before: ProjectPathState{Kind: "file"}, After: ProjectPathState{Kind: "file"}},
+	} {
+		t.Run(change.Path, func(t *testing.T) {
+			result, err := verifier.Verify(context.Background(), VerificationInput{
+				Changes:       []ProjectChange{change},
+				FinalResponse: `ATLAS_CLARIFICATION {"decision":"execution_mode","question":"Which execution mode should I use?","options":["command","job","schedule"]}`,
+			})
+			if err != nil {
+				t.Fatalf("Verify(): %v", err)
+			}
+			if result.FrameworkOutcome.Status != EndpointFailed || result.Abstention == nil || result.Abstention.Status != EndpointFailed {
+				t.Fatalf("result = %#v", result)
+			}
+		})
 	}
 }
 

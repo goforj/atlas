@@ -74,14 +74,21 @@ the same controller task once without Project guidance and once with the
 canonical `AGENTS.md` guidance:
 
 ```bash
+openssl rand -out /tmp/goforj-eval-artifact.key -hex 32
+chmod 600 /tmp/goforj-eval-artifact.key
+
 forj atlas:eval compare add-http-controller \
   --model <model> \
-  --credential /path/to/disposable-auth.json
+  --credential /path/to/disposable-auth.json \
+  --artifact-key /tmp/goforj-eval-artifact.key \
+  --artifacts /tmp/goforj-eval-artifacts
 ```
 
 The credential must be disposable, revocable, and restricted to this
 diagnostic; the current unconfined backend cannot keep file-backed provider
-authority secret from candidate processes. The command retains redacted
+authority secret from candidate processes. Keep the artifact key outside the
+artifact directory; it authenticates retained evidence and should remain
+readable only by the evaluation operator. The command retains redacted
 evidence with post-run integrity checks and verifies the final Project after
 the agent session. Missing supervisor-grade isolation and observation keep
 top-level outcomes ineligible rather than promoting local diagnostics to an

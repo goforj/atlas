@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -71,14 +72,24 @@ func (*SafeAbstentionVerifier) Verify(_ context.Context, input VerificationInput
 	return result, nil
 }
 
-// hasAuthoredSurfaceChange separates speculative edits from build artifacts created while inspecting local framework behavior.
+// hasAuthoredSurfaceChange treats every Project mutation as authored except the known transient inspection index.
 func hasAuthoredSurfaceChange(changes []ProjectChange) bool {
 	for _, change := range changes {
-		if !derivedSurfaceProjectChange(change) {
+		if !safeAbstentionTransientOutput(change) {
 			return true
 		}
 	}
 	return false
+}
+
+// safeAbstentionTransientOutput permits only the newly-created API index emitted by local framework inspection.
+func safeAbstentionTransientOutput(change ProjectChange) bool {
+	if change.Before.Kind != "" {
+		return false
+	}
+	path := filepath.ToSlash(change.Path)
+	return path == "build" && change.After.Kind == "directory" ||
+		path == "build/api_index.json" && change.After.Kind == "file"
 }
 
 // parseClarificationResponse extracts exactly one structured terminal clarification from otherwise natural prose.
