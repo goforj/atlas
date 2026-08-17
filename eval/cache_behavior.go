@@ -231,22 +231,55 @@ func resolveCacheBehaviorProbe(root string) (cacheBehaviorProbe, error) {
 	return cacheBehaviorProbe{}, fmt.Errorf("a two-dependency cache repository constructor could not be derived")
 }
 
-// verifyCacheDecoratorRegistration requires the discovered decorator constructor in the App Wire set.
+// verifyCacheDecoratorRegistration requires App Wire to register the decorator directly or through
+// a local provider that constructs it, preserving the production dependency relationship.
 func verifyCacheDecoratorRegistration(root, constructor string) error {
 	path := filepath.Join(root, "app", "wire", "inject_services_app.go")
 	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 	if err != nil {
 		return fmt.Errorf("parse cache repository registration: %w", err)
 	}
-	registered := false
+	registeredProviders := map[string]bool{}
+	directConstructor := false
 	ast.Inspect(file, func(node ast.Node) bool {
-		selector, ok := node.(*ast.SelectorExpr)
-		if ok && selector.Sel.Name == constructor {
-			registered = true
+		call, ok := node.(*ast.CallExpr)
+		if !ok || !isWireNewSet(call) {
+			return true
 		}
-		return !registered
+		for _, argument := range call.Args {
+			switch expression := argument.(type) {
+			case *ast.SelectorExpr:
+				if expression.Sel.Name == constructor {
+					directConstructor = true
+				}
+			case *ast.Ident:
+				registeredProviders[expression.Name] = true
+			}
+		}
+		return true
 	})
-	if !registered {
+	if directConstructor {
+		return nil
+	}
+	for _, declaration := range file.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Recv != nil || !registeredProviders[function.Name.Name] || function.Body == nil {
+			continue
+		}
+		constructsDecorator := false
+		ast.Inspect(function.Body, func(node ast.Node) bool {
+			selector, ok := node.(*ast.SelectorExpr)
+			if ok && selector.Sel.Name == constructor {
+				constructsDecorator = true
+				return false
+			}
+			return !constructsDecorator
+		})
+		if constructsDecorator {
+			return nil
+		}
+	}
+	if !directConstructor {
 		return fmt.Errorf("cache repository constructor %q is not registered in app/wire/inject_services_app.go", constructor)
 	}
 	return nil

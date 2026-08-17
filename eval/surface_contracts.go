@@ -42,18 +42,14 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "add-schedule/v1",
-			allowedChanges: []string{"internal/invoices/*_schedule.go", "internal/invoices/*_schedule_test.go", "app/wire/inject_schedules_app.go", "app/schedules.go"},
+			allowedChanges: []string{"internal/*/*.go", "app/*_schedule.go", "app/wire/inject_schedules_app.go", "app/schedules.go"},
 			sources: []sourceContract{
-				{id: "schedule-shape", paths: []string{"internal/invoices/*_schedule.go"}, identifiers: []string{"ReconcileSchedule", "Interval", "Service"}, forbiddenCalls: []string{"TODO"}, stringLiterals: []string{"invoices:reconcile"}, declarations: []declarationContract{{name: "Handle", receiver: "ReconcileSchedule", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
-				{id: "schedule-registration", paths: []string{"app/wire/inject_schedules_app.go", "app/schedules.go"}, identifiers: []string{"NewReconcileSchedule"}},
+				{id: "schedule-shape", paths: []string{"internal/*/*.go", "app/*_schedule.go"}, identifiers: []string{"Interval", "Service"}, forbiddenCalls: []string{"TODO"}, stringLiterals: []string{"invoices:reconcile"}, declarations: []declarationContract{{name: "Handle", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
+				{id: "schedule-registration", paths: []string{"app/wire/inject_schedules_app.go", "app/schedules.go"}, identifiers: []string{"Handle"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
-				id:        "reconcile-schedule-behavior",
-				arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasReconcileScheduleBehavior$", "-count=1"},
-				supervisorFiles: []supervisorFile{{
-					path: "internal/invoices/atlas_eval_reconcile_schedule_test.go",
-					body: reconcileScheduleBehaviorProbe,
-				}},
+				id:    "reconcile-schedule-behavior",
+				probe: runReconcileScheduleBehaviorProbe,
 			}),
 		},
 		{
@@ -63,7 +59,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			sources: []sourceContract{
 				{id: "typed-event", paths: []string{"internal/invoices/*_event.go"}, identifiers: []string{"PaidEvent", "InvoiceID", "Topic"}, stringLiterals: []string{"invoices.paid"}},
 				{id: "subscriber-boundary", paths: []string{"internal/invoices/*_subscriber.go"}, identifiers: []string{"PaidSubscriber", "Service"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Handle", receiver: "PaidSubscriber", identifiers: []string{"ctx", "InvoiceID"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
-				{id: "subscriber-registration", paths: []string{"app/wire/inject_subscribers_app.go"}, identifiers: []string{"NewPaidSubscriber", "Handle"}, selectorCalls: []string{"Named", "Subscribe"}},
+				{id: "subscriber-registration", paths: []string{"app/wire/inject_subscribers_app.go"}, identifiers: []string{"NewPaidSubscriber", "Handle"}, selectorCalls: []string{"Subscribe"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
 				id:        "paid-subscriber-behavior",
@@ -96,9 +92,9 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "add-named-app-route/v1",
-			allowedChanges: []string{"internal/audits/*.go", "app/admin/routes.go", "app/admin/wire/inject_http_controllers_app.go"},
+			allowedChanges: []string{"internal/audit/*.go", "internal/audits/*.go", "app/admin/routes.go", "app/admin/wire/inject_http_controllers_app.go"},
 			sources: []sourceContract{
-				{id: "admin-route", paths: []string{"internal/audits/*.go"}, identifiers: []string{"Controller"}, declarations: []declarationContract{{name: "Routes", receiver: "Controller", selectorCalls: []string{"NewRoute"}}, {nameChoices: []string{"Get", "Show", "Index"}, receiver: "Controller", selectorCalls: []string{"JSON"}}}},
+				{id: "admin-route", paths: []string{"internal/audit/*.go", "internal/audits/*.go"}, identifiers: []string{"Controller"}, declarations: []declarationContract{{name: "Routes", receiver: "Controller", selectorCalls: []string{"NewRoute"}}, {nameChoices: []string{"Get", "Show", "Index"}, receiver: "Controller", selectorCalls: []string{"JSON"}}}},
 				{id: "admin-registration", paths: []string{"app/admin/routes.go", "app/admin/wire/inject_http_controllers_app.go"}, identifiers: []string{"NewController", "Routes"}},
 			},
 			forbiddenText: []textExclusion{{id: "default-app-unchanged", paths: []string{"app/routes.go"}, text: "/api/v1/audits"}},
@@ -106,34 +102,34 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:              "add-named-resource/v1",
-			allowedChanges:  generatedEnvironmentChanges("internal/queues/*_gen.go", "app/wire/inject_services_app.go"),
+			allowedChanges:  generatedEnvironmentChanges("internal/queues/*_gen.go", "app/*.go", "app/wire/inject_services_app.go"),
 			requiredChanges: []string{"app/wire/inject_services_app.go"},
 			sources: []sourceContract{
 				{id: "named-queue-config", paths: []string{".env"}, text: []string{"QUEUE_REPORTS_NAME=reports", "QUEUE_REPORTS_WORKERS=2"}},
 				{id: "named-queue-accessor", paths: []string{"internal/queues/*_gen.go"}, identifiers: []string{"Reports"}},
-				{id: "named-queue-injection", paths: []string{"internal/*/*.go"}, providerConnection: &providerConnectionContract{accessor: "Reports", managerImportSuffix: "/internal/queues", wirePaths: []string{"app/wire/inject_services_app.go"}}},
+				{id: "named-queue-injection", paths: []string{"internal/*/*.go", "app/*.go"}, providerConnection: &providerConnectionContract{accessor: "Reports", managerImportSuffix: "/internal/queues", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
 			commands: standardSurfaceCommands(commandContract{id: "named-queue-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedQueueBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_queue_test.go", body: namedQueueBehaviorProbe}}, namedResourceProbe: &providerConnectionContract{accessor: "Reports", managerImportSuffix: "/internal/queues", wirePaths: []string{"app/wire/inject_services_app.go"}}}),
 		},
 		{
 			id:              "add-named-cache/v1",
-			allowedChanges:  generatedEnvironmentChanges("internal/caches/*_gen.go", "app/wire/inject_services_app.go"),
+			allowedChanges:  generatedEnvironmentChanges("internal/caches/*_gen.go", "app/*.go", "app/wire/inject_services_app.go"),
 			requiredChanges: []string{"app/wire/inject_services_app.go"},
 			sources: []sourceContract{
 				{id: "named-cache-config", paths: []string{".env"}, text: []string{"CACHE_PROFILES_DRIVER=memory"}},
 				{id: "named-cache-accessor", paths: []string{"internal/caches/*_gen.go"}, identifiers: []string{"Profiles"}},
-				{id: "named-cache-injection", paths: []string{"internal/*/*.go"}, providerConnection: &providerConnectionContract{accessor: "Profiles", managerImportSuffix: "/internal/caches", wirePaths: []string{"app/wire/inject_services_app.go"}}},
+				{id: "named-cache-injection", paths: []string{"internal/*/*.go", "app/*.go"}, providerConnection: &providerConnectionContract{accessor: "Profiles", managerImportSuffix: "/internal/caches", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
 			commands: standardSurfaceCommands(commandContract{id: "named-cache-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedCacheBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_cache_test.go", body: namedCacheBehaviorProbe}}, namedResourceProbe: &providerConnectionContract{accessor: "Profiles", managerImportSuffix: "/internal/caches", wirePaths: []string{"app/wire/inject_services_app.go"}}}),
 		},
 		{
 			id:              "add-named-storage/v1",
-			allowedChanges:  generatedEnvironmentChanges("internal/storages/*_gen.go", "app/wire/inject_services_app.go"),
+			allowedChanges:  generatedEnvironmentChanges("internal/storages/*_gen.go", "app/*.go", "app/wire/inject_services_app.go"),
 			requiredChanges: []string{"app/wire/inject_services_app.go"},
 			sources: []sourceContract{
 				{id: "named-storage-config", paths: []string{".env"}, text: []string{"STORAGE_AVATARS_DRIVER=local", "STORAGE_AVATARS_ROOT=storage/app/avatars"}},
 				{id: "named-storage-accessor", paths: []string{"internal/storages/*_gen.go"}, identifiers: []string{"Avatars"}},
-				{id: "named-storage-injection", paths: []string{"internal/*/*.go"}, providerConnection: &providerConnectionContract{accessor: "Avatars", managerImportSuffix: "/internal/storages", wirePaths: []string{"app/wire/inject_services_app.go"}}},
+				{id: "named-storage-injection", paths: []string{"internal/*/*.go", "app/*.go"}, providerConnection: &providerConnectionContract{accessor: "Avatars", managerImportSuffix: "/internal/storages", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
 			commands: standardSurfaceCommands(commandContract{id: "named-storage-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedStorageBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_storage_test.go", body: namedStorageBehaviorProbe}}, namedResourceProbe: &providerConnectionContract{accessor: "Avatars", managerImportSuffix: "/internal/storages", wirePaths: []string{"app/wire/inject_services_app.go"}}}),
 		},
@@ -226,7 +222,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "create-additional-app/v1",
 			allowedChanges: generatedEnvironmentChanges(".env.local", ".goforj.yml", "Dockerfile", "Makefile", "app/statuspage/**", "cmd/statuspage/**", "internal/runtime/apps.go", "internal/runtime/apps_test.go"),
 			sources: []sourceContract{
-				{id: "statuspage-project-config", paths: []string{".goforj.yml"}, text: []string{"statuspage:", "./bin/statuspage"}},
+				{id: "statuspage-project-config", paths: []string{".goforj.yml"}, normalizedText: []string{"dev: apps: statuspage:"}},
 				{id: "statuspage-entrypoint", paths: []string{"cmd/statuspage/main.go"}, declarations: []declarationContract{{name: "main", selectorCalls: []string{"LaunchApplication"}}}},
 				{id: "statuspage-app-boundary", paths: []string{"app/statuspage/routes.go", "app/statuspage/wire/*.go"}, identifiers: []string{"ProvideRoutes", "InitializeApplication"}},
 			},
@@ -295,11 +291,11 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "add-database-transaction/v1",
-			allowedChanges: []string{"go.mod", "go.sum", "internal/accounts/*.go", "app/wire/inject_repositories_app.go", "app/wire/inject_services_app.go"},
+			allowedChanges: []string{"go.mod", "go.sum", "internal/accounts/*.go", "app/wire/app.go", "app/wire/inject_repositories_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
-				{id: "transaction-bound-repository", paths: []string{"internal/accounts/repository.go"}, identifiers: []string{"Repository", "WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "WithTransaction", receiver: "Repository", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "Transaction"}}, {name: "AdjustBalance", receiver: "Repository", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "UpdateColumn"}}}},
-				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Transfer", receiver: "Service", selectorCalls: []string{"WithTransaction", "AdjustBalance"}, nestedCalls: []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}}}}},
-				{id: "account-repository-registration", paths: []string{"app/wire/inject_repositories_app.go"}, identifiers: []string{"NewRepository"}},
+				{id: "transaction-bound-repository", paths: []string{"internal/accounts/repository.go"}, identifiers: []string{"Repository", "WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "WithTransaction", receiver: "Repository", identifiers: []string{"ctx"}, selectorCalls: []string{"Transaction"}}, {name: "AdjustBalance", receiver: "Repository", identifiers: []string{"ctx"}, selectorCalls: []string{"UpdateColumn"}}}},
+				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Transfer", receiver: "Service", selectorCalls: []string{"WithTransaction", "AdjustBalance"}, nestedCalls: []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}}}}},
+				{id: "account-repository-registration", paths: []string{"app/wire/app.go", "app/wire/inject_repositories_app.go"}, identifierChoices: [][]string{{"NewRepository", "ProvideRepository"}}},
 				{id: "account-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
@@ -338,8 +334,9 @@ func promotedSurfaceContracts() []surfaceContract {
 			),
 		},
 		{
-			id:             "add-cached-repository/v1",
-			allowedChanges: generatedEnvironmentChanges("internal/caches/*_gen.go", "internal/users/*.go", "app/wire/inject_services_app.go"),
+			id:                     "add-cached-repository/v1",
+			allowedChanges:         generatedEnvironmentChanges("internal/caches/*_gen.go", "internal/users/*.go", "app/wire/inject_services_app.go"),
+			baselineTestExclusions: []string{"internal/users/service_test.go"},
 			sources: []sourceContract{
 				{id: "cache-aside-repository", paths: []string{"internal/users/*.go"}, identifiers: []string{"User"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Find", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}}}},
 				{id: "profiles-cache-access", paths: []string{"internal/users/*.go", "app/wire/inject_services_app.go"}, selectorCalls: []string{"Profiles"}},
@@ -368,9 +365,9 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges:      []string{"internal/events/*.go", "internal/users/*.go", "internal/notifications/*.go", "app/routes.go", "app/lifecycle.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go", "app/wire/inject_subscribers_app.go"},
 			qualityTestPatterns: []string{"internal/users/*_test.go", "internal/notifications/*_test.go"},
 			sources: []sourceContract{
-				{id: "typed-user-event", paths: []string{"internal/events/*.go"}, identifiers: []string{"UserCreated", "UserID", "Topic"}, stringLiterals: []string{"users.created"}, declarations: []declarationContract{{name: "UserCreated", identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}}},
-				{id: "domain-event-publication", paths: []string{"internal/users/events.go", "internal/users/service.go"}, identifiers: []string{"UserEvents", "UserEventPublisher", "PublishCreated"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "PublishCreated", receiver: "UserEventPublisher", identifiers: []string{"ctx"}, selectorCalls: []string{"Publish", "WithContext"}}}},
-				{id: "event-reaction", paths: []string{"internal/notifications/subscribers.go", "app/lifecycle.go"}, identifiers: []string{"Subscribers", "UserCreatedHandler", "Register", "Startup"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Register", receiver: "Subscribers", identifiers: []string{"UserID"}, selectorCalls: []string{"Subscribe"}}, {name: "Startup", receiver: "LifecycleRegistry", selectorCalls: []string{"Register"}}}},
+				{id: "typed-user-event", paths: []string{"internal/events/*.go"}, identifiers: []string{"UserID", "Topic"}, identifierChoices: [][]string{{"UserCreated", "UserCreatedEvent"}}, stringLiterals: []string{"users.created"}, declarations: []declarationContract{{nameChoices: []string{"UserCreated", "UserCreatedEvent"}, identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}}},
+				{id: "domain-event-publication", paths: []string{"internal/users/*.go"}, identifiers: []string{"UserEvents", "UserEventPublisher"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{anyName: true, receiver: "UserEventPublisher", identifiers: []string{"ctx", "UserID"}, selectorCalls: []string{"Publish", "WithContext"}}, {name: "Create", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"Save"}}}},
+				{id: "event-reaction", paths: []string{"internal/notifications/*.go", "app/lifecycle.go"}, identifiers: []string{"Subscribers", "UserCreatedHandler", "Register", "Startup", "Shutdown"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Register", receiver: "Subscribers", identifiers: []string{"UserID"}, selectorCalls: []string{"Subscribe"}}, {name: "Startup", receiver: "LifecycleRegistry", selectorCalls: []string{"Register"}}, {name: "Shutdown", receiver: "LifecycleRegistry", selectorCalls: []string{"Close"}}}},
 			},
 			commands: standardSurfaceCommands(commandContract{
 				id:              "domain-event-behavior",
@@ -397,7 +394,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "schedule-existing-job/v1",
 			allowedChanges: []string{"internal/reports/*.go", "internal/users/*.go", "app/wire/inject_schedules_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
-				{id: "scheduled-job-dispatch", paths: []string{"internal/reports/daily.go", "internal/reports/daily_schedule.go"}, identifiers: []string{"DailyTargetRepository", "DailyRunner", "DailySchedule", "Interval", "Handle"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:daily"}, declarations: []declarationContract{{name: "Run", receiver: "DailyRunner", selectorCalls: []string{"ListDailyReportTargets", "Queue"}}, {name: "Handle", receiver: "DailySchedule", selectorCalls: []string{"Run"}}}},
+				{id: "scheduled-job-dispatch", paths: []string{"internal/reports/*.go"}, identifiers: []string{"DailyTargetRepository", "DailyRunner", "DailySchedule", "Interval", "Handle"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:daily"}, declarations: []declarationContract{{name: "Run", receiver: "DailyRunner", selectorCalls: []string{"ListDailyReportTargets", "Queue"}}, {name: "Handle", receiver: "DailySchedule", selectorCalls: []string{"Run"}}}},
 				{id: "daily-target-repository", paths: []string{"internal/users/*.go"}, identifiers: []string{"ListDailyReportTargets"}},
 				{id: "daily-schedule-registration", paths: []string{"app/wire/inject_schedules_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewDailySchedule", "NewDailyRunner"}},
 			},

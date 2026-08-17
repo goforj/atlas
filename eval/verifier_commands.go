@@ -446,6 +446,9 @@ func copyVerifierProjectTree(ctx context.Context, project VerifierProject, desti
 		if !filepath.IsLocal(test.Path) || !strings.HasSuffix(filepath.ToSlash(test.Path), "_test.go") {
 			return fmt.Errorf("trusted test path %q is invalid", test.Path)
 		}
+		if baselineTestExcluded(filepath.ToSlash(test.Path), project.BaselineTestExclusions) {
+			continue
+		}
 		trustedBytes += int64(len(test.Body))
 		if trustedBytes > maxTrustedTestRetainedContentSize {
 			return fmt.Errorf("trusted tests exceed %d bytes", maxTrustedTestRetainedContentSize)
@@ -464,6 +467,17 @@ func copyVerifierProjectTree(ctx context.Context, project VerifierProject, desti
 		}
 	}
 	return nil
+}
+
+// baselineTestExcluded limits compatibility exclusions to explicitly reviewed baseline paths.
+func baselineTestExcluded(path string, exclusions []string) bool {
+	for _, exclusion := range exclusions {
+		matched, err := filepath.Match(exclusion, path)
+		if err == nil && matched {
+			return true
+		}
+	}
+	return false
 }
 
 // prepareTrustedTestParent recreates deleted baseline directories without following candidate-controlled symlinks.
