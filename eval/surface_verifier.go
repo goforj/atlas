@@ -116,7 +116,8 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 	if verifier == nil || verifier.runner == nil {
 		return VerificationResult{}, fmt.Errorf("surface verifier requires an isolated command runner")
 	}
-	checks := []EndpointResult{verifySurfaceOwnership(input.Changes, verifier.contract.allowedChanges)}
+	ownedPatterns := append(append([]string(nil), verifier.contract.allowedChanges...), verifier.contract.qualityTestPatterns...)
+	checks := []EndpointResult{verifySurfaceOwnership(input.Changes, ownedPatterns)}
 	if len(verifier.contract.qualityTestPatterns) > 0 {
 		checks = append(checks, verifyCandidateTestQuality(input.ProjectRoot, input.Changes, verifier.contract.qualityTestPatterns))
 	}
