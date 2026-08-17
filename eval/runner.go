@@ -73,6 +73,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	var baselineTree string
 	var finalTree string
 	var baselineDiff projectDiffSnapshot
+	var baselineTests []TrustedTestFile
 	var supervisorEvents []Event
 	var artifactEvents []Event
 	var agentProperties AgentProperties
@@ -228,6 +229,11 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("snapshot treatment baseline Project: %w", err)
 	}
+	baselineTests, err = trustedTestsFromSnapshot(baselineDiff)
+	if err != nil {
+		result.EvaluationStatus = EvaluationFixtureError
+		return result, fmt.Errorf("capture trusted baseline tests: %w", err)
+	}
 	baseline, err := backendEnvironment.Baseline(ctx)
 	if err != nil {
 		result.EvaluationStatus = EvaluationEvaluatorError
@@ -353,7 +359,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("seal candidate Project: %w", err)
 	}
-	if err := verifySealedAttempt(ctx, sealed, baselineDiff, baselineTree, supervisorEvents, agentResult.Message, preparedProject.Result().ForjDigest, available, resolved, request.Intent, artifacts, &result); err != nil {
+	if err := verifySealedAttempt(ctx, sealed, baselineDiff, baselineTests, baselineTree, supervisorEvents, agentResult.Message, preparedProject.Result().ForjDigest, available, resolved, request.Intent, artifacts, &result); err != nil {
 		return result, err
 	}
 	finalTree = sealed.TreeDigest
@@ -431,7 +437,7 @@ func (runner Runner) preflightAttempt(ctx context.Context, request AttemptReques
 }
 
 // verifySealedAttempt projects the immutable candidate tree into outcome and workflow results.
-func verifySealedAttempt(ctx context.Context, sealed SealedProject, baselineDiff projectDiffSnapshot, baselineTree string, events []Event, finalResponse, forjDigest string, available []Capability, resolved ResolvedEvaluation, intent RunIntent, artifacts *AttemptArtifacts, result *AttemptResult) error {
+func verifySealedAttempt(ctx context.Context, sealed SealedProject, baselineDiff projectDiffSnapshot, baselineTests []TrustedTestFile, baselineTree string, events []Event, finalResponse, forjDigest string, available []Capability, resolved ResolvedEvaluation, intent RunIntent, artifacts *AttemptArtifacts, result *AttemptResult) error {
 	if strings.TrimSpace(sealed.Root) == "" || strings.TrimSpace(sealed.TreeDigest) == "" {
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return fmt.Errorf("backend returned an incomplete sealed Project")
@@ -454,6 +460,7 @@ func verifySealedAttempt(ctx context.Context, sealed SealedProject, baselineDiff
 		ProjectRoot:   sealed.Root,
 		BaselineTree:  baselineTree,
 		FinalTree:     sealed.TreeDigest,
+		BaselineTests: baselineTests,
 		Changes:       changes,
 		Events:        events,
 		FinalResponse: finalResponse,

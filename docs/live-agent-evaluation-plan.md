@@ -70,7 +70,7 @@ gate:
 | GoForj preparation | Scenario decoder, plan, preparation, clone, tree, and documentation-parity tests cover strict v2 YAML, unchanged v1 behavior, dependency ordering, target omission, symlink rejection, independent writable copies, and lexical tree identities. Tagged calibration covers the core golden Projects, targeted mutants, and safe abstention. |
 | Atlas evaluation core | Runner, artifact, manifest, diff, authenticated report, diagnostic, workflow, and isolation tests cover capability preflight, baseline timing, cancellation, timeout, cleanup, repairable finalization, sealing before verification, redaction, and HMAC-backed post-run tamper evidence for artifacts, plus separate outcome and conformance endpoints. Verifier phases keep separate writable Go state while using the supervisor's prepared module archives as a local proxy before falling back to the declared upstream. This HMAC evidence is not adversarial authentication when an unconfined candidate and the supervisor share a UID, because that candidate can read the signing key or replace retained files. |
 | Guidance ownership | Guidance reconciliation tests cover every native target, managed-block ownership, stable target selection, and legacy inference. Tagged `TestBaselineGuidanceSurvivesProjectLifecycle` proves baseline guidance survives render, build, and a representative generator workflow. |
-| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 30 versioned contracts and classify them as scaffold, feature, repair, or abstention measurements. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. Newer application-shaped cases add golden and targeted-mutant calibration without presenting calibration as live treatment evidence. High-risk runtime semantics—transaction rollback, cache population, named-storage round trips, image revalidation, payload validation, route policy, command behavior, and controller behavior—are exercised by tests installed only in the verifier clone. Other contracts currently establish source shape, registration, compilation, or route visibility and must not be reported as behavioral proof. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
+| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 30 versioned contracts and classify them as scaffold, feature, repair, or abstention measurements. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. Newer application-shaped cases add golden and targeted-mutant calibration without presenting calibration as live treatment evidence. Behavior-sensitive feature contracts now add verifier-owned runtime probes or observable command output for transactions, caching, storage, image revalidation, payload validation, route policy, commands, controllers, lifecycle readiness, outbound HTTP, mail, uploads, JSON APIs, auth registration, events, jobs, and schedules. Scaffold contracts intentionally remain source, registration, compilation, or route-visibility measurements. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
 
 Live calibration found real harness defects rather than being rerun until
 green. A valid transport-package controller exposed constructor-name
@@ -214,9 +214,13 @@ update, custom, minimal, and skip modes.
    and mutants. Install its hidden behavior probe only in the verifier-owned
    clone after the candidate tree is sealed, so candidate tests cannot define
    the behavioral oracle and the oracle cannot leak into measured changes.
-   Treat successful same-process execution as ineligible until a separate
-   execution boundary can provide completion evidence unavailable to candidate
-   production code.
+   Require a randomized supervisor-owned completion test to execute in the
+   same isolated command before accepting the probe result. Candidate tests
+   remain excluded from that clone, while immutable tests captured before the
+   agent received the Project are restored and continue to run. This marker
+   detects ordinary early termination but is not an adversarial isolation
+   boundary: unconfined candidate code can inspect its verifier clone, so the
+   behavior result remains diagnostic until the authoritative backend exists.
 4. Add the natural prompt adjacent to its evaluation manifest.
 5. Connect the diagnostic Codex adapter.
 6. Add the thin `forj atlas:eval` wrapper.

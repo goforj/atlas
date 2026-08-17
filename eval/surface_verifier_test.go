@@ -284,6 +284,10 @@ func TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality(t *testing.T) {
 	if len(result.Checks) < 2 || result.Checks[1].ID != "focused-tests-added" || result.Checks[1].Kind != RequirementQuality || result.Checks[1].Status != EndpointFailed {
 		t.Fatalf("quality check = %#v", result.Checks)
 	}
+	testPath := filepath.Join(root, "internal", "feature", "service_test.go")
+	if err := os.WriteFile(testPath, []byte("package feature\n\nimport \"testing\"\n\nfunc TestService(t *testing.T) {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	result, err = verifier.Verify(context.Background(), VerificationInput{
 		ProjectRoot: root,
@@ -297,6 +301,35 @@ func TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality(t *testing.T) {
 	}
 	if result.Checks[1].Status != EndpointPassed {
 		t.Fatalf("quality check = %#v, want focused test reported", result.Checks[1])
+	}
+}
+
+// TestVerifyCandidateTestQualityRejectsHelpersAndInvalidSignatures keeps filenames and Test-prefixed helpers from becoming a quality signal.
+func TestVerifyCandidateTestQualityRejectsHelpersAndInvalidSignatures(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "feature_test.go")
+	changes := []ProjectChange{{Path: "feature_test.go", After: ProjectPathState{Kind: "file"}}}
+	for name, body := range map[string]string{
+		"empty":             "package feature\n",
+		"helper":            "package feature\nfunc helper() {}\n",
+		"test-like helper":  "package feature\n\nimport \"testing\"\n\nfunc Tester(t *testing.T) {}\n",
+		"invalid signature": "package feature\nfunc TestFeature(value string) {}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			result := verifyCandidateTestQuality(root, changes, []string{"*_test.go"})
+			if result.Status != EndpointFailed {
+				t.Fatalf("result = %#v, want invalid test rejected", result)
+			}
+		})
+	}
+	if err := os.WriteFile(path, []byte("package feature\n\nimport check \"testing\"\n\nfunc TestFeature(t *check.T) {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := verifyCandidateTestQuality(root, changes, []string{"*_test.go"}); result.Status != EndpointPassed {
+		t.Fatalf("aliased testing import result = %#v, want valid test accepted", result)
 	}
 }
 
@@ -357,7 +390,7 @@ func TestRunIsolatedCommandInstallsSupervisorFiles(t *testing.T) {
 			body: "package feature\n",
 		}},
 	}
-	result := runIsolatedCommand(context.Background(), runner, t.TempDir(), contract)
+	result := runIsolatedCommand(context.Background(), runner, VerifierProject{Root: t.TempDir()}, contract)
 	if result.Status != EndpointPassed {
 		t.Fatalf("result = %#v", result)
 	}

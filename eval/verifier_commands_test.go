@@ -22,7 +22,7 @@ func TestVerifierCommandsUsesPrivateCloneAndAllowlistedTools(t *testing.T) {
 		t.Fatalf("write test: %v", err)
 	}
 	runner := VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: os.Environ()}
-	session, err := runner.Open(context.Background(), source)
+	session, err := runner.Open(context.Background(), VerifierProject{Root: source})
 	if err != nil {
 		t.Fatalf("Open(): %v", err)
 	}
@@ -55,11 +55,11 @@ func TestVerifierCommandsUsesPrivatePhaseState(t *testing.T) {
 	}
 	baseEnvironment := append(os.Environ(), "GOMODCACHE="+moduleCache, "GOPROXY=https://proxy.golang.org,direct")
 	runner := VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: baseEnvironment}
-	first, err := runner.Open(context.Background(), source)
+	first, err := runner.Open(context.Background(), VerifierProject{Root: source})
 	if err != nil {
 		t.Fatalf("Open() first phase: %v", err)
 	}
-	second, err := runner.Open(context.Background(), source)
+	second, err := runner.Open(context.Background(), VerifierProject{Root: source})
 	if err != nil {
 		_ = first.Close(context.Background())
 		t.Fatalf("Open() second phase: %v", err)
@@ -125,7 +125,7 @@ func TestVerifierModuleProxyRequiresPreparedArchives(t *testing.T) {
 
 // TestVerifierCommandsCloseRemovesReadOnlyModuleCache verifies downloaded module permissions cannot turn a passing check into a cleanup failure.
 func TestVerifierCommandsCloseRemovesReadOnlyModuleCache(t *testing.T) {
-	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: os.Environ()}).Open(context.Background(), t.TempDir())
+	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: os.Environ()}).Open(context.Background(), VerifierProject{Root: t.TempDir()})
 	if err != nil {
 		t.Fatalf("Open(): %v", err)
 	}
@@ -184,7 +184,7 @@ func init() {
 	if err := os.WriteFile(filepath.Join(root, "production.go"), []byte(maliciousSource), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), root)
+	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), VerifierProject{Root: root})
 	if err != nil {
 		t.Fatalf("Open(): %v", err)
 	}
@@ -197,7 +197,7 @@ func init() {
 	if err != nil {
 		t.Fatalf("framed forgery precondition did not reproduce: %v", err)
 	}
-	if result := invoiceBehaviorExecutionResult(err); result.Status != EndpointIneligible {
+	if result := invoiceBehaviorExecutionResult("", "missing-proof", err); result.Status != EndpointFailed {
 		t.Fatalf("framed output forgery result = %#v", result)
 	}
 }
@@ -220,7 +220,7 @@ func init() {
 		t.Fatal(err)
 	}
 	runner := VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: os.Environ()}
-	session, err := runner.Open(context.Background(), root)
+	session, err := runner.Open(context.Background(), VerifierProject{Root: root})
 	if err != nil {
 		t.Fatalf("Open(): %v", err)
 	}
@@ -256,7 +256,7 @@ func TestVerifierCommandsBoundsCandidateProcesses(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			runner := VerifierCommands{WorkRoot: t.TempDir(), GoExecutable: os.Args[0], ForjExecutable: os.Args[0], Environment: append(os.Environ(), "ATLAS_VERIFIER_HELPER=1", "ATLAS_VERIFIER_HELPER_MODE="+test.mode)}
-			session, err := runner.Open(context.Background(), source)
+			session, err := runner.Open(context.Background(), VerifierProject{Root: source})
 			if err != nil {
 				t.Fatalf("Open(): %v", err)
 			}
@@ -285,7 +285,7 @@ func TestVerifierCommandsExcludesCandidateTests(t *testing.T) {
 	if err := os.WriteFile(candidateTest, []byte("package invoices\nfunc TestMain() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), source)
+	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), VerifierProject{Root: source})
 	if err != nil {
 		t.Fatalf("Open(): %v", err)
 	}
@@ -293,6 +293,64 @@ func TestVerifierCommandsExcludesCandidateTests(t *testing.T) {
 	concrete := session.(*verifierCommandSession)
 	if _, err := os.Stat(filepath.Join(concrete.root, "internal", "invoices", "controller_test.go")); !os.IsNotExist(err) {
 		t.Fatalf("candidate test copied into verifier clone: %v", err)
+	}
+}
+
+// TestVerifierCommandsRestoresTrustedBaselineTests proves pre-agent tests remain executable while a candidate replacement at the same path is discarded.
+func TestVerifierCommandsRestoresTrustedBaselineTests(t *testing.T) {
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "go.mod"), []byte("module example.test/feature\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(source, "feature_test.go")
+	if err := os.WriteFile(path, []byte("package feature\nfunc TestMain() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	trusted := []byte("package feature\n\nimport \"testing\"\n\nfunc TestBaseline(t *testing.T) {}\n")
+	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), VerifierProject{
+		Root: source,
+		BaselineTests: []TrustedTestFile{{
+			Path: "feature_test.go",
+			Body: trusted,
+			Mode: 0o644,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Open(): %v", err)
+	}
+	defer session.Close(context.Background())
+	concrete := session.(*verifierCommandSession)
+	body, err := os.ReadFile(filepath.Join(concrete.root, "feature_test.go"))
+	if err != nil {
+		t.Fatalf("read restored test: %v", err)
+	}
+	if string(body) != string(trusted) {
+		t.Fatalf("restored test = %q, want trusted baseline", body)
+	}
+	if _, err := session.Run(context.Background(), []string{"go", "test", "./...", "-count=1"}); err != nil {
+		t.Fatalf("trusted baseline test did not execute: %v", err)
+	}
+}
+
+// TestVerifierCommandsRejectsTrustedTestsThroughCandidateSymlinks proves immutable source cannot be restored through a candidate-controlled alias.
+func TestVerifierCommandsRejectsTrustedTestsThroughCandidateSymlinks(t *testing.T) {
+	source := t.TempDir()
+	if err := os.Mkdir(filepath.Join(source, "safe"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("safe", filepath.Join(source, "alias")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), VerifierProject{
+		Root: source,
+		BaselineTests: []TrustedTestFile{{
+			Path: "alias/feature_test.go",
+			Body: []byte("package safe\n"),
+			Mode: 0o644,
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "must not be replaced by a symlink") {
+		t.Fatalf("Open() error = %v, want candidate symlink rejection", err)
 	}
 }
 
@@ -308,7 +366,7 @@ func TestVerifierCommandsRestrictsSupervisorFiles(t *testing.T) {
 	if err := os.Symlink("safe", filepath.Join(source, "alias")); err != nil {
 		t.Fatal(err)
 	}
-	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), source)
+	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), VerifierProject{Root: source})
 	if err != nil {
 		t.Fatalf("Open(): %v", err)
 	}
@@ -333,7 +391,7 @@ func TestVerifierCommandsRejectsEscapingSymlink(t *testing.T) {
 	if err := os.Symlink(filepath.Join(t.TempDir(), "outside"), filepath.Join(source, "escape")); err != nil {
 		t.Fatalf("create symlink: %v", err)
 	}
-	_, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), source)
+	_, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), VerifierProject{Root: source})
 	if err == nil || !strings.Contains(err.Error(), "escapes") {
 		t.Fatalf("Open() error = %v, want escaping symlink rejection", err)
 	}

@@ -17,6 +17,7 @@ import (
 
 const maxDiffSourceFileSize = 1 << 20
 const maxDiffRetainedContentSize = 8 << 20
+const maxTrustedTestRetainedContentSize = 8 << 20
 
 // projectDiffEntry retains enough trusted tree state to explain a candidate change without retaining large or binary file content.
 type projectDiffEntry struct {
@@ -31,6 +32,26 @@ type projectDiffEntry struct {
 
 // projectDiffSnapshot is the supervisor-owned baseline captured before an agent can mutate the candidate Project.
 type projectDiffSnapshot map[string]projectDiffEntry
+
+// trustedTestsFromSnapshot extracts only immutable test source retained before the agent can mutate the Project.
+func trustedTestsFromSnapshot(snapshot projectDiffSnapshot) ([]TrustedTestFile, error) {
+	paths := make([]string, 0)
+	for path, entry := range snapshot {
+		if entry.kind == "file" && strings.HasSuffix(path, "_test.go") {
+			if entry.tooLarge || entry.binary {
+				return nil, fmt.Errorf("baseline test %q cannot be retained safely", path)
+			}
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	tests := make([]TrustedTestFile, 0, len(paths))
+	for _, path := range paths {
+		entry := snapshot[path]
+		tests = append(tests, TrustedTestFile{Path: path, Body: append([]byte(nil), entry.content...), Mode: uint32(entry.mode)})
+	}
+	return tests, nil
+}
 
 // buildProjectDiff compares the immutable baseline snapshot with the sealed candidate using a deterministic, bounded text projection.
 func buildProjectDiff(baseline projectDiffSnapshot, finalRoot string) (string, error) {
@@ -136,6 +157,7 @@ func snapshotProjectForDiff(root string) (projectDiffSnapshot, string, error) {
 
 	entries := projectDiffSnapshot{}
 	retainedContentSize := int64(0)
+	trustedTestContentSize := int64(0)
 	totalContentSize := int64(0)
 	treeHash := sha256.New()
 	for _, path := range paths {
@@ -166,12 +188,20 @@ func snapshotProjectForDiff(root string) (projectDiffSnapshot, string, error) {
 				return nil, "", fmt.Errorf("Project tree exceeds %d bytes", maxProjectTreeBytes)
 			}
 			totalContentSize += info.Size()
-			retainContent := info.Size() <= maxDiffSourceFileSize && retainedContentSize+info.Size() <= maxDiffRetainedContentSize
+			isTrustedTest := strings.HasSuffix(filepath.ToSlash(relative), "_test.go")
+			retainContent := info.Size() <= maxDiffSourceFileSize
+			if isTrustedTest {
+				retainContent = retainContent && trustedTestContentSize+info.Size() <= maxTrustedTestRetainedContentSize
+			} else {
+				retainContent = retainContent && retainedContentSize+info.Size() <= maxDiffRetainedContentSize
+			}
 			entry.content, entry.digest, entry.tooLarge, entry.binary, err = readDiffFile(path, retainContent, treeHash, info.Size())
 			if err != nil {
 				return nil, "", err
 			}
-			if retainContent && !entry.binary {
+			if retainContent && !entry.binary && isTrustedTest {
+				trustedTestContentSize += int64(len(entry.content))
+			} else if retainContent && !entry.binary {
 				retainedContentSize += int64(len(entry.content))
 			}
 		default:

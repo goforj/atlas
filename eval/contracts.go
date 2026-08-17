@@ -138,11 +138,20 @@ type VerificationInput struct {
 	ProjectRoot  string
 	BaselineTree string
 	FinalTree    string
+	// BaselineTests contains supervisor-captured tests from before the agent received the Project.
+	BaselineTests []TrustedTestFile
 	// Changes is the supervisor-computed, path-level projection of the sealed Project delta.
 	Changes []ProjectChange
 	Events  []Event
 	// FinalResponse is the exact terminal provider response captured by the adapter.
 	FinalResponse string
+}
+
+// TrustedTestFile retains one immutable pre-agent test for isolated verifier clones.
+type TrustedTestFile struct {
+	Path string
+	Body []byte
+	Mode uint32
 }
 
 // ProjectPathState identifies one Project path at a sealed snapshot. A zero value means the path was absent.

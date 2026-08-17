@@ -80,7 +80,7 @@ func (session *verifierCommandSession) WriteFile(relativePath string, body []byt
 }
 
 // Open clones the sealed Project for exactly one verifier phase, so no phase can observe another phase's candidate-controlled mutation.
-func (runner VerifierCommands) Open(ctx context.Context, sourceRoot string) (CommandSession, error) {
+func (runner VerifierCommands) Open(ctx context.Context, project VerifierProject) (CommandSession, error) {
 	goExecutable, err := resolveVerifierExecutable(runner.GoExecutable, "go")
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (runner VerifierCommands) Open(ctx context.Context, sourceRoot string) (Com
 	if err != nil {
 		return nil, fmt.Errorf("create verifier Project: %w", err)
 	}
-	if err := copyVerifierProjectTree(ctx, sourceRoot, root); err != nil {
+	if err := copyVerifierProjectTree(ctx, project, root); err != nil {
 		return nil, errors.Join(err, removeVerifierOwnedTree(root))
 	}
 	stateRoot, err := os.MkdirTemp(runner.WorkRoot, "atlas-verifier-state-")
@@ -334,11 +334,74 @@ func copyProjectTree(ctx context.Context, sourceRoot, destinationRoot string) er
 	return copyProjectTreeWithFilter(ctx, sourceRoot, destinationRoot, func(string) bool { return false })
 }
 
-// copyVerifierProjectTree excludes candidate tests so candidate-authored assertions cannot determine verifier outcomes.
-func copyVerifierProjectTree(ctx context.Context, sourceRoot, destinationRoot string) error {
-	return copyProjectTreeWithFilter(ctx, sourceRoot, destinationRoot, func(relative string) bool {
+// copyVerifierProjectTree excludes candidate tests and restores only tests captured before the agent received the Project.
+func copyVerifierProjectTree(ctx context.Context, project VerifierProject, destinationRoot string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := copyProjectTreeWithFilter(ctx, project.Root, destinationRoot, func(relative string) bool {
 		return strings.HasSuffix(relative, "_test.go")
-	})
+	}); err != nil {
+		return err
+	}
+	if len(project.BaselineTests) > maxProjectTreeEntries {
+		return fmt.Errorf("trusted tests exceed %d entries", maxProjectTreeEntries)
+	}
+	var trustedBytes int64
+	for _, test := range project.BaselineTests {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !filepath.IsLocal(test.Path) || !strings.HasSuffix(filepath.ToSlash(test.Path), "_test.go") {
+			return fmt.Errorf("trusted test path %q is invalid", test.Path)
+		}
+		trustedBytes += int64(len(test.Body))
+		if trustedBytes > maxTrustedTestRetainedContentSize {
+			return fmt.Errorf("trusted tests exceed %d bytes", maxTrustedTestRetainedContentSize)
+		}
+		destination := filepath.Join(destinationRoot, filepath.FromSlash(test.Path))
+		if err := prepareTrustedTestParent(destinationRoot, filepath.Dir(destination)); err != nil {
+			return fmt.Errorf("prepare trusted test %q: %w", test.Path, err)
+		}
+		file, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, os.FileMode(test.Mode).Perm())
+		if err != nil {
+			return fmt.Errorf("restore trusted test %q: %w", test.Path, err)
+		}
+		_, writeErr := file.Write(test.Body)
+		if err := errors.Join(writeErr, file.Close()); err != nil {
+			return fmt.Errorf("restore trusted test %q: %w", test.Path, err)
+		}
+	}
+	return nil
+}
+
+// prepareTrustedTestParent recreates deleted baseline directories without following candidate-controlled symlinks.
+func prepareTrustedTestParent(root, parent string) error {
+	relative, err := filepath.Rel(root, parent)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("trusted test parent escapes the disposable Project")
+	}
+	current := root
+	if relative == "." {
+		return nil
+	}
+	for _, component := range strings.Split(relative, string(filepath.Separator)) {
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			if err := os.Mkdir(current, 0o755); err != nil {
+				return fmt.Errorf("create directory %q: %w", component, err)
+			}
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("inspect directory %q: %w", component, err)
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("directory %q must not be replaced by a symlink or file", component)
+		}
+	}
+	return nil
 }
 
 // copyProjectTreeWithFilter preserves regular files, directories, modes, and safe internal symlinks in a private clone.
