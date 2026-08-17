@@ -210,8 +210,9 @@ func promotedSurfaceContracts() []surfaceContract {
 			commands: append(standardSurfaceCommands(), commandContract{id: "statuspage-build", arguments: []string{"forj", "statuspage", "build"}}),
 		},
 		{
-			id:             "add-app-lifecycle-hook/v1",
-			allowedChanges: []string{"app/lifecycle.go"},
+			id:                  "add-app-lifecycle-hook/v1",
+			allowedChanges:      []string{"app/lifecycle.go"},
+			qualityTestPatterns: []string{"app/lifecycle_test.go"},
 			sources: []sourceContract{
 				{id: "application-readiness-hook", paths: []string{"app/lifecycle.go"}, identifiers: []string{"LifecycleRegistry", "NewLifecycleRegistry", "Service"}, forbiddenCalls: []string{"TODO"}, text: []string{"runtime.BeforeStartup"}, declarations: []declarationContract{{name: "Register", receiver: "LifecycleRegistry", selectorCalls: []string{"On"}}, {name: "BeforeStartup", receiver: "LifecycleRegistry", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
 			},

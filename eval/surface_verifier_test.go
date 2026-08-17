@@ -304,6 +304,33 @@ func TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality(t *testing.T) {
 	}
 }
 
+// TestSurfaceVerifierTreatsQualityTestsAsOwnedChanges keeps encouraged focused coverage inside the change budget.
+func TestSurfaceVerifierTreatsQualityTestsAsOwnedChanges(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "feature", "service_test.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("package feature\n\nimport \"testing\"\n\nfunc TestService(t *testing.T) {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	verifier := newSurfaceVerifier(&fakeCommandRunner{}, surfaceContract{
+		id:                  "quality-test-ownership/v1",
+		allowedChanges:      []string{"internal/feature/service.go"},
+		qualityTestPatterns: []string{"internal/feature/*_test.go"},
+	})
+	result, err := verifier.Verify(context.Background(), VerificationInput{
+		ProjectRoot: root,
+		Changes:     []ProjectChange{{Path: "internal/feature/service_test.go", After: ProjectPathState{Kind: "file"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !checkHasStatus(result.Checks, "change-ownership", EndpointPassed) {
+		t.Fatalf("checks = %#v", result.Checks)
+	}
+}
+
 // TestVerifyCandidateTestQualityRejectsHelpersAndInvalidSignatures keeps filenames and Test-prefixed helpers from becoming a quality signal.
 func TestVerifyCandidateTestQualityRejectsHelpersAndInvalidSignatures(t *testing.T) {
 	root := t.TempDir()
