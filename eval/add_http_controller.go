@@ -164,13 +164,15 @@ func isAllowedControllerFile(path string) bool {
 }
 
 // runCheck delegates executable behavior to the trusted verifier environment rather than the candidate's agent session.
-func runCheck(ctx context.Context, session CommandSession, id string, command []string, contains string) EndpointResult {
+func runCheck(ctx context.Context, session CommandSession, id string, command []string, contains ...string) EndpointResult {
 	output, err := session.Run(ctx, command)
 	if err != nil {
 		return EndpointResult{ID: id, Status: EndpointFailed, Details: err.Error()}
 	}
-	if contains != "" && !strings.Contains(output, contains) {
-		return EndpointResult{ID: id, Status: EndpointFailed, Details: fmt.Sprintf("output does not contain %q", contains)}
+	for _, required := range contains {
+		if required != "" && !strings.Contains(output, required) {
+			return EndpointResult{ID: id, Status: EndpointFailed, Details: fmt.Sprintf("output does not contain %q", required)}
+		}
 	}
 	return EndpointResult{ID: id, Status: EndpointPassed}
 }

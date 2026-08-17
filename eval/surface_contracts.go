@@ -10,7 +10,10 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "command-shape", paths: []string{"internal/invoices/*_cmd.go"}, identifiers: []string{"ShowCmd", "Service"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Run", receiver: "ShowCmd", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
 				{id: "command-registration", paths: []string{"app/commands.go", "app/wire/inject_cmd_app.go"}, identifiers: []string{"ShowCmd", "NewShowCmd"}},
 			},
-			commands: standardSurfaceCommands(commandContract{id: "command-behavior", arguments: []string{"forj", "invoices:show", "inv-42"}, contains: "12500"}),
+			commands: standardSurfaceCommands(
+				commandContract{id: "command-behavior-primary", arguments: []string{"forj", "invoices:show", "inv-42"}, contains: []string{"inv-42", "12500"}},
+				commandContract{id: "command-behavior-variable", arguments: []string{"forj", "invoices:show", "inv-99"}, contains: []string{"inv-99", "9900"}},
+			),
 		},
 		{
 			id:             "add-job/v1",
@@ -99,7 +102,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "admin-registration", paths: []string{"app/admin/routes.go", "app/admin/wire/inject_http_controllers_app.go"}, identifiers: []string{"NewController", "Routes"}},
 			},
 			forbiddenText: []textExclusion{{id: "default-app-unchanged", paths: []string{"app/routes.go"}, text: "/api/v1/audits"}},
-			commands:      append(standardSurfaceCommands(), commandContract{id: "admin-route-visible", arguments: []string{"forj", "admin", "route:list"}, contains: "/api/v1/audits"}),
+			commands:      append(standardSurfaceCommands(), commandContract{id: "admin-route-visible", arguments: []string{"forj", "admin", "route:list"}, contains: []string{"/api/v1/audits"}}),
 		},
 		{
 			id:             "add-named-resource/v1",
@@ -174,7 +177,7 @@ func promotedSurfaceContracts() []surfaceContract {
 					path: "internal/avatars/atlas_eval_avatar_revalidation_test.go",
 					body: avatarRevalidationBehaviorProbe,
 				}},
-			}), commandContract{id: "avatar-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/avatars/:id"}),
+			}), commandContract{id: "avatar-route-visible", arguments: []string{"forj", "route:list"}, contains: []string{"/api/v1/avatars/:id"}}),
 		},
 		{
 			id:             "repair-wire-provider/v1",
@@ -182,7 +185,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			sources: []sourceContract{
 				{id: "provider-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}},
 			},
-			commands: append(standardSurfaceCommands(), commandContract{id: "report-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/reports"}),
+			commands: append(standardSurfaceCommands(), commandContract{id: "report-route-visible", arguments: []string{"forj", "route:list"}, contains: []string{"/api/v1/reports"}}),
 		},
 		{
 			id:             "build-json-api-feature/v1",
@@ -198,7 +201,7 @@ func promotedSurfaceContracts() []surfaceContract {
 					path: "internal/users/atlas_eval_json_api_test.go",
 					body: jsonAPIFeatureBehaviorProbe,
 				}},
-			}), commandContract{id: "users-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/users/:id"}),
+			}), commandContract{id: "users-route-visible", arguments: []string{"forj", "route:list"}, contains: []string{"/api/v1/users/:id"}}),
 		},
 		{
 			id:             "create-additional-app/v1",
@@ -252,7 +255,7 @@ func promotedSurfaceContracts() []surfaceContract {
 					path: "internal/invoices/atlas_eval_invoice_validation_test.go",
 					body: invoiceValidationBehaviorProbe,
 				}},
-			}), commandContract{id: "invoice-write-route", arguments: []string{"forj", "route:list"}, contains: "/api/v1/invoices"}),
+			}), commandContract{id: "invoice-write-route", arguments: []string{"forj", "route:list"}, contains: []string{"/api/v1/invoices"}}),
 		},
 		{
 			id:                  "add-route-middleware/v1",
@@ -311,8 +314,8 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "generated-auth-composition", paths: []string{"app/routes.go"}, identifiers: []string{"publicRoutes", "protectedRoutes", "invoicesController", "authService", "RequireAuth"}, selectorCalls: []string{"NewRouteGroup"}, assignments: []assignmentContract{{name: "publicRoutes", forbiddenIdentifiers: []string{"invoicesController"}}, {name: "protectedRoutes", identifiers: []string{"invoicesController"}, selectorCalls: []string{"Routes"}}}},
 			},
 			commands: append(standardSurfaceCommands(),
-				commandContract{id: "protected-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/invoices/:id"},
-				commandContract{id: "protected-middleware-visible", arguments: []string{"forj", "route:list"}, contains: "RequireAuth"},
+				commandContract{id: "protected-route-visible", arguments: []string{"forj", "route:list"}, contains: []string{"/api/v1/invoices/:id"}},
+				commandContract{id: "protected-middleware-visible", arguments: []string{"forj", "route:list"}, contains: []string{"RequireAuth"}},
 			),
 		},
 		{
@@ -339,7 +342,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				id:              "upload-workflow-behavior",
 				arguments:       []string{"go", "test", "./internal/uploads", "-run", "^TestAtlasUploadWorkflowBehavior$", "-count=1"},
 				supervisorFiles: []supervisorFile{{path: "internal/uploads/atlas_eval_upload_workflow_test.go", body: uploadWorkflowBehaviorProbe}},
-			}), commandContract{id: "uploads-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/uploads"}),
+			}), commandContract{id: "uploads-route-visible", arguments: []string{"forj", "route:list"}, contains: []string{"/api/v1/uploads"}}),
 		},
 		{
 			id:                  "publish-domain-event/v1",
@@ -361,7 +364,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges:      generatedEnvironmentChanges("internal/jobs/*.go", "internal/reports/*.go", "internal/notifications/*.go", "internal/storages/*_gen.go", "app/lifecycle.go", "app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go", "app/wire/inject_subscribers_app.go"),
 			qualityTestPatterns: []string{"internal/reports/*_test.go", "internal/notifications/*_test.go"},
 			sources: []sourceContract{
-				{id: "typed-report-job", paths: []string{"internal/reports/*.go"}, identifiers: []string{"GeneratePayload", "GenerateJob", "GenerateJobTypeName", "HandleTask", "ReportQueue"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:generate"}, declarations: []declarationContract{{name: "GeneratePayload", identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}, {name: "ReportQueue", identifiers: []string{"Queue"}}, {name: "GenerateForUser", receiver: "Service", selectorCalls: []string{"Find"}}, {name: "HandleTask", receiver: "GenerateJob", selectorCalls: []string{"Bind", "GenerateForUser"}}, {name: "Queue", receiver: "GenerateJob", selectorCalls: []string{"Dispatch"}}}},
+				{id: "typed-report-job", paths: []string{"internal/reports/*.go"}, identifiers: []string{"GeneratePayload", "GenerateJob", "GenerateJobTypeName", "HandleTask"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:generate"}, declarations: []declarationContract{{name: "GeneratePayload", identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}, {name: "GenerateForUser", receiver: "Service", selectorCalls: []string{"Find"}}, {name: "HandleTask", receiver: "GenerateJob", selectorCalls: []string{"Bind", "GenerateForUser"}}, {name: "Queue", receiver: "GenerateJob", selectorCalls: []string{"Dispatch"}}}},
 				{id: "event-job-boundary", paths: []string{"internal/notifications/service.go"}, identifiers: []string{"HandleUserCreated", "ReportQueue"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "HandleUserCreated", receiver: "Service", selectorCalls: []string{"Queue"}}}},
 				{id: "report-job-registration", paths: []string{"app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewGenerateJob", "NewService"}},
 			},

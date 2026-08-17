@@ -263,6 +263,39 @@ func TestModelRelationshipContractRejectsSplitLocalKey(t *testing.T) {
 	}
 }
 
+// TestReportJobContractAllowsConsumerOwnedQueueInterface keeps the producer contract independent from the notification package's boundary.
+func TestReportJobContractAllowsConsumerOwnedQueueInterface(t *testing.T) {
+	root := t.TempDir()
+	writeVerifierFile(t, root, "internal/reports/report.go", `package reports
+
+import "context"
+
+const GenerateJobTypeName = "reports:generate"
+type GeneratePayload struct{ UserID string }
+type Task struct{}
+type QueueManager struct{}
+type Repository struct{}
+type Service struct{ repository Repository }
+type GenerateJob struct{ queue QueueManager; service Service }
+func (*Task) Bind(any) error { return nil }
+func (QueueManager) Dispatch(context.Context, any) error { return nil }
+func (Repository) Find(context.Context, string) error { return nil }
+func (service Service) GenerateForUser(ctx context.Context, id string) error { return service.repository.Find(ctx, id) }
+func (job GenerateJob) HandleTask(ctx context.Context, task *Task) error {
+	var payload GeneratePayload
+	if err := task.Bind(&payload); err != nil { return err }
+	return job.service.GenerateForUser(ctx, payload.UserID)
+}
+func (job GenerateJob) Queue(ctx context.Context, id string) error {
+	return job.queue.Dispatch(ctx, GeneratePayload{UserID: id})
+}
+`)
+	contract := promotedSourceContract(t, "dispatch-event-followup-job/v1", "typed-report-job")
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("consumer-owned queue boundary result = %#v", result)
+	}
+}
+
 // TestAvatarContractAcceptsHeaderAccessAndControllerRegistration keeps the static gate neutral to equivalent request and Wire composition APIs.
 func TestAvatarContractAcceptsHeaderAccessAndControllerRegistration(t *testing.T) {
 	root := t.TempDir()
