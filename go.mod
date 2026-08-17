@@ -5,6 +5,8 @@ go 1.25.0
 require (
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/mark3labs/mcp-go v0.48.0
+	github.com/pmezard/go-difflib v1.0.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
