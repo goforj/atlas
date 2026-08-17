@@ -747,6 +747,48 @@ func routes(invoicesController Controller) {
 	}
 }
 
+// TestSurfaceVerifierRequiresMiddlewareOnProtectedRouteGroup rejects unrelated middleware evidence.
+func TestSurfaceVerifierRequiresMiddlewareOnProtectedRouteGroup(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "routes.go")
+	contract := sourceContract{
+		id:    "route-groups",
+		paths: []string{"routes.go"},
+		routeGroups: []routeGroupContract{{
+			routesIdentifier:   "protectedRoutes",
+			middlewareSelector: "RequireAuth",
+		}},
+	}
+	for name, source := range map[string]string{
+		"protected": `package app
+func routes() {
+	protectedRoutes := routes()
+	_ = NewRouteGroup("/api", protectedRoutes, authService.RequireAuth)
+}
+`,
+		"split": `package app
+func routes() {
+	protectedRoutes := routes()
+	_ = NewRouteGroup("/api", protectedRoutes)
+	_ = NewRouteGroup("/hello", helloRoutes(), authService.RequireAuth)
+}
+`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			result := verifySurfaceSource(root, contract)
+			if name == "protected" && result.Status != EndpointPassed {
+				t.Fatalf("protected route group = %#v", result)
+			}
+			if name == "split" && result.Status != EndpointFailed {
+				t.Fatalf("split route groups = %#v, want failure", result)
+			}
+		})
+	}
+}
+
 // TestSurfaceVerifierExcludesCandidateTestsFromSourceEvidence prevents candidate-owned tests from satisfying or invalidating implementation contracts.
 func TestSurfaceVerifierExcludesCandidateTestsFromSourceEvidence(t *testing.T) {
 	root := t.TempDir()
