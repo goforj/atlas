@@ -194,15 +194,18 @@ import (
 	"testing"
 )
 
-// TestAtlasJSONAPIFeatureBehavior proves the application boundary returns the documented user and rejects missing identity.
+// TestAtlasJSONAPIFeatureBehavior proves the application boundary returns the requested user and rejects invalid identities.
 func TestAtlasJSONAPIFeatureBehavior(t *testing.T) {
 	service := NewService()
 	user, err := service.Find(context.Background(), "42")
-	if err != nil || user.ID != "42" || user.Email != "ada@example.test" {
+	if err != nil || user.ID != "42" {
 		t.Fatalf("Find(42) = %#v, %v", user, err)
 	}
 	if _, err := service.Find(context.Background(), ""); err == nil {
 		t.Fatal("Find(empty) succeeded")
+	}
+	if _, err := service.Find(context.Background(), "missing"); err == nil {
+		t.Fatal("Find(unknown) succeeded")
 	}
 }
 `

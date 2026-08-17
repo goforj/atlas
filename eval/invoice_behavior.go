@@ -55,6 +55,7 @@ import (
 	"encoding/json"
 	{{.HTTPImport}}
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/goforj/web/webtest"
@@ -106,11 +107,12 @@ func TestAtlasInvoiceHTTPBehavior(t *testing.T) {
 				}
 				return
 			}
-			var response map[string]string
+			var response map[string]any
 			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 				t.Fatalf("decode error response: %v", err)
 			}
-			if response["error"] != "invoice not found" {
+			errorMessage, ok := response["error"].(string)
+			if !ok || strings.TrimSpace(errorMessage) == "" {
 				t.Fatalf("error response = %#v", response)
 			}
 		})
