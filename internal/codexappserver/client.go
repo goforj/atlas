@@ -4,11 +4,14 @@ package codexappserver
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -26,10 +29,17 @@ const (
 
 // StartOptions configures one private Codex app-server process.
 type StartOptions struct {
-	Executable string
-	Arguments  []string
-	Dir        string
-	Env        []string
+	Launcher  PreparedLauncher
+	Arguments []string
+	Dir       string
+	Env       []string
+}
+
+// PreparedLauncher binds the configured launcher name to the path and bytes resolved during preparation.
+type PreparedLauncher struct {
+	Candidate string
+	Path      string
+	Digest    string
 }
 
 // ThreadOptions defines the attributable inputs for one fresh evaluation thread.
@@ -204,10 +214,10 @@ type lockedBuffer struct {
 	dropped uint64
 }
 
-// Start launches and initializes one Codex app-server connection.
+// Start checks the prepared Codex launcher digest immediately before starting and initializes one app-server connection.
 func Start(ctx context.Context, options StartOptions) (*Client, error) {
-	if options.Executable == "" {
-		return nil, fmt.Errorf("Codex executable is required")
+	if options.Launcher.Candidate == "" || options.Launcher.Path == "" || options.Launcher.Digest == "" {
+		return nil, fmt.Errorf("prepared Codex launcher path and digest are required")
 	}
 	arguments := options.Arguments
 	if len(arguments) == 0 {
@@ -239,12 +249,22 @@ func Start(ctx context.Context, options StartOptions) (*Client, error) {
 		closeDone:             make(chan struct{}),
 	}
 	go client.deliverNotifications()
-	process, err := processgroup.Start(options.Executable, arguments, processgroup.Options{
+	process, err := processgroup.Start(options.Launcher.Path, arguments, processgroup.Options{
 		Dir:    options.Dir,
 		Env:    options.Env,
 		Stdin:  stdinRead,
 		Stdout: stdoutWrite,
 		Stderr: &client.stderr,
+		BeforeStart: func() error {
+			launcher, err := ResolveLauncher(options.Launcher.Candidate)
+			if err != nil {
+				return err
+			}
+			if launcher.Path != options.Launcher.Path || launcher.Digest != options.Launcher.Digest {
+				return fmt.Errorf("Codex pre-exec launcher digest differs from prepared state")
+			}
+			return nil
+		},
 	})
 	_ = stdinRead.Close()
 	_ = stdoutWrite.Close()
@@ -272,6 +292,28 @@ func Start(ctx context.Context, options StartOptions) (*Client, error) {
 	}
 	client.userAgent = initialized.UserAgent
 	return client, nil
+}
+
+// ResolveLauncher returns the resolved launcher path and SHA-256 digest of its current bytes.
+func ResolveLauncher(candidate string) (PreparedLauncher, error) {
+	path, err := exec.LookPath(candidate)
+	if err != nil {
+		return PreparedLauncher{}, fmt.Errorf("resolve Codex launcher: %w", err)
+	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return PreparedLauncher{}, fmt.Errorf("resolve absolute Codex launcher: %w", err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return PreparedLauncher{}, fmt.Errorf("open Codex launcher: %w", err)
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return PreparedLauncher{}, fmt.Errorf("digest Codex launcher: %w", err)
+	}
+	return PreparedLauncher{Candidate: candidate, Path: path, Digest: fmt.Sprintf("sha256:%x", hash.Sum(nil))}, nil
 }
 
 // startFailure includes bounded provider diagnostics when the protocol cannot initialize far enough to return a Client.

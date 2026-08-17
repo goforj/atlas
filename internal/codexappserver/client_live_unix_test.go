@@ -27,6 +27,10 @@ func TestLiveCodexAppServerFeasibility(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve Codex executable: %v", err)
 	}
+	launcher, err := ResolveLauncher(executable)
+	if err != nil {
+		t.Fatalf("prepare Codex launcher: %v", err)
+	}
 	root := t.TempDir()
 	if _, err := git.PlainInit(root, false); err != nil {
 		t.Fatalf("initialize disposable repository: %v", err)
@@ -36,9 +40,9 @@ func TestLiveCodexAppServerFeasibility(t *testing.T) {
 	startCtx, startCancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer startCancel()
 	client, err := Start(startCtx, StartOptions{
-		Executable: executable,
-		Dir:        root,
-		Env:        environmentWithCodexState(os.Environ(), codexState),
+		Launcher: launcher,
+		Dir:      root,
+		Env:      environmentWithCodexState(os.Environ(), codexState),
 	})
 	if err != nil {
 		t.Fatalf("start live Codex app-server: %v", err)

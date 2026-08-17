@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -151,12 +153,13 @@ func TestLockedBufferRetainsTail(t *testing.T) {
 
 // TestStartReturnsCapturedStderr makes launcher and dependency failures actionable before a Client can be returned.
 func TestStartReturnsCapturedStderr(t *testing.T) {
+	launcher := preparedTestLauncher(t, os.Args[0])
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	_, err := Start(ctx, StartOptions{
-		Executable: os.Args[0],
-		Arguments:  []string{"-test.run=TestFakeAppServerProcess"},
-		Dir:        t.TempDir(),
+		Launcher:  launcher,
+		Arguments: []string{"-test.run=TestFakeAppServerProcess"},
+		Dir:       t.TempDir(),
 		Env: []string{
 			fakeAppServerEnv + "=1",
 			fakeStartupFailureEnv + "=1",
@@ -164,6 +167,47 @@ func TestStartReturnsCapturedStderr(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "fixture startup failed") || !strings.Contains(err.Error(), "Codex stderr:") {
 		t.Fatalf("Start() error = %v, want captured startup stderr", err)
+	}
+}
+
+// TestStartAcceptsPreparedLauncherDigest verifies the final launcher check permits the prepared test launcher to start.
+func TestStartAcceptsPreparedLauncherDigest(t *testing.T) {
+	launcher := preparedTestLauncher(t, os.Args[0])
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	client, err := Start(ctx, StartOptions{
+		Launcher:  launcher,
+		Arguments: []string{"-test.run=TestFakeAppServerProcess"},
+		Dir:       t.TempDir(),
+		Env:       []string{fakeAppServerEnv + "=1"},
+	})
+	if err != nil {
+		t.Fatalf("Start() = %v", err)
+	}
+	defer closeClient(t, client)
+}
+
+// TestStartRejectsChangedPreparedLauncher verifies the final launcher check rejects replacement after preparation.
+func TestStartRejectsChangedPreparedLauncher(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink replacement is not portable on Windows test hosts")
+	}
+	launcherPath := filepath.Join(t.TempDir(), "codex")
+	if err := os.Symlink(os.Args[0], launcherPath); err != nil {
+		t.Fatalf("create launcher symlink: %v", err)
+	}
+	launcher := preparedTestLauncher(t, launcherPath)
+	if err := os.Remove(launcherPath); err != nil {
+		t.Fatalf("remove launcher symlink: %v", err)
+	}
+	if err := os.WriteFile(launcherPath, []byte("replacement"), 0o700); err != nil {
+		t.Fatalf("replace launcher: %v", err)
+	}
+	_, err := Start(context.Background(), StartOptions{
+		Launcher: launcher,
+	})
+	if err == nil || !strings.Contains(err.Error(), "pre-exec launcher digest") {
+		t.Fatalf("Start() error = %v, want launcher digest mismatch", err)
 	}
 }
 
@@ -226,12 +270,13 @@ func TestFakeAppServerProcess(t *testing.T) {
 // startFakeClient launches the current test binary as an isolated protocol fixture.
 func startFakeClient(t *testing.T) *Client {
 	t.Helper()
+	launcher := preparedTestLauncher(t, os.Args[0])
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	client, err := Start(ctx, StartOptions{
-		Executable: os.Args[0],
-		Arguments:  []string{"-test.run=TestFakeAppServerProcess"},
-		Dir:        t.TempDir(),
+		Launcher:  launcher,
+		Arguments: []string{"-test.run=TestFakeAppServerProcess"},
+		Dir:       t.TempDir(),
 		Env: []string{
 			fakeAppServerEnv + "=1",
 			fakeFloodEnv + "=" + os.Getenv(fakeFloodEnv),
@@ -242,6 +287,16 @@ func startFakeClient(t *testing.T) *Client {
 		t.Fatalf("start fake app-server: %v", err)
 	}
 	return client
+}
+
+// preparedTestLauncher resolves the fixture executable exactly as evaluation preparation does.
+func preparedTestLauncher(t *testing.T, candidate string) PreparedLauncher {
+	t.Helper()
+	launcher, err := ResolveLauncher(candidate)
+	if err != nil {
+		t.Fatalf("resolve test launcher: %v", err)
+	}
+	return launcher
 }
 
 // closeClient gives cleanup an independent budget so a failed test context cannot leak the fixture.
