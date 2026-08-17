@@ -42,10 +42,10 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "add-schedule/v1",
-			allowedChanges: []string{"internal/*/*.go", "app/*_schedule.go", "app/wire/inject_schedules_app.go", "app/schedules.go"},
+			allowedChanges: []string{"internal/*/*.go", "app/*_schedule.go", "app/wire/*schedule*.go", "app/schedules.go"},
 			sources: []sourceContract{
 				{id: "schedule-shape", paths: []string{"internal/*/*.go", "app/*_schedule.go"}, identifiers: []string{"Interval", "Service"}, forbiddenCalls: []string{"TODO"}, stringLiterals: []string{"invoices:reconcile"}, declarations: []declarationContract{{name: "Handle", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
-				{id: "schedule-registration", paths: []string{"app/wire/inject_schedules_app.go", "app/schedules.go"}, identifiers: []string{"Handle"}},
+				{id: "schedule-registration", paths: []string{"internal/*/*.go", "app/*.go", "app/wire/*.go"}, scheduleRegistration: true},
 			},
 			commands: standardSurfaceCommands(commandContract{
 				id:    "reconcile-schedule-behavior",
@@ -222,7 +222,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "create-additional-app/v1",
 			allowedChanges: generatedEnvironmentChanges(".env.local", ".goforj.yml", "Dockerfile", "Makefile", "app/statuspage/**", "cmd/statuspage/**", "internal/runtime/apps.go", "internal/runtime/apps_test.go"),
 			sources: []sourceContract{
-				{id: "statuspage-project-config", paths: []string{".goforj.yml"}, normalizedText: []string{"dev: apps: statuspage:"}},
+				{id: "statuspage-project-config", paths: []string{".goforj.yml"}, appConfiguration: &appConfigurationContract{name: "statuspage", requiredComponents: []string{"web_api"}}},
 				{id: "statuspage-entrypoint", paths: []string{"cmd/statuspage/main.go"}, declarations: []declarationContract{{name: "main", selectorCalls: []string{"LaunchApplication"}}}},
 				{id: "statuspage-app-boundary", paths: []string{"app/statuspage/routes.go", "app/statuspage/wire/*.go"}, identifiers: []string{"ProvideRoutes", "InitializeApplication"}},
 			},
@@ -294,7 +294,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges: []string{"go.mod", "go.sum", "internal/accounts/*.go", "app/wire/app.go", "app/wire/inject_repositories_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
 				{id: "transaction-bound-repository", paths: []string{"internal/accounts/repository.go"}, identifiers: []string{"Repository", "WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "WithTransaction", receiver: "Repository", identifiers: []string{"ctx"}, selectorCalls: []string{"Transaction"}}, {name: "AdjustBalance", receiver: "Repository", identifiers: []string{"ctx"}, selectorCalls: []string{"UpdateColumn"}}}},
-				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Transfer", receiver: "Service", selectorCalls: []string{"WithTransaction", "AdjustBalance"}, nestedCalls: []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}}}}},
+				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Transfer", receiver: "Service", selectorCalls: []string{"WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"Background"}, nestedCalls: []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}}}}},
 				{id: "account-repository-registration", paths: []string{"app/wire/app.go", "app/wire/inject_repositories_app.go"}, identifierChoices: [][]string{{"NewRepository", "ProvideRepository"}}},
 				{id: "account-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}},
 			},

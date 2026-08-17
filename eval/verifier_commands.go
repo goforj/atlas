@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	// verifierCommandTimeout allows a generated Project to compile from a private cold build cache without permitting an indefinite child process.
-	verifierCommandTimeout = 2 * time.Minute
+	// verifierCommandTimeout leaves headroom for concurrent private cold-cache builds without permitting an indefinite child process.
+	verifierCommandTimeout = 4 * time.Minute
 	maxVerifierOutput      = 1 << 20
 	maxVerifierReadFile    = 4 << 20
 	maxProjectTreeEntries  = 25_000
@@ -295,14 +295,8 @@ func (session *verifierCommandSession) Run(ctx context.Context, command []string
 	default:
 		return "", fmt.Errorf("verifier command %q is not allowlisted", command[0])
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, verifierCommandTimeout)
-		defer cancel()
-	}
+	ctx, cancel := verifierCommandContext(ctx)
+	defer cancel()
 	output := &boundedVerifierOutput{limit: maxVerifierOutput}
 	process, err := processgroup.Start(executable, command[1:], processgroup.Options{
 		Dir:    session.root,
@@ -316,9 +310,9 @@ func (session *verifierCommandSession) Run(ctx context.Context, command []string
 	err = process.Wait(ctx)
 	// A candidate may have backgrounded descendants. They share this dedicated
 	// group and must not survive into a later verifier phase.
-	cleanupContext, cancel := context.WithTimeout(context.Background(), verifierCleanupTimeout)
+	cleanupContext, cleanupCancel := context.WithTimeout(context.Background(), verifierCleanupTimeout)
 	terminateErr := process.Terminate(cleanupContext)
-	cancel()
+	cleanupCancel()
 	err = errors.Join(err, terminateErr)
 	if output.exceeded() {
 		err = errors.Join(err, fmt.Errorf("verifier command output exceeds %d bytes", maxVerifierOutput))
@@ -327,6 +321,14 @@ func (session *verifierCommandSession) Run(ctx context.Context, command []string
 		return output.String(), fmt.Errorf("%s: %w\n%s", strings.Join(command, " "), err, strings.TrimSpace(output.String()))
 	}
 	return output.String(), nil
+}
+
+// verifierCommandContext applies the command ceiling while preserving an earlier evaluation deadline.
+func verifierCommandContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(ctx, verifierCommandTimeout)
 }
 
 // boundedVerifierOutput prevents untrusted candidate output from consuming supervisor memory.

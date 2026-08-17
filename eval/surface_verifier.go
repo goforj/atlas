@@ -16,6 +16,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"gopkg.in/yaml.v3"
 )
 
 const maxWireOutputFiles = 64
@@ -41,22 +43,30 @@ type textExclusion struct {
 
 // sourceContract requires syntax-bearing facts from one or more candidate-owned files.
 type sourceContract struct {
-	id                 string
-	paths              []string
-	identifiers        []string
-	identifierChoices  [][]string
-	selectorCalls      []string
-	forbiddenCalls     []string
-	stringLiterals     []string
-	forbiddenLiterals  []string
-	declarations       []declarationContract
-	assignments        []assignmentContract
-	routeGroups        []routeGroupContract
-	text               []string
-	normalizedText     []string
-	commentOnly        bool
-	sqlColumnChanges   []sqlColumnChangeContract
-	providerConnection *providerConnectionContract
+	id                   string
+	paths                []string
+	identifiers          []string
+	identifierChoices    [][]string
+	selectorCalls        []string
+	forbiddenCalls       []string
+	stringLiterals       []string
+	forbiddenLiterals    []string
+	declarations         []declarationContract
+	assignments          []assignmentContract
+	routeGroups          []routeGroupContract
+	text                 []string
+	normalizedText       []string
+	appConfiguration     *appConfigurationContract
+	commentOnly          bool
+	sqlColumnChanges     []sqlColumnChangeContract
+	providerConnection   *providerConnectionContract
+	scheduleRegistration bool
+}
+
+// appConfigurationContract requires an App's persisted Project configuration rather than its development watcher settings.
+type appConfigurationContract struct {
+	name               string
+	requiredComponents []string
 }
 
 // sqlColumnChangeContract requires one SQL migration to add or remove a named table column.
@@ -686,6 +696,11 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required configuration %q is absent", required)}
 		}
 	}
+	if contract.appConfiguration != nil {
+		if details := verifyAppConfiguration(text.String(), *contract.appConfiguration); details != "" {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details}
+		}
+	}
 	if contract.commentOnly && !sqlCommentsOnly(text.String()) {
 		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: "migration must not contain executable SQL"}
 	}
@@ -703,12 +718,184 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details}
 		}
 	}
+	if contract.scheduleRegistration {
+		if details := verifyScheduleRegistration(root, paths); details != "" {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details}
+		}
+	}
 	for _, routeGroup := range contract.routeGroups {
 		if !sourceHasRouteGroup(facts.routeGroupCalls, routeGroup) {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("route group does not join %q with middleware %q", routeGroup.routesIdentifier, routeGroup.middlewareSelector)}
 		}
 	}
 	return EndpointResult{ID: contract.id, Status: EndpointPassed}
+}
+
+// verifyScheduleRegistration requires an application registration to reference the constructor for a concrete schedule shape.
+func verifyScheduleRegistration(root string, paths []string) string {
+	candidates := scheduleCandidates(paths)
+	if len(candidates) == 0 {
+		return "no schedule with Interval and Handle methods is present"
+	}
+	for _, path := range paths {
+		if !isApplicationSource(root, path) {
+			continue
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err.Error()
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, body, 0)
+		if err != nil {
+			return fmt.Sprintf("parse %s: %v", filepath.ToSlash(path), err)
+		}
+		if applicationRegistersSchedule(file, root, path, candidates) {
+			return ""
+		}
+	}
+	return "no application registration references a concrete schedule constructor"
+}
+
+// scheduleCandidate identifies the constructor for a type that implements the supported recurring schedule shape.
+type scheduleCandidate struct {
+	name        string
+	constructor string
+	directory   string
+}
+
+// scheduleTypeKey keeps platform-specific path syntax separate from the Go type name.
+type scheduleTypeKey struct {
+	directory string
+	name      string
+}
+
+// scheduleCandidates discovers schedule constructors from their methods instead of their file or package names.
+func scheduleCandidates(paths []string) []scheduleCandidate {
+	types := map[scheduleTypeKey]map[string]bool{}
+	constructors := map[scheduleTypeKey]bool{}
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") || filepath.Ext(path) != ".go" {
+			continue
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, body, 0)
+		if err != nil {
+			continue
+		}
+		for _, declaration := range file.Decls {
+			function, ok := declaration.(*ast.FuncDecl)
+			if !ok {
+				continue
+			}
+			if receiver := functionReceiverName(function); receiver != "" && (function.Name.Name == "Interval" || function.Name.Name == "Handle") {
+				key := scheduleTypeKey{directory: filepath.Dir(path), name: receiver}
+				if types[key] == nil {
+					types[key] = map[string]bool{}
+				}
+				types[key][function.Name.Name] = true
+			}
+			if function.Recv == nil && strings.HasPrefix(function.Name.Name, "New") {
+				if typeName := functionResultType(function); typeName != "" && function.Name.Name == "New"+typeName {
+					constructors[scheduleTypeKey{directory: filepath.Dir(path), name: typeName}] = true
+				}
+			}
+		}
+	}
+	candidates := make([]scheduleCandidate, 0)
+	for key, methods := range types {
+		if !methods["Interval"] || !methods["Handle"] {
+			continue
+		}
+		if !constructors[key] {
+			continue
+		}
+		candidates = append(candidates, scheduleCandidate{name: key.name, constructor: "New" + key.name, directory: key.directory})
+	}
+	sort.Slice(candidates, func(left, right int) bool {
+		if candidates[left].directory != candidates[right].directory {
+			return candidates[left].directory < candidates[right].directory
+		}
+		return candidates[left].name < candidates[right].name
+	})
+	return candidates
+}
+
+// functionResultType returns the named type produced by a constructor, accepting pointer and value constructors.
+func functionResultType(function *ast.FuncDecl) string {
+	if function == nil || function.Type.Results == nil || len(function.Type.Results.List) != 1 {
+		return ""
+	}
+	expression := function.Type.Results.List[0].Type
+	if pointer, ok := expression.(*ast.StarExpr); ok {
+		expression = pointer.X
+	}
+	identifier, _ := expression.(*ast.Ident)
+	if identifier == nil {
+		return ""
+	}
+	return identifier.Name
+}
+
+// isApplicationSource limits registration evidence to application wiring rather than a detached domain helper.
+func isApplicationSource(root, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	return err == nil && strings.Split(filepath.ToSlash(relative), "/")[0] == "app"
+}
+
+// applicationRegistersSchedule recognizes generated Wire sets and direct AppSchedules construction without relying on a particular filename.
+func applicationRegistersSchedule(file *ast.File, root, path string, candidates []scheduleCandidate) bool {
+	imports := wireImportPaths(file)
+	found := false
+	ast.Inspect(file, func(current ast.Node) bool {
+		call, ok := current.(*ast.CallExpr)
+		if !ok || (!isWireNewSet(call) && callName(call) != "NewAppSchedules") {
+			return true
+		}
+		for _, argument := range call.Args {
+			if scheduleConstructorReference(argument, imports, root, path, candidates) {
+				found = true
+				return false
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+// scheduleConstructorReference matches a constructor reference to the package that declares its schedule type.
+func scheduleConstructorReference(expression ast.Expr, imports map[string]string, root, path string, candidates []scheduleCandidate) bool {
+	if call, ok := expression.(*ast.CallExpr); ok {
+		expression = call.Fun
+	}
+	if identifier, ok := expression.(*ast.Ident); ok {
+		for _, candidate := range candidates {
+			if identifier.Name == candidate.constructor && candidate.directory == filepath.Dir(path) {
+				return true
+			}
+		}
+		return false
+	}
+	selector, ok := expression.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	packageName, ok := selector.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	for _, candidate := range candidates {
+		if selector.Sel.Name != candidate.constructor {
+			continue
+		}
+		relative, err := filepath.Rel(root, candidate.directory)
+		if err == nil && strings.HasSuffix(imports[packageName.Name], "/"+filepath.ToSlash(relative)) {
+			return true
+		}
+	}
+	return false
 }
 
 // sourceHasRouteGroup reports whether one NewRouteGroup call applies the required middleware to the required route slice.
@@ -971,6 +1158,48 @@ func normalizeSurfaceText(source string) string {
 		normalized = strings.ReplaceAll(normalized, separator+" ", separator)
 	}
 	return normalized
+}
+
+// verifyAppConfiguration distinguishes persisted App capabilities from the separate dev.apps watcher graph.
+func verifyAppConfiguration(source string, contract appConfigurationContract) string {
+	var configuration map[string]any
+	if err := yaml.Unmarshal([]byte(source), &configuration); err != nil {
+		return fmt.Sprintf("invalid Project configuration: %v", err)
+	}
+	apps, ok := configuration["apps"].(map[string]any)
+	if !ok {
+		return fmt.Sprintf("required App configuration %q is absent", contract.name)
+	}
+	app, ok := apps[contract.name].(map[string]any)
+	if !ok {
+		return fmt.Sprintf("required App configuration %q is absent", contract.name)
+	}
+	components, ok := app["components"]
+	if !ok {
+		return fmt.Sprintf("App configuration %q does not declare components", contract.name)
+	}
+	for _, required := range contract.requiredComponents {
+		if !appConfigurationHasComponent(components, required) {
+			return fmt.Sprintf("App configuration %q does not enable component %q", contract.name, required)
+		}
+	}
+	return ""
+}
+
+// appConfigurationHasComponent accepts GoForj's sequence and mapping component encodings.
+func appConfigurationHasComponent(components any, required string) bool {
+	switch values := components.(type) {
+	case []any:
+		for _, value := range values {
+			if component, ok := value.(string); ok && component == required {
+				return true
+			}
+		}
+	case map[string]any:
+		enabled, ok := values[required].(bool)
+		return ok && enabled
+	}
+	return false
 }
 
 // sqlCommentsOnly accepts SQL comment syntax without treating a generator's particular comment wording as an outcome requirement.

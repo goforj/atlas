@@ -314,6 +314,31 @@ func TestVerifierCommandsBoundsCandidateProcesses(t *testing.T) {
 	}
 }
 
+// TestVerifierCommandContextBoundsDefaultAndPreservesParentDeadline proves the cold-build allowance remains bounded by evaluation cancellation.
+func TestVerifierCommandContextBoundsDefaultAndPreservesParentDeadline(t *testing.T) {
+	started := time.Now()
+	defaultContext, defaultCancel := verifierCommandContext(nil)
+	defer defaultCancel()
+	defaultDeadline, ok := defaultContext.Deadline()
+	if !ok {
+		t.Fatal("verifierCommandContext(nil) has no deadline")
+	}
+	defaultDuration := defaultDeadline.Sub(started)
+	if defaultDuration < verifierCommandTimeout-time.Second || defaultDuration > verifierCommandTimeout+time.Second {
+		t.Fatalf("default command deadline = %s, want approximately %s", defaultDuration, verifierCommandTimeout)
+	}
+
+	parentDeadline := time.Now().Add(time.Minute)
+	parent, parentCancel := context.WithDeadline(context.Background(), parentDeadline)
+	defer parentCancel()
+	child, childCancel := verifierCommandContext(parent)
+	defer childCancel()
+	childDeadline, ok := child.Deadline()
+	if !ok || !childDeadline.Equal(parentDeadline) {
+		t.Fatalf("command deadline = %v, want parent deadline %v", childDeadline, parentDeadline)
+	}
+}
+
 // TestVerifierCommandsExcludesCandidateTests prevents candidate TestMain from intercepting supervisor test execution, even when ownership permits the test file.
 func TestVerifierCommandsExcludesCandidateTests(t *testing.T) {
 	source := t.TempDir()
