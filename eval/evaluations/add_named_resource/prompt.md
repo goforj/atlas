@@ -1,1 +1,1 @@
-Configure a named `reports` queue with two workers. Add an application-owned report dispatcher that receives the queue manager through dependency injection and selects the generated named accessor. Leave the Project working.
+Configure a named `reports` queue with two workers. Add an application-owned report dispatcher that receives the queue manager through dependency injection, selects the generated named accessor, and dispatches a report-generation request through that queue. Leave the Project working.

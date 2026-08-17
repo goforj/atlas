@@ -114,6 +114,31 @@ func TestSQLCommentsOnlySeparatesEmptyMigrationIntentFromGeneratorCommentText(t 
 	}
 }
 
+// TestSQLChangesColumnAcceptsPortableMigrationForms proves the schema oracle checks the intended table and column rather than a generator's formatting.
+func TestSQLChangesColumnAcceptsPortableMigrationForms(t *testing.T) {
+	addStatus := sqlColumnChangeContract{table: "invoices", column: "status", add: true}
+	dropStatus := sqlColumnChangeContract{table: "invoices", column: "status"}
+	for _, test := range []struct {
+		name   string
+		source string
+		change sqlColumnChangeContract
+		want   bool
+	}{
+		{name: "add column", source: "ALTER TABLE invoices ADD COLUMN status TEXT;", change: addStatus, want: true},
+		{name: "add without column keyword", source: "ALTER TABLE \"invoices\" ADD IF NOT EXISTS `status` TEXT;", change: addStatus, want: true},
+		{name: "drop column", source: "ALTER TABLE [invoices] DROP COLUMN status;", change: dropStatus, want: true},
+		{name: "wrong column", source: "ALTER TABLE invoices ADD COLUMN state TEXT;", change: addStatus, want: false},
+		{name: "no operation", source: "SELECT 1;", change: addStatus, want: false},
+		{name: "comment decoy", source: "-- ALTER TABLE invoices ADD COLUMN status TEXT\nSELECT 1;", change: addStatus, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := sqlChangesColumn(test.source, test.change); got != test.want {
+				t.Fatalf("sqlChangesColumn(%q) = %v, want %v", test.source, got, test.want)
+			}
+		})
+	}
+}
+
 // TestSurfaceVerifierUsesSyntaxAndStopsBeforeExecutingInvalidCandidates proves comments cannot satisfy contracts and static failures do not run code.
 func TestSurfaceVerifierUsesSyntaxAndStopsBeforeExecutingInvalidCandidates(t *testing.T) {
 	root := t.TempDir()

@@ -1,5 +1,103 @@
 package eval
 
+const namedQueueBehaviorProbe = `package invoices
+
+import (
+	"context"
+	"testing"
+
+	"example.com/invoiceeval/internal/queues"
+	"github.com/goforj/queue"
+)
+
+// TestAtlasNamedQueueBehavior proves the dispatcher sends report work through the configured reports queue.
+func TestAtlasNamedQueueBehavior(t *testing.T) {
+	t.Setenv("QUEUE_DRIVER", "null")
+	t.Setenv("QUEUE_REPORTS_DRIVER", "sync")
+	manager, err := queues.NewManager()
+	if err != nil {
+		t.Fatalf("queues.NewManager(): %v", err)
+	}
+	runtimeQueue := manager.Reports()
+	t.Cleanup(func() {
+		if err := runtimeQueue.Shutdown(context.Background()); err != nil {
+			t.Errorf("reports queue shutdown: %v", err)
+		}
+	})
+	manager.Register("reports:generate", func(context.Context, queue.Message) error { return nil })
+	if err := runtimeQueue.StartWorkers(context.Background()); err != nil {
+		t.Fatalf("reports queue start: %v", err)
+	}
+	if err := NewReportDispatcher(manager).Dispatch(context.Background(), "inv-42"); err != nil {
+		t.Fatalf("dispatcher.Dispatch(): %v", err)
+	}
+}
+`
+
+const namedCacheBehaviorProbe = `package invoices
+
+import (
+	"context"
+	"testing"
+
+	"example.com/invoiceeval/internal/caches"
+)
+
+// TestAtlasNamedCacheBehavior proves the boundary writes through the configured profiles cache.
+func TestAtlasNamedCacheBehavior(t *testing.T) {
+	t.Setenv("CACHE_DRIVER", "null")
+	t.Setenv("CACHE_PROFILES_DRIVER", "memory")
+	manager, err := caches.NewManager()
+	if err != nil {
+		t.Fatalf("caches.NewManager(): %v", err)
+	}
+	if err := NewProfileCache(manager).Store(context.Background(), "users:42", "Ada"); err != nil {
+		t.Fatalf("profiles.Store(): %v", err)
+	}
+	got, ok, err := manager.Profiles().GetString("users:42")
+	if err != nil || !ok || got != "Ada" {
+		t.Fatalf("profiles cache = %q, %t, %v; want Ada, true, nil", got, ok, err)
+	}
+}
+`
+
+const namedStorageBehaviorProbe = `package invoices
+
+import (
+	"bytes"
+	"context"
+	"path/filepath"
+	"testing"
+
+	"example.com/invoiceeval/internal/storages"
+)
+
+// TestAtlasNamedStorageBehavior proves the boundary writes avatar bytes through the configured avatars disk.
+func TestAtlasNamedStorageBehavior(t *testing.T) {
+	t.Setenv("STORAGE_DRIVER", "local")
+	t.Setenv("STORAGE_ROOT", filepath.Join(t.TempDir(), "default"))
+	t.Setenv("STORAGE_AVATARS_DRIVER", "local")
+	t.Setenv("STORAGE_AVATARS_ROOT", filepath.Join(t.TempDir(), "avatars"))
+	manager, err := storages.NewManager()
+	if err != nil {
+		t.Fatalf("storages.NewManager(): %v", err)
+	}
+	t.Cleanup(func() {
+		if err := manager.Close(); err != nil {
+			t.Errorf("storage manager close: %v", err)
+		}
+	})
+	want := []byte("avatar")
+	if err := NewAvatarStorage(manager).Store(context.Background(), "users/42/avatar.txt", want); err != nil {
+		t.Fatalf("avatars.Store(): %v", err)
+	}
+	got, err := manager.Avatars().Get("users/42/avatar.txt")
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("avatars disk = %q, %v; want %q, nil", got, err, want)
+	}
+}
+`
+
 const receiptJobBehaviorProbe = `package invoices
 
 import (

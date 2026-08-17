@@ -35,8 +35,8 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "add-migration/v1",
 			allowedChanges: []string{"migrations/*_add_status_to_invoices.up.sql", "migrations/*_add_status_to_invoices.down.sql"},
 			sources: []sourceContract{
-				{id: "migration-up", paths: []string{"migrations/*_add_status_to_invoices.up.sql"}, commentOnly: true},
-				{id: "migration-down", paths: []string{"migrations/*_add_status_to_invoices.down.sql"}, commentOnly: true},
+				{id: "migration-up", paths: []string{"migrations/*_add_status_to_invoices.up.sql"}, sqlColumnChanges: []sqlColumnChangeContract{{table: "invoices", column: "status", add: true}}},
+				{id: "migration-down", paths: []string{"migrations/*_add_status_to_invoices.down.sql"}, sqlColumnChanges: []sqlColumnChangeContract{{table: "invoices", column: "status"}}},
 			},
 			commands: standardSurfaceCommands(),
 		},
@@ -113,7 +113,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "named-queue-accessor", paths: []string{"internal/queues/*_gen.go"}, identifiers: []string{"Reports"}},
 				{id: "named-queue-injection", paths: []string{"internal/*/*.go"}, providerConnection: &providerConnectionContract{accessor: "Reports", managerImportSuffix: "/internal/queues", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{id: "named-queue-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedQueueBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_queue_test.go", body: namedQueueBehaviorProbe}}}),
 		},
 		{
 			id:              "add-named-cache/v1",
@@ -124,7 +124,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "named-cache-accessor", paths: []string{"internal/caches/*_gen.go"}, identifiers: []string{"Profiles"}},
 				{id: "named-cache-injection", paths: []string{"internal/*/*.go"}, providerConnection: &providerConnectionContract{accessor: "Profiles", managerImportSuffix: "/internal/caches", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{id: "named-cache-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedCacheBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_cache_test.go", body: namedCacheBehaviorProbe}}}),
 		},
 		{
 			id:              "add-named-storage/v1",
@@ -135,7 +135,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "named-storage-accessor", paths: []string{"internal/storages/*_gen.go"}, identifiers: []string{"Avatars"}},
 				{id: "named-storage-injection", paths: []string{"internal/*/*.go"}, providerConnection: &providerConnectionContract{accessor: "Avatars", managerImportSuffix: "/internal/storages", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{id: "named-storage-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedStorageBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_storage_test.go", body: namedStorageBehaviorProbe}}}),
 		},
 		{
 			id:                  "choose-storage-for-files/v1",

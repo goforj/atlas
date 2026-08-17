@@ -13,6 +13,9 @@ import (
 // TestCorrectedBehaviorProbesParse catches malformed supervisor code before a rendered calibration spends setup time.
 func TestCorrectedBehaviorProbesParse(t *testing.T) {
 	for name, source := range map[string]string{
+		"named cache":           namedCacheBehaviorProbe,
+		"named queue":           namedQueueBehaviorProbe,
+		"named storage":         namedStorageBehaviorProbe,
 		"JSON API":              jsonAPIFeatureBehaviorProbe,
 		"local inspect capture": runtimeObservabilityBehaviorProbe,
 		"route middleware":      tokenPolicyBehaviorProbe,

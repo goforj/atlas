@@ -578,6 +578,55 @@ func TestRunnerPreservesPreManifestArtifactErrorIdentity(t *testing.T) {
 	}
 }
 
+// TestRunnerDoesNotAuthenticateStaleReportsAfterAllowedArtifactCollision keeps candidate-preexisting files out of Atlas-authenticated evidence.
+func TestRunnerDoesNotAuthenticateStaleReportsAfterAllowedArtifactCollision(t *testing.T) {
+	runner, _, _, _, agent := newFakeRunner(t)
+	request := fakeAttemptRequest()
+	agent.prepareHook = func(RunEnvironment, Guidance) error {
+		return os.WriteFile(filepath.Join(runner.Artifacts.root, request.AttemptID, "environment.json"), []byte("candidate content\n"), 0o600)
+	}
+	result, err := runner.Run(context.Background(), request)
+	if !errors.Is(err, os.ErrExist) || result.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("Run() = %#v, %v, want allowed artifact collision evaluator error", result, err)
+	}
+	if !hasSecondaryFailurePhase(result.SecondaryFailures, "artifact_environment") {
+		t.Fatalf("secondary failures = %#v, want artifact_environment", result.SecondaryFailures)
+	}
+	directory := filepath.Join(runner.Artifacts.root, request.AttemptID)
+	if _, statErr := os.Stat(filepath.Join(directory, "manifest.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("manifest after report collision = %v, want absent", statErr)
+	}
+	summary, readErr := os.ReadFile(filepath.Join(directory, "summary.txt"))
+	if readErr != nil || !strings.Contains(string(summary), "Evaluation failed") || strings.Contains(string(summary), "Result verified") {
+		t.Fatalf("repaired summary = %q, %v", summary, readErr)
+	}
+	var scorecard AttemptScorecard
+	body, readErr := os.ReadFile(filepath.Join(directory, "scorecard.json"))
+	if readErr != nil || json.Unmarshal(body, &scorecard) != nil || scorecard.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("repaired scorecard = %q, %v, %#v", body, readErr, scorecard)
+	}
+}
+
+// TestRunnerKeepsDiagnosticDiffCaptureFailureAsEvaluatorError preserves the evaluator failure and its retained cause.
+func TestRunnerKeepsDiagnosticDiffCaptureFailureAsEvaluatorError(t *testing.T) {
+	runner, _, _, _, agent := newFakeRunner(t)
+	request := fakeAttemptRequest()
+	request.Intent = IntentDiagnostic
+	agent.prepareHook = func(RunEnvironment, Guidance) error {
+		return os.WriteFile(filepath.Join(runner.Artifacts.root, request.AttemptID, "diff.patch"), []byte("candidate content\n"), 0o600)
+	}
+	result, err := runner.Run(context.Background(), request)
+	if !errors.Is(err, os.ErrExist) || result.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("Run() = %#v, %v, want diagnostic diff capture evaluator error", result, err)
+	}
+	if !hasSecondaryFailurePhase(result.SecondaryFailures, "artifact_diff") {
+		t.Fatalf("secondary failures = %#v, want artifact_diff", result.SecondaryFailures)
+	}
+	if _, statErr := os.Stat(filepath.Join(runner.Artifacts.root, request.AttemptID, "manifest.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("manifest after diff collision = %v, want absent", statErr)
+	}
+}
+
 // TestRunnerCapturesBaselineAfterGuidanceMaterialization keeps treatment files out of the agent-authored diff.
 func TestRunnerCapturesBaselineAfterGuidanceMaterialization(t *testing.T) {
 	runner, _, preparer, backend, agent := newFakeRunner(t)

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -134,6 +135,73 @@ func TestAdapterRunsFreshAttributedDiagnosticSession(t *testing.T) {
 		if event.Kind == EventFileWrite && event.Fields["kind"] != "update" {
 			t.Fatalf("structured file-change kind was not normalized: %#v", event)
 		}
+	}
+}
+
+// TestCodexAgentStartRejectsLauncherDigestDrift keeps preparation identity from being reused after the selected launcher changes.
+func TestCodexAgentStartRejectsLauncherDigestDrift(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink replacement is not portable on Windows test hosts")
+	}
+	launcher := filepath.Join(t.TempDir(), "codex")
+	if err := os.Symlink(os.Args[0], launcher); err != nil {
+		t.Fatalf("create launcher symlink: %v", err)
+	}
+	credential := filepath.Join(t.TempDir(), "auth.json")
+	if err := os.WriteFile(credential, []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write credential: %v", err)
+	}
+	adapter, err := NewCodexAgent(CodexOptions{Executable: launcher, Model: "gpt-test", CredentialSource: credential})
+	if err != nil {
+		t.Fatalf("NewCodexAgent(): %v", err)
+	}
+	prepared, err := adapter.Prepare(context.Background(), RunEnvironment{ProjectRoot: t.TempDir(), HomeRoot: t.TempDir()}, Guidance{Profile: "none"})
+	if err != nil {
+		t.Fatalf("Prepare(): %v", err)
+	}
+	defer prepared.Close(context.Background())
+	if err := os.Remove(launcher); err != nil {
+		t.Fatalf("remove launcher symlink: %v", err)
+	}
+	if err := os.WriteFile(launcher, []byte("replacement"), 0o700); err != nil {
+		t.Fatalf("replace launcher: %v", err)
+	}
+	if _, err := adapter.Start(context.Background(), prepared.Agent()); err == nil || !strings.Contains(err.Error(), "launcher changed") {
+		t.Fatalf("Start() error = %v, want launcher integrity failure", err)
+	}
+}
+
+// TestCodexAgentStartRejectsLauncherPathDrift keeps a later PATH resolution from selecting a different prepared launcher.
+func TestCodexAgentStartRejectsLauncherPathDrift(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink replacement is not portable on Windows test hosts")
+	}
+	firstDirectory := t.TempDir()
+	secondDirectory := t.TempDir()
+	first := filepath.Join(firstDirectory, "codex")
+	second := filepath.Join(secondDirectory, "codex")
+	for _, launcher := range []string{first, second} {
+		if err := os.Symlink(os.Args[0], launcher); err != nil {
+			t.Fatalf("create launcher symlink: %v", err)
+		}
+	}
+	credential := filepath.Join(t.TempDir(), "auth.json")
+	if err := os.WriteFile(credential, []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("write credential: %v", err)
+	}
+	t.Setenv("PATH", firstDirectory)
+	adapter, err := NewCodexAgent(CodexOptions{Executable: "codex", Model: "gpt-test", CredentialSource: credential})
+	if err != nil {
+		t.Fatalf("NewCodexAgent(): %v", err)
+	}
+	prepared, err := adapter.Prepare(context.Background(), RunEnvironment{ProjectRoot: t.TempDir(), HomeRoot: t.TempDir()}, Guidance{Profile: "none"})
+	if err != nil {
+		t.Fatalf("Prepare(): %v", err)
+	}
+	defer prepared.Close(context.Background())
+	t.Setenv("PATH", secondDirectory)
+	if _, err := adapter.Start(context.Background(), prepared.Agent()); err == nil || !strings.Contains(err.Error(), "launcher changed") {
+		t.Fatalf("Start() error = %v, want launcher integrity failure", err)
 	}
 }
 

@@ -53,7 +53,15 @@ type sourceContract struct {
 	text               []string
 	normalizedText     []string
 	commentOnly        bool
+	sqlColumnChanges   []sqlColumnChangeContract
 	providerConnection *providerConnectionContract
+}
+
+// sqlColumnChangeContract requires one SQL migration to add or remove a named table column.
+type sqlColumnChangeContract struct {
+	table  string
+	column string
+	add    bool
 }
 
 // providerConnectionContract requires an accessor-using provider to be registered in an App Wire set.
@@ -591,6 +599,15 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 	if contract.commentOnly && !sqlCommentsOnly(text.String()) {
 		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: "migration must not contain executable SQL"}
 	}
+	for _, change := range contract.sqlColumnChanges {
+		if !sqlChangesColumn(text.String(), change) {
+			verb := "remove"
+			if change.add {
+				verb = "add"
+			}
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("migration does not %s column %q on table %q", verb, change.column, change.table)}
+		}
+	}
 	if contract.providerConnection != nil {
 		if details := verifyProviderConnection(root, paths, contract.providerConnection); details != "" {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details}
@@ -827,6 +844,133 @@ func sqlCommentsOnly(source string) bool {
 		index += size
 	}
 	return !inBlockComment
+}
+
+// sqlChangesColumn recognizes the portable ALTER TABLE forms that add or remove one named column.
+func sqlChangesColumn(source string, change sqlColumnChangeContract) bool {
+	tokens, ok := sqlTokens(source)
+	if !ok {
+		return false
+	}
+	for index := 0; index+3 < len(tokens); index++ {
+		if tokens[index] != "alter" || tokens[index+1] != "table" {
+			continue
+		}
+		index += 2
+		for index < len(tokens) && (tokens[index] == "if" || tokens[index] == "exists" || tokens[index] == "only") {
+			index++
+		}
+		if index >= len(tokens) || tokens[index] != strings.ToLower(change.table) {
+			continue
+		}
+		index++
+		if index >= len(tokens) {
+			continue
+		}
+		if change.add && tokens[index] == "add" {
+			index++
+			if index < len(tokens) && tokens[index] == "column" {
+				index++
+			}
+			for index < len(tokens) && (tokens[index] == "if" || tokens[index] == "not" || tokens[index] == "exists") {
+				index++
+			}
+		} else if !change.add && tokens[index] == "drop" {
+			index++
+			if index < len(tokens) && tokens[index] == "column" {
+				index++
+			}
+			for index < len(tokens) && (tokens[index] == "if" || tokens[index] == "exists") {
+				index++
+			}
+		} else {
+			continue
+		}
+		if index < len(tokens) && tokens[index] == strings.ToLower(change.column) {
+			return true
+		}
+	}
+	return false
+}
+
+// sqlTokens extracts SQL keywords and identifiers while ignoring comments and string literals.
+func sqlTokens(source string) ([]string, bool) {
+	tokens := make([]string, 0)
+	for index := 0; index < len(source); {
+		if unicode.IsSpace(rune(source[index])) {
+			index++
+			continue
+		}
+		if index+1 < len(source) && source[index:index+2] == "--" {
+			newline := strings.IndexByte(source[index:], '\n')
+			if newline < 0 {
+				break
+			}
+			index += newline + 1
+			continue
+		}
+		if index+1 < len(source) && source[index:index+2] == "/*" {
+			end := strings.Index(source[index+2:], "*/")
+			if end < 0 {
+				return nil, false
+			}
+			index += end + 4
+			continue
+		}
+		if source[index] == '\'' {
+			end, ok := sqlQuotedTokenEnd(source, index, '\'')
+			if !ok {
+				return nil, false
+			}
+			index = end
+			continue
+		}
+		if source[index] == '"' || source[index] == '`' || source[index] == '[' {
+			quote := source[index]
+			endQuote := quote
+			if quote == '[' {
+				endQuote = ']'
+			}
+			end, ok := sqlQuotedTokenEnd(source, index, endQuote)
+			if !ok {
+				return nil, false
+			}
+			tokens = append(tokens, strings.ToLower(source[index+1:end-1]))
+			index = end
+			continue
+		}
+		if isSQLTokenCharacter(source[index]) {
+			end := index + 1
+			for end < len(source) && isSQLTokenCharacter(source[end]) {
+				end++
+			}
+			tokens = append(tokens, strings.ToLower(source[index:end]))
+			index = end
+			continue
+		}
+		index++
+	}
+	return tokens, true
+}
+
+// sqlQuotedTokenEnd returns the byte immediately after a SQL quoted token, accepting doubled quote escapes.
+func sqlQuotedTokenEnd(source string, start int, quote byte) (int, bool) {
+	for index := start + 1; index < len(source); index++ {
+		if source[index] != quote {
+			continue
+		}
+		if index+1 < len(source) && source[index+1] == quote {
+			index++
+			continue
+		}
+		return index + 1, true
+	}
+	return 0, false
+}
+
+// isSQLTokenCharacter keeps the SQL lexer deliberately narrow because this verifier only needs keywords and identifiers.
+func isSQLTokenCharacter(value byte) bool {
+	return value == '_' || value == '$' || value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z' || value >= '0' && value <= '9'
 }
 
 // sourceFacts retains the syntax classes used by promoted surface contracts.

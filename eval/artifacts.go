@@ -317,6 +317,19 @@ func (artifacts *AttemptArtifacts) Finalize(planDigest, baselineTree, finalTree 
 	return manifest, nil
 }
 
+// closeForRepair releases streaming artifacts after a failed finalization write so terminal reports can be repaired without signing incomplete evidence.
+func (artifacts *AttemptArtifacts) closeForRepair() error {
+	if artifacts == nil || artifacts.closed {
+		return fmt.Errorf("attempt artifacts are closed")
+	}
+	directoryRoot := artifacts.root
+	artifacts.root = nil
+	closeEventsErr := artifacts.events.Close()
+	artifacts.closed = true
+	closeRootErr := directoryRoot.Close()
+	return errors.Join(closeEventsErr, closeRootErr)
+}
+
 // VerifyArtifactManifest authenticates metadata and every retained file without executing artifact content.
 func VerifyArtifactManifest(directory string, key []byte) (ArtifactManifest, error) {
 	if err := validateArtifactAuthenticationKey(key); err != nil {
