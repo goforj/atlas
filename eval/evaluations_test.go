@@ -186,9 +186,9 @@ func TestImplementationFlexiblePromptsAvoidAnswerLeakage(t *testing.T) {
 		id        string
 		forbidden []string
 	}{
-		{id: "add-named-resource", forbidden: []string{"internal/invoices/report_dispatcher.go", "NewReportDispatcher", "manager.Reports()"}},
-		{id: "add-named-cache", forbidden: []string{"internal/invoices/profile_cache.go", "NewProfileCache", "manager.Profiles()"}},
-		{id: "add-named-storage", forbidden: []string{"internal/invoices/avatar_storage.go", "NewAvatarStorage", "manager.Avatars()"}},
+		{id: "add-named-resource", forbidden: []string{"internal/invoices/report_dispatcher.go", "manager.Reports()"}},
+		{id: "add-named-cache", forbidden: []string{"internal/invoices/profile_cache.go", "manager.Profiles()"}},
+		{id: "add-named-storage", forbidden: []string{"internal/invoices/avatar_storage.go", "manager.Avatars()"}},
 		{id: "create-additional-app", forbidden: []string{"cmd/statuspage/main.go", "InitializeApplication", "app/statuspage/wire"}},
 	}
 	for _, test := range tests {

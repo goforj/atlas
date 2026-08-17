@@ -109,13 +109,14 @@ type callArgumentFlowContract struct {
 
 // commandContract defines one supervisor-owned executable check.
 type commandContract struct {
-	id              string
-	arguments       []string
-	contains        []string
-	supervisorFiles []supervisorFile
-	probe           func(context.Context, CommandRunner, VerifierProject) EndpointResult
-	standard        bool
-	standardBuilds  [][]string
+	id                 string
+	arguments          []string
+	contains           []string
+	supervisorFiles    []supervisorFile
+	probe              func(context.Context, CommandRunner, VerifierProject) EndpointResult
+	standard           bool
+	standardBuilds     [][]string
+	namedResourceProbe *providerConnectionContract
 }
 
 // readableCommandSession exposes candidate-derived files from a verifier-owned clone without expanding the public command-session contract.
@@ -220,6 +221,7 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		return VerificationResult{}, fmt.Errorf("surface verifier requires an isolated command runner")
 	}
 	ownedPatterns := append(append([]string(nil), verifier.contract.allowedChanges...), verifier.contract.qualityTestPatterns...)
+	ownedPatterns = append(ownedPatterns, verifier.namedResourceOwnershipPatterns(input.ProjectRoot)...)
 	checks := []EndpointResult{verifySurfaceOwnership(input.Changes, ownedPatterns)}
 	if len(verifier.contract.requiredChanges) > 0 {
 		checks = append(checks, verifyRequiredSurfaceChanges(input.Changes, verifier.contract.requiredChanges))
@@ -249,7 +251,12 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 			checks = append(checks, contract.probe(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}))
 			continue
 		}
-		checks = append(checks, runIsolatedCommand(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}, contract))
+		resolved, details := resolveNamedResourceProbe(input.ProjectRoot, contract)
+		if details != "" {
+			checks = append(checks, EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details})
+			continue
+		}
+		checks = append(checks, runIsolatedCommand(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}, resolved))
 	}
 	framework := summarizeSurfaceChecks(verifier.ID(), checks)
 	return VerificationResult{
@@ -257,6 +264,25 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		WorkflowConformance: EndpointResult{ID: "workflow-owned-by-runner", Status: EndpointIneligible},
 		Checks:              checks,
 	}, nil
+}
+
+// namedResourceOwnershipPatterns admits only the Wire-connected application's package and its newly created directory.
+func (verifier *surfaceVerifier) namedResourceOwnershipPatterns(root string) []string {
+	patterns := make([]string, 0)
+	for _, source := range verifier.contract.sources {
+		if source.providerConnection == nil {
+			continue
+		}
+		paths, err := matchingSurfacePaths(root, source.paths)
+		if err != nil {
+			continue
+		}
+		provider, details := connectedNamedResourceProvider(root, paths, source.providerConnection)
+		if details == "" {
+			patterns = append(patterns, provider.directory, provider.directory+"/*.go")
+		}
+	}
+	return patterns
 }
 
 // verifyRequiredSurfaceChanges proves the candidate connected behavior to framework-owned registration points without prescribing application names.
@@ -618,28 +644,45 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 
 // verifyProviderConnection finds an application-owned provider that resolves the named resource and confirms App Wire registers that same provider.
 func verifyProviderConnection(root string, sourcePaths []string, contract *providerConnectionContract) string {
+	_, details := connectedNamedResourceProvider(root, sourcePaths, contract)
+	return details
+}
+
+// connectedNamedResourceProvider returns the one accessor provider registered by App Wire.
+func connectedNamedResourceProvider(root string, sourcePaths []string, contract *providerConnectionContract) (namedResourceProvider, string) {
 	providers := namedResourceProviders(root, sourcePaths, contract)
 	if len(providers) == 0 {
-		return fmt.Sprintf("no provider resolves named accessor %q", contract.accessor)
+		return namedResourceProvider{}, fmt.Sprintf("no provider resolves named accessor %q", contract.accessor)
 	}
 	wirePaths, err := matchingSurfacePaths(root, contract.wirePaths)
 	if err != nil {
-		return err.Error()
+		return namedResourceProvider{}, err.Error()
 	}
-	for _, path := range wirePaths {
-		body, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr.Error()
-		}
-		file, parseErr := parser.ParseFile(token.NewFileSet(), path, body, 0)
-		if parseErr != nil {
-			return fmt.Sprintf("parse %s: %v", filepath.ToSlash(path), parseErr)
-		}
-		if wireSetReferencesProvider(file, providers) {
-			return ""
+	connected := make([]namedResourceProvider, 0, 1)
+	seen := map[string]bool{}
+	for _, provider := range providers {
+		for _, path := range wirePaths {
+			body, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return namedResourceProvider{}, readErr.Error()
+			}
+			file, parseErr := parser.ParseFile(token.NewFileSet(), path, body, 0)
+			if parseErr != nil {
+				return namedResourceProvider{}, fmt.Sprintf("parse %s: %v", filepath.ToSlash(path), parseErr)
+			}
+			if wireSetReferencesProvider(file, []namedResourceProvider{provider}) {
+				key := provider.directory + ":" + provider.name
+				if !seen[key] {
+					connected = append(connected, provider)
+					seen[key] = true
+				}
+			}
 		}
 	}
-	return fmt.Sprintf("no provider resolving %q is registered in App wire.NewSet", contract.accessor)
+	if len(connected) != 1 {
+		return namedResourceProvider{}, fmt.Sprintf("no unique provider resolving %q is registered in App wire.NewSet", contract.accessor)
+	}
+	return connected[0], ""
 }
 
 // namedResourceProviders returns function declarations that directly resolve the selected named resource.
@@ -667,7 +710,7 @@ func namedResourceProviders(root string, paths []string, contract *providerConne
 			if relativeErr != nil {
 				continue
 			}
-			providers = append(providers, namedResourceProvider{name: function.Name.Name, directory: filepath.ToSlash(directory)})
+			providers = append(providers, namedResourceProvider{name: function.Name.Name, directory: filepath.ToSlash(directory), packageName: file.Name.Name})
 		}
 	}
 	return providers
@@ -697,8 +740,35 @@ func functionReceivesManager(function *ast.FuncDecl, imports map[string]string, 
 
 // namedResourceProvider identifies a provider by its declaration name and application package directory.
 type namedResourceProvider struct {
-	name      string
-	directory string
+	name        string
+	directory   string
+	packageName string
+}
+
+// resolveNamedResourceProbe installs the probe beside the provider that App Wire actually uses.
+func resolveNamedResourceProbe(root string, contract commandContract) (commandContract, string) {
+	if contract.namedResourceProbe == nil {
+		return contract, ""
+	}
+	paths, err := matchingSurfacePaths(root, []string{"internal/*/*.go"})
+	if err != nil {
+		return commandContract{}, err.Error()
+	}
+	provider, details := connectedNamedResourceProvider(root, paths, contract.namedResourceProbe)
+	if details != "" {
+		return commandContract{}, details
+	}
+	for index := range contract.supervisorFiles {
+		file := &contract.supervisorFiles[index]
+		file.path = filepath.ToSlash(filepath.Join(provider.directory, filepath.Base(file.path)))
+		file.body = strings.Replace(file.body, "package invoices\n", "package "+provider.packageName+"\n", 1)
+	}
+	for index, argument := range contract.arguments {
+		if strings.HasPrefix(argument, "./internal/") {
+			contract.arguments[index] = "./" + provider.directory
+		}
+	}
+	return contract, ""
 }
 
 // functionCallsAccessor identifies providers by their resource use rather than an application-specific function name.

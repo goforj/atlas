@@ -178,6 +178,82 @@ func TestNamedResourceProviderConnectionRejectsDisconnectedAccessorHelpers(t *te
 	}
 }
 
+// TestNamedResourceProbesFollowWireConnectedPackages keeps behavior evidence colocated with the boundary an application chooses to own.
+func TestNamedResourceProbesFollowWireConnectedPackages(t *testing.T) {
+	tests := []struct {
+		name        string
+		contractID  string
+		directory   string
+		packageName string
+		provider    string
+		accessor    string
+		manager     string
+	}{
+		{name: "queue golden invoices", contractID: "add-named-resource/v1", directory: "internal/invoices", packageName: "invoices", provider: "NewReportDispatcher", accessor: "Reports", manager: "queues"},
+		{name: "queue reports", contractID: "add-named-resource/v1", directory: "internal/reports", packageName: "reports", provider: "NewReportDispatcher", accessor: "Reports", manager: "queues"},
+		{name: "cache profiles", contractID: "add-named-cache/v1", directory: "internal/profiles", packageName: "profiles", provider: "NewProfileCache", accessor: "Profiles", manager: "caches"},
+		{name: "storage avatars", contractID: "add-named-storage/v1", directory: "internal/avatars", packageName: "avatars", provider: "NewAvatarStorage", accessor: "Avatars", manager: "storages"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			wirePath := filepath.Join(root, "app", "wire", "inject_services_app.go")
+			writeVerifierFile(t, root, filepath.ToSlash(filepath.Join(test.directory, "boundary.go")), "package "+test.packageName+"\n\nimport \"project/internal/"+test.manager+"\"\n\nfunc "+test.provider+"(manager *"+test.manager+".Manager) any { return manager."+test.accessor+"() }\n")
+			if err := os.MkdirAll(filepath.Dir(wirePath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(wirePath, []byte("package wire\n\nimport (\n\t\"github.com/google/wire\"\n\t\"project/"+test.directory+"\"\n)\n\nvar appSet = wire.NewSet("+test.packageName+"."+test.provider+")\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			contract := promotedContract(t, test.contractID)
+			if result := verifySurfaceSource(root, contract.sources[2]); result.Status != EndpointPassed {
+				t.Fatalf("provider connection = %#v", result)
+			}
+			resolved, details := resolveNamedResourceProbe(root, contract.commands[1])
+			if details != "" {
+				t.Fatalf("resolve named probe: %s", details)
+			}
+			if got, want := resolved.arguments[2], "./"+test.directory; got != want {
+				t.Fatalf("probe package = %q, want %q", got, want)
+			}
+			if got, want := resolved.supervisorFiles[0].path, filepath.ToSlash(filepath.Join(test.directory, "atlas_eval_named_"+map[string]string{"add-named-resource/v1": "queue", "add-named-cache/v1": "cache", "add-named-storage/v1": "storage"}[test.contractID]+"_test.go")); got != want {
+				t.Fatalf("probe path = %q, want %q", got, want)
+			}
+			if !strings.HasPrefix(resolved.supervisorFiles[0].body, "package "+test.packageName+"\n") {
+				t.Fatalf("probe package declaration = %q", resolved.supervisorFiles[0].body[:min(len(resolved.supervisorFiles[0].body), 40)])
+			}
+			verifier := newSurfaceVerifier(&fakeCommandRunner{}, contract)
+			patterns := verifier.namedResourceOwnershipPatterns(root)
+			if result := verifySurfaceOwnership([]ProjectChange{{Path: test.directory, After: ProjectPathState{Kind: "directory"}}, {Path: filepath.ToSlash(filepath.Join(test.directory, "boundary.go")), After: ProjectPathState{Kind: "file"}}}, patterns); result.Status != EndpointPassed {
+				t.Fatalf("selected package ownership = %#v", result)
+			}
+			if result := verifySurfaceOwnership([]ProjectChange{{Path: "internal/unrelated/escape.go", After: ProjectPathState{Kind: "file"}}}, patterns); result.Status != EndpointFailed {
+				t.Fatalf("unrelated source ownership = %#v, want failure", result)
+			}
+		})
+	}
+}
+
+// TestNamedResourceProbesRetainBehaviorMutants keeps the dynamic package selection from weakening the resource-specific oracles.
+func TestNamedResourceProbesRetainBehaviorMutants(t *testing.T) {
+	for name, probe := range map[string]struct {
+		body       string
+		mustRetain []string
+	}{
+		"queue job type": {body: namedQueueBehaviorProbe, mustRetain: []string{"manager.Register(\"reports:generate\"", "Dispatch(context.Background(), \"inv-42\")"}},
+		"cache key":      {body: namedCacheBehaviorProbe, mustRetain: []string{"Store(context.Background(), \"users:42\", \"Ada\")", "GetString(\"users:42\")"}},
+		"storage path":   {body: namedStorageBehaviorProbe, mustRetain: []string{"Store(context.Background(), \"users/42/avatar.txt\"", "Get(\"users/42/avatar.txt\")"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, required := range probe.mustRetain {
+				if !strings.Contains(probe.body, required) {
+					t.Fatalf("probe omits mutant guard %q:\n%s", required, probe.body)
+				}
+			}
+		})
+	}
+}
+
 // TestStructuralDeclarationContractAcceptsApplicationOwnedNaming keeps semantic evidence independent from a preferred service name.
 func TestStructuralDeclarationContractAcceptsApplicationOwnedNaming(t *testing.T) {
 	root := t.TempDir()

@@ -106,36 +106,36 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:              "add-named-resource/v1",
-			allowedChanges:  generatedEnvironmentChanges("internal/queues/*_gen.go", "internal/*/*.go", "app/wire/inject_services_app.go"),
+			allowedChanges:  generatedEnvironmentChanges("internal/queues/*_gen.go", "app/wire/inject_services_app.go"),
 			requiredChanges: []string{"app/wire/inject_services_app.go"},
 			sources: []sourceContract{
 				{id: "named-queue-config", paths: []string{".env"}, text: []string{"QUEUE_REPORTS_NAME=reports", "QUEUE_REPORTS_WORKERS=2"}},
 				{id: "named-queue-accessor", paths: []string{"internal/queues/*_gen.go"}, identifiers: []string{"Reports"}},
 				{id: "named-queue-injection", paths: []string{"internal/*/*.go"}, providerConnection: &providerConnectionContract{accessor: "Reports", managerImportSuffix: "/internal/queues", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
-			commands: standardSurfaceCommands(commandContract{id: "named-queue-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedQueueBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_queue_test.go", body: namedQueueBehaviorProbe}}}),
+			commands: standardSurfaceCommands(commandContract{id: "named-queue-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedQueueBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_queue_test.go", body: namedQueueBehaviorProbe}}, namedResourceProbe: &providerConnectionContract{accessor: "Reports", managerImportSuffix: "/internal/queues", wirePaths: []string{"app/wire/inject_services_app.go"}}}),
 		},
 		{
 			id:              "add-named-cache/v1",
-			allowedChanges:  generatedEnvironmentChanges("internal/caches/*_gen.go", "internal/*/*.go", "app/wire/inject_services_app.go"),
+			allowedChanges:  generatedEnvironmentChanges("internal/caches/*_gen.go", "app/wire/inject_services_app.go"),
 			requiredChanges: []string{"app/wire/inject_services_app.go"},
 			sources: []sourceContract{
 				{id: "named-cache-config", paths: []string{".env"}, text: []string{"CACHE_PROFILES_DRIVER=memory"}},
 				{id: "named-cache-accessor", paths: []string{"internal/caches/*_gen.go"}, identifiers: []string{"Profiles"}},
 				{id: "named-cache-injection", paths: []string{"internal/*/*.go"}, providerConnection: &providerConnectionContract{accessor: "Profiles", managerImportSuffix: "/internal/caches", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
-			commands: standardSurfaceCommands(commandContract{id: "named-cache-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedCacheBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_cache_test.go", body: namedCacheBehaviorProbe}}}),
+			commands: standardSurfaceCommands(commandContract{id: "named-cache-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedCacheBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_cache_test.go", body: namedCacheBehaviorProbe}}, namedResourceProbe: &providerConnectionContract{accessor: "Profiles", managerImportSuffix: "/internal/caches", wirePaths: []string{"app/wire/inject_services_app.go"}}}),
 		},
 		{
 			id:              "add-named-storage/v1",
-			allowedChanges:  generatedEnvironmentChanges("internal/storages/*_gen.go", "internal/*/*.go", "app/wire/inject_services_app.go"),
+			allowedChanges:  generatedEnvironmentChanges("internal/storages/*_gen.go", "app/wire/inject_services_app.go"),
 			requiredChanges: []string{"app/wire/inject_services_app.go"},
 			sources: []sourceContract{
 				{id: "named-storage-config", paths: []string{".env"}, text: []string{"STORAGE_AVATARS_DRIVER=local", "STORAGE_AVATARS_ROOT=storage/app/avatars"}},
 				{id: "named-storage-accessor", paths: []string{"internal/storages/*_gen.go"}, identifiers: []string{"Avatars"}},
 				{id: "named-storage-injection", paths: []string{"internal/*/*.go"}, providerConnection: &providerConnectionContract{accessor: "Avatars", managerImportSuffix: "/internal/storages", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
-			commands: standardSurfaceCommands(commandContract{id: "named-storage-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedStorageBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_storage_test.go", body: namedStorageBehaviorProbe}}}),
+			commands: standardSurfaceCommands(commandContract{id: "named-storage-behavior", arguments: []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasNamedStorageBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_named_storage_test.go", body: namedStorageBehaviorProbe}}, namedResourceProbe: &providerConnectionContract{accessor: "Avatars", managerImportSuffix: "/internal/storages", wirePaths: []string{"app/wire/inject_services_app.go"}}}),
 		},
 		{
 			id:                  "choose-storage-for-files/v1",
