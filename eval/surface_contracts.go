@@ -319,16 +319,12 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "add-cached-repository/v1",
 			allowedChanges: generatedEnvironmentChanges("internal/caches/*_gen.go", "internal/users/*.go", "app/wire/inject_services_app.go"),
 			sources: []sourceContract{
-				{id: "cache-aside-repository", paths: []string{"internal/users/repository.go", "internal/users/service.go"}, identifiers: []string{"UserRepository", "MemoryUserRepository", "CachedUserRepository", "Get", "Set"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Find", receiver: "CachedUserRepository", identifiers: []string{"ctx"}, selectorCalls: []string{"Get", "Set", "WithContext", "Find"}}, {name: "Find", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}}}},
-				{id: "profiles-cache-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewCachedUserRepository"}, selectorCalls: []string{"Profiles"}},
+				{id: "cache-aside-repository", paths: []string{"internal/users/*.go"}, identifiers: []string{"User"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Find", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}}}},
+				{id: "profiles-cache-access", paths: []string{"internal/users/*.go", "app/wire/inject_services_app.go"}, selectorCalls: []string{"Profiles"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
-				id:        "cache-aside-behavior",
-				arguments: []string{"go", "test", "./internal/users", "-run", "^TestAtlasCacheAsideBehavior$", "-count=1"},
-				supervisorFiles: []supervisorFile{{
-					path: "internal/users/atlas_eval_cache_aside_test.go",
-					body: cacheAsideBehaviorProbe,
-				}},
+				id:    "cache-aside-behavior",
+				probe: runCacheBehaviorProbe,
 			}),
 		},
 		{

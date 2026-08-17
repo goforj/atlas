@@ -287,39 +287,3 @@ func atlasAssertBalance(t *testing.T, db *gorm.DB, id string, want int64) {
 	}
 }
 `
-
-const cacheAsideBehaviorProbe = `package users
-
-import (
-	"context"
-	"testing"
-
-	"github.com/goforj/cache"
-)
-
-// TestAtlasCacheAsideBehavior proves a successful repository lookup populates the profile cache.
-func TestAtlasCacheAsideBehavior(t *testing.T) {
-	const (
-		userID   = "42"
-		cacheKey = "users:42:profile"
-	)
-	ctx := context.Background()
-	profileCache := cache.NewCache(cache.NewMemoryStore(ctx))
-	repository := NewCachedUserRepository(NewMemoryUserRepository(), profileCache)
-	want := User{ID: userID, Name: "Ada Lovelace", Email: "ada@example.test"}
-	user, err := repository.Find(ctx, userID)
-	if err != nil {
-		t.Fatalf("find user: %v", err)
-	}
-	if user != want {
-		t.Fatalf("user = %+v, want %+v", user, want)
-	}
-	cached, ok, err := cache.Get[User](profileCache.WithContext(ctx), cacheKey)
-	if err != nil {
-		t.Fatalf("read cache: %v", err)
-	}
-	if !ok || cached != want {
-		t.Fatalf("cached user = %+v, present = %t, want %+v", cached, ok, want)
-	}
-}
-`

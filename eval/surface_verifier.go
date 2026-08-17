@@ -82,6 +82,7 @@ type commandContract struct {
 	arguments       []string
 	contains        string
 	supervisorFiles []supervisorFile
+	probe           func(context.Context, CommandRunner, VerifierProject) EndpointResult
 }
 
 // supervisorFile installs verifier-owned executable evidence after candidate tests have been removed.
@@ -135,6 +136,10 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		}, nil
 	}
 	for _, contract := range verifier.contract.commands {
+		if contract.probe != nil {
+			checks = append(checks, contract.probe(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}))
+			continue
+		}
 		checks = append(checks, runIsolatedCommand(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}, contract))
 	}
 	framework := summarizeSurfaceChecks(verifier.ID(), checks)
