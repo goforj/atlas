@@ -58,7 +58,7 @@ func TestWireOutputParityRequiresAuthoritativeRegeneration(t *testing.T) {
 // TestStandardProjectChecksReuseOnePrivateSession keeps full compilation on the cache warmed by authoritative Wire regeneration.
 func TestStandardProjectChecksReuseOnePrivateSession(t *testing.T) {
 	runner := &fakeCommandRunner{files: map[string][]byte{"app/wire/wire_gen.go": []byte("generated")}}
-	checks := runStandardProjectChecks(context.Background(), runner, VerifierProject{})
+	checks := runStandardProjectChecks(context.Background(), runner, VerifierProject{}, defaultWireBuildCommands())
 	if len(checks) != 2 || checks[0].ID != "wire-output-parity" || checks[1].ID != "project-compile" {
 		t.Fatalf("checks = %#v", checks)
 	}
@@ -68,6 +68,27 @@ func TestStandardProjectChecksReuseOnePrivateSession(t *testing.T) {
 	want := [][]string{{"forj", "build"}, {"go", "test", "./..."}}
 	if !slices.EqualFunc(runner.commands, want, func(left, right []string) bool { return slices.Equal(left, right) }) {
 		t.Fatalf("commands = %#v, want %#v", runner.commands, want)
+	}
+}
+
+// TestStandardProjectChecksRegeneratesEveryAppBeforeParityComparison prevents stale additional-App Wire output from false-passing.
+func TestStandardProjectChecksRegeneratesEveryAppBeforeParityComparison(t *testing.T) {
+	files := map[string][]byte{
+		"app/wire/wire_gen.go":            []byte("default-generated"),
+		"app/statuspage/wire/wire_gen.go": []byte("manually-edited"),
+	}
+	runner := &fakeCommandRunner{files: files}
+	runner.onRun = func(command []string) {
+		if slices.Equal(command, []string{"forj", "statuspage", "build"}) {
+			runner.files["app/statuspage/wire/wire_gen.go"] = []byte("statuspage-generated")
+		}
+	}
+	checks := runStandardProjectChecks(context.Background(), runner, VerifierProject{}, [][]string{{"forj", "build"}, {"forj", "statuspage", "build"}})
+	if len(checks) != 1 || checks[0].ID != "wire-output-parity" || checks[0].Status != EndpointFailed {
+		t.Fatalf("checks = %#v, want additional-App parity failure", checks)
+	}
+	if len(runner.commands) != 2 {
+		t.Fatalf("build commands = %#v, want both App builds before comparison", runner.commands)
 	}
 }
 
