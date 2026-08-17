@@ -4,35 +4,50 @@ const lifecycleReadinessBehaviorProbe = `package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"example.com/invoiceeval/internal/invoices"
+	"example.com/invoiceeval/internal/runtime"
 )
 
-// atlasReadinessRepository records the exact context and identity crossing the lifecycle boundary.
+// atlasReadinessRepository records the lifecycle call and can model an unavailable dependency.
 type atlasReadinessRepository struct {
 	context context.Context
 	id      string
+	err     error
 }
 
 // Find records readiness input while satisfying the application repository contract.
 func (repository *atlasReadinessRepository) Find(ctx context.Context, id string) (invoices.Invoice, error) {
 	repository.context = ctx
 	repository.id = id
+	if repository.err != nil {
+		return invoices.Invoice{}, repository.err
+	}
 	return invoices.Invoice{ID: id}, nil
 }
 
-// TestAtlasLifecycleReadinessBehavior proves startup readiness delegates through the service with its caller context.
+// TestAtlasLifecycleReadinessBehavior proves the registered readiness hook preserves context and stops startup on failure.
 func TestAtlasLifecycleReadinessBehavior(t *testing.T) {
 	type contextKey string
 	ctx := context.WithValue(context.Background(), contextKey("probe"), "ready")
 	repository := &atlasReadinessRepository{}
 	registry := NewLifecycleRegistry(invoices.NewService(repository))
-	if err := registry.BeforeStartup(ctx); err != nil {
-		t.Fatalf("BeforeStartup(): %v", err)
+	lifecycle := runtime.NewLifecycle(runtime.NewTimeouts())
+	registry.Register(lifecycle)
+	if err := lifecycle.Start(ctx); err != nil {
+		t.Fatalf("lifecycle.Start(): %v", err)
 	}
-	if repository.context != ctx || repository.id != "readiness" {
-		t.Fatalf("readiness call = context %v id %q", repository.context == ctx, repository.id)
+	if repository.context != ctx || repository.id == "" {
+		t.Fatalf("readiness call = context %v id present %v", repository.context == ctx, repository.id != "")
+	}
+	failure := errors.New("invoice repository unavailable")
+	failingRegistry := NewLifecycleRegistry(invoices.NewService(&atlasReadinessRepository{err: failure}))
+	failingLifecycle := runtime.NewLifecycle(runtime.NewTimeouts())
+	failingRegistry.Register(failingLifecycle)
+	if err := failingLifecycle.Start(ctx); !errors.Is(err, failure) {
+		t.Fatalf("lifecycle.Start() error = %v, want readiness failure", err)
 	}
 }
 `
@@ -75,26 +90,68 @@ const receiptMailBehaviorProbe = `package invoices
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 
 	appmail "example.com/invoiceeval/internal/mail"
 )
 
-// TestAtlasReceiptMailBehavior proves current invoice state becomes one configured mail delivery.
+// atlasReceiptRepository provides invoice state without depending on a scenario fixture identity.
+type atlasReceiptRepository struct{}
+
+// Find supplies a receipt-ready invoice through the existing application repository contract.
+func (atlasReceiptRepository) Find(_ context.Context, id string) (Invoice, error) {
+	return Invoice{ID: id, TotalCents: 12500}, nil
+}
+
+// TestAtlasReceiptMailBehavior proves a receipt workflow addresses one invoice-derived delivery through the configured default mailer.
 func TestAtlasReceiptMailBehavior(t *testing.T) {
 	t.Setenv("MAIL_DRIVER", "log")
 	t.Setenv("MAIL_FROM_ADDRESS", "no-reply@example.test")
-	manager, err := appmail.NewManager()
+	t.Setenv("MAIL_LOG_BODIES", "true")
+	output, err := os.CreateTemp(t.TempDir(), "receipt-mail-*.jsonl")
 	if err != nil {
-		t.Fatalf("mail.NewManager(): %v", err)
+		t.Fatalf("create mail log: %v", err)
 	}
-	mailer := NewReceiptMailer(NewService(NewRepository()), manager)
-	if err := mailer.Send(context.Background(), "inv-42", "customer@example.test"); err != nil {
+	originalStdout := os.Stdout
+	os.Stdout = output
+	manager, managerErr := appmail.NewManager()
+	os.Stdout = originalStdout
+	if managerErr != nil {
+		t.Fatalf("mail.NewManager(): %v", managerErr)
+	}
+	const recipient = "customer@example.test"
+	mailer := NewReceiptMailer(NewService(atlasReceiptRepository{}), manager)
+	if err := mailer.Send(context.Background(), "invoice-42", recipient); err != nil {
 		t.Fatalf("Send(): %v", err)
 	}
-	subject, body := receiptContent(Invoice{ID: "inv-42", TotalCents: 12500})
-	if subject != "Invoice inv-42" || body != "Total: 12500 cents" {
-		t.Fatalf("receipt content = %q, %q", subject, body)
+	if err := output.Close(); err != nil {
+		t.Fatalf("close mail log: %v", err)
+	}
+	body, err := os.ReadFile(output.Name())
+	if err != nil {
+		t.Fatalf("read mail log: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(body)), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("mail log entries = %d, want 1", len(lines))
+	}
+	var delivery struct {
+		To      []struct{ Email string }
+		Subject string
+		Text    string
+	}
+	if err := json.Unmarshal([]byte(lines[0]), &delivery); err != nil {
+		t.Fatalf("decode mail log: %v", err)
+	}
+	if len(delivery.To) != 1 || delivery.To[0].Email != recipient {
+		t.Fatalf("recipients = %#v, want %q", delivery.To, recipient)
+	}
+	amountPresent := strings.Contains(delivery.Text, "12500") || strings.Contains(delivery.Text, "125.00")
+	if !strings.Contains(delivery.Subject, "invoice-42") || !amountPresent {
+		t.Fatalf("receipt content = subject %q text %q", delivery.Subject, delivery.Text)
 	}
 }
 `
@@ -157,22 +214,21 @@ import (
 	"testing"
 
 	appevents "example.com/scenarioapp/internal/events"
+	"example.com/scenarioapp/internal/users"
 )
 
 // atlasUserCreatedHandler records delivery without relying on candidate-authored tests.
 type atlasUserCreatedHandler struct {
 	userID string
-	email  string
 }
 
 // HandleUserCreated records the typed event payload delivered by the subscriber.
-func (handler *atlasUserCreatedHandler) HandleUserCreated(_ context.Context, userID, email string) error {
+func (handler *atlasUserCreatedHandler) HandleUserCreated(_ context.Context, userID string) error {
 	handler.userID = userID
-	handler.email = email
 	return nil
 }
 
-// TestAtlasDomainEventBehavior proves the configured bus delivers the typed fact to the application subscriber.
+// TestAtlasDomainEventBehavior proves user creation publishes an ID-only event to a registered subscriber.
 func TestAtlasDomainEventBehavior(t *testing.T) {
 	ctx := context.Background()
 	t.Setenv("EVENTS_DRIVER", "inproc")
@@ -191,11 +247,13 @@ func TestAtlasDomainEventBehavior(t *testing.T) {
 		t.Fatalf("Register(): %v", err)
 	}
 	t.Cleanup(func() { _ = subscription.Close() })
-	if err := bus.WithContext(ctx).Publish(appevents.UserCreated{UserID: "43", Email: "grace@example.test"}); err != nil {
-		t.Fatalf("Publish(): %v", err)
+	service := users.NewService(users.NewMemoryUserRepository(), users.NewUserEventPublisher(bus))
+	user, err := service.Create(ctx, users.CreateUserInput{Name: "Grace Hopper", Email: "grace@example.test"})
+	if err != nil {
+		t.Fatalf("Create(): %v", err)
 	}
-	if handler.userID != "43" || handler.email != "grace@example.test" {
-		t.Fatalf("delivered payload = %q, %q", handler.userID, handler.email)
+	if user.ID == "" || handler.userID != user.ID {
+		t.Fatalf("delivered user ID = %q, want %q", handler.userID, user.ID)
 	}
 }
 `

@@ -259,6 +259,16 @@ func TestAtlasTransferTransactionBehavior(t *testing.T) {
 	}
 	atlasAssertBalance(t, db, "from", 800)
 	atlasAssertBalance(t, db, "to", 450)
+	if err := service.Transfer(context.Background(), "from", "to", 0); err == nil {
+		t.Fatal("Transfer() accepted zero amount")
+	}
+	atlasAssertBalance(t, db, "from", 800)
+	atlasAssertBalance(t, db, "to", 450)
+	if err := service.Transfer(context.Background(), "from", "to", -100); err == nil {
+		t.Fatal("Transfer() accepted negative amount")
+	}
+	atlasAssertBalance(t, db, "from", 800)
+	atlasAssertBalance(t, db, "to", 450)
 	if err := service.Transfer(context.Background(), "from", "missing", 100); err == nil {
 		t.Fatal("Transfer() accepted a missing destination")
 	}
