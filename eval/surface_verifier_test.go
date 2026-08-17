@@ -384,6 +384,9 @@ func TestApplicationBehaviorProbesExerciseDisclosedWorkflows(t *testing.T) {
 	if strings.Contains(receiptMailBehaviorProbe, "receiptContent(") || !strings.Contains(receiptMailBehaviorProbe, "delivery.To[0].Email != recipient") || !strings.Contains(receiptMailBehaviorProbe, `strings.Contains(delivery.Subject, "invoice-42")`) || !strings.Contains(receiptMailBehaviorProbe, `strings.Contains(delivery.Text, "125.00")`) {
 		t.Fatalf("mail probe must inspect one real delivery without a private formatter contract:\n%s", receiptMailBehaviorProbe)
 	}
+	if strings.Contains(jsonAPIFeatureBehaviorProbe, "ada@example.test") || strings.Contains(jsonAPIFeatureBehaviorProbe, "user.Email !=") || !strings.Contains(jsonAPIFeatureBehaviorProbe, `user.ID != "42"`) || !strings.Contains(jsonAPIFeatureBehaviorProbe, `service.Find(context.Background(), "missing")`) {
+		t.Fatalf("JSON API probe must verify lookup identity and reject an unknown nonempty ID without pinning an undocumented fixture email:\n%s", jsonAPIFeatureBehaviorProbe)
+	}
 
 	httpDefinition, err := LoadDefinition(filepath.Join("evaluations", "add_outbound_http_integration"))
 	if err != nil {

@@ -2,6 +2,7 @@ package eval
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"go/ast"
 	"go/importer"
@@ -447,6 +448,56 @@ func TestInvoiceRouteOwnerRejectsShadowedReceiver(t *testing.T) {
 	if ownerName, handlerName := invoiceRouteOwner(file); ownerName != "" || handlerName != "" {
 		t.Fatalf("shadowed route owner = %q, handler = %q", ownerName, handlerName)
 	}
+}
+
+// TestInvoiceBehaviorProbeRequiresMeaningfulNonCanonicalJSON404Error keeps the error-member contract independent of error wording.
+func TestInvoiceBehaviorProbeRequiresMeaningfulNonCanonicalJSON404Error(t *testing.T) {
+	body, err := renderInvoiceBehaviorProbe(invoiceBehaviorProbe{
+		packageName:   "invoices",
+		ownerName:     "Controller",
+		handlerName:   "Show",
+		boundaryField: "service",
+		boundaryType:  "*Service",
+	})
+	if err != nil {
+		t.Fatalf("renderInvoiceBehaviorProbe(): %v", err)
+	}
+	source := string(body)
+	if strings.Contains(source, "invoice not found") || !strings.Contains(source, "var response map[string]any") || !strings.Contains(source, `response["error"].(string)`) || !strings.Contains(source, "strings.TrimSpace(errorMessage) == \"\"") {
+		t.Fatalf("404 behavior probe =\n%s", source)
+	}
+
+	response := decodeInvoiceProbeError(t, `{"error":"no invoice matches that reference"}`)
+	if message, ok := response["error"].(string); !ok || strings.TrimSpace(message) == "" {
+		t.Fatalf("noncanonical error response = %#v", response)
+	}
+}
+
+// TestJSONAPIFeatureBehaviorProbeRejectsUnknownNonemptyID prevents an empty-ID-only probe from accepting a lookup that returns every nonempty ID.
+func TestJSONAPIFeatureBehaviorProbeRejectsUnknownNonemptyID(t *testing.T) {
+	if !jsonAPIProbeRejectsUnknownNonemptyID(jsonAPIFeatureBehaviorProbe) {
+		t.Fatalf("JSON API behavior probe does not reject an unknown nonempty ID:\n%s", jsonAPIFeatureBehaviorProbe)
+	}
+
+	emptyIDMutant := strings.Replace(jsonAPIFeatureBehaviorProbe, `service.Find(context.Background(), "missing")`, `service.Find(context.Background(), "")`, 1)
+	if jsonAPIProbeRejectsUnknownNonemptyID(emptyIDMutant) {
+		t.Fatalf("empty-ID mutant still rejects an unknown nonempty ID:\n%s", emptyIDMutant)
+	}
+}
+
+// jsonAPIProbeRejectsUnknownNonemptyID reports whether a probe preserves the independent unknown-ID failure assertion.
+func jsonAPIProbeRejectsUnknownNonemptyID(source string) bool {
+	return strings.Contains(source, `if _, err := service.Find(context.Background(), "missing"); err == nil {`) && strings.Contains(source, `t.Fatal("Find(unknown) succeeded")`)
+}
+
+// decodeInvoiceProbeError decodes an executable fixture in the same loose JSON shape accepted by the behavior probe.
+func decodeInvoiceProbeError(t *testing.T, body string) map[string]any {
+	t.Helper()
+	var response map[string]any
+	if err := json.Unmarshal([]byte(body), &response); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	return response
 }
 
 // writeControllerFixture materializes only the candidate-owned sources inspected by the verifier.
