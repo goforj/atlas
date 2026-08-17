@@ -254,7 +254,21 @@ const (
 	GuidanceProfileNone = "none"
 	// GuidanceProfileAgents installs only the canonical Project AGENTS.md treatment.
 	GuidanceProfileAgents = "agents"
+	// GuidanceProfileAgentsSkills installs canonical Project instructions and recommended native skills.
+	GuidanceProfileAgentsSkills = "agents-skills"
+	// GuidanceProfileAtlas installs the complete recommended Atlas surface: instructions, skills, and MCP.
+	GuidanceProfileAtlas = "atlas"
 )
+
+// SupportedGuidanceProfile reports whether profile names one closed evaluation treatment.
+func SupportedGuidanceProfile(profile string) bool {
+	switch profile {
+	case GuidanceProfileNone, GuidanceProfileAgents, GuidanceProfileAgentsSkills, GuidanceProfileAtlas:
+		return true
+	default:
+		return false
+	}
+}
 
 // GuidanceResolver projects one named treatment from the prepared Project's trusted identity.
 type GuidanceResolver interface {

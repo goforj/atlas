@@ -13,12 +13,7 @@ implementation dependency or reviewable source of truth for this work.
 
 ## Delivered Diagnostic Slice
 
-The first useful vertical slice compared a fresh Codex agent with no guidance
-against the same agent with GoForj's baseline `AGENTS.md`. The implemented
-slice now applies that treatment boundary to the original 13-evaluation core
-portfolio. Paired attempts begin from the same guidance-neutral prepared
-Project, receive the same natural task, retain diagnostic evidence, and report
-framework outcome separately from generator-workflow conformance.
+The first useful vertical slice compared a fresh Codex agent with no guidance against the same agent with GoForj's baseline `AGENTS.md`. The treatment model now also represents `agents-skills` and the complete `atlas` surface so comparisons can isolate the incremental value of recommended native skills and Atlas MCP. Paired attempts begin from the same guidance-neutral prepared Project, receive the same natural task, retain diagnostic evidence, and report framework outcome separately from generator-workflow conformance.
 
 This slice is diagnostic and local. It does not make authoritative isolation,
 security, or release-gate claims.
@@ -33,7 +28,7 @@ The diagnostic core portfolio is implemented across Atlas and GoForj:
 - the Atlas runner, guidance treatments, verifier, redacted authenticated
   artifacts, focused supervisor diff, and diagnostic report are implemented;
 - 32 GoForj scenario fixtures establish reusable starting state and exercise
-  the 30 promoted controller, command, job, migration, schedule,
+  the 31 promoted controller, command, job, migration, schedule,
   event/subscriber, model, additional-App, named resource, Wire-repair, and
   clarification evaluations, including six application-shaped capstones that
   cross HTTP, repositories, cache, storage, events, jobs, and scheduling, plus
@@ -41,6 +36,7 @@ The diagnostic core portfolio is implemented across Atlas and GoForj:
   outbound HTTP integration cases;
 - `forj atlas:eval list`, `run`, `report`, `compare`, and `suite` expose the
   diagnostic portfolio without requiring a separate Atlas executable;
+- a versioned capability catalog makes measured and planned framework coverage explicit, drives cumulative smoke, core, and extended portfolios, and prevents the evaluation count from substituting for useful behavioral signal;
 - every promoted verifier is calibrated against a golden Project and a
   targeted structural mutant; transaction, cache-aside, named-storage,
   conditional-image, validation, route-policy, command, and HTTP-controller
@@ -70,7 +66,7 @@ gate:
 | GoForj preparation | Scenario decoder, plan, preparation, clone, tree, and documentation-parity tests cover strict v2 YAML, unchanged v1 behavior, dependency ordering, target omission, symlink rejection, independent writable copies, and lexical tree identities. Tagged calibration covers the core golden Projects, targeted mutants, and safe abstention. |
 | Atlas evaluation core | Runner, artifact, manifest, diff, authenticated report, diagnostic, workflow, and isolation tests cover capability preflight, baseline timing, cancellation, timeout, cleanup, repairable finalization, sealing before verification, redaction, and HMAC-backed post-run tamper evidence for artifacts, plus separate outcome and conformance endpoints. Verifier phases keep separate writable Go state while using the supervisor's prepared module archives as a local proxy before falling back to the declared upstream. This HMAC evidence is not adversarial authentication when an unconfined candidate and the supervisor share a UID, because that candidate can read the signing key or replace retained files. |
 | Guidance ownership | Guidance reconciliation tests cover every native target, managed-block ownership, stable target selection, and legacy inference. Tagged `TestBaselineGuidanceSurvivesProjectLifecycle` proves baseline guidance survives render, build, and a representative generator workflow. |
-| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 31 versioned contracts and classify them as scaffold, feature, repair, abstention, or runtime-observability measurements. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. Newer application-shaped cases add golden and targeted-mutant calibration without presenting calibration as live treatment evidence. Behavior-sensitive feature contracts now add verifier-owned runtime probes or observable command output for transactions, caching, storage, image revalidation, payload validation, route policy, commands, controllers, lifecycle readiness, outbound HTTP, mail, uploads, JSON APIs, auth registration, events, jobs, schedules, and runtime observability. Scaffold contracts intentionally remain source, registration, compilation, or route-visibility measurements. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
+| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 32 versioned contracts and classify them as scaffold, feature, repair, abstention, or runtime-observability measurements. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. Newer application-shaped cases add golden and targeted-mutant calibration without presenting calibration as live treatment evidence. Behavior-sensitive feature contracts now add verifier-owned runtime probes or observable command output for transactions, caching, storage, image revalidation, payload validation, route policy, commands, controllers, lifecycle readiness, outbound HTTP, mail, uploads, JSON APIs, auth registration, events, retry-safe jobs, schedules, and runtime observability. Scaffold contracts intentionally remain source, registration, compilation, or route-visibility measurements. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
 
 Live calibration found real harness defects rather than being rerun until
 green. A valid transport-package controller exposed constructor-name
@@ -243,6 +239,47 @@ The implementation is consolidated into two cross-linked review boundaries:
 Cross-repository pull requests must link the exact dependency and must not
 assume an unpublished sibling version is available outside the repository
 workspace.
+
+## Maintainer Handoff
+
+Start here when resuming this work after the original implementation context is gone:
+
+1. Read the normative design in the GoForj repository at `docs/designs/atlas-live-agent-evaluation-design.md`, then this implementation plan.
+2. Read GoForj's `docs/maintainer/atlas-evaluation-benchmark.md` before interpreting any pass rate. That file distinguishes completed provider measurements from contracts that have only deterministic calibration.
+3. Run `forj atlas:eval coverage` from the matching GoForj revision. The capability catalog is the source of truth for covered behavior and planned gaps; the number of evaluation directories is not a coverage metric.
+4. Confirm the selected Atlas and GoForj revisions with `GOWORK=off`. A local workspace or `replace` directive is useful while developing both repositories, but it is not acceptable release evidence.
+
+The repositories divide responsibility intentionally:
+
+| Repository | Change here when | Primary surfaces |
+| --- | --- | --- |
+| Atlas | Adding a prompt, guidance treatment, workflow expectation, verifier, behavior probe, result contract, artifact rule, or capability mapping | `eval/evaluations/`, `eval/coverage.yaml`, `eval/promoted.go`, `eval/surface_contracts.go`, `eval/application_behavior_probes.go` |
+| GoForj | Adding the rendered starting Project, generator-backed golden state, CLI option, native guidance projection, or integration calibration | `internal/scenarios/specs/`, `internal/forj/atlaseval/`, `internal/forj/atlas/eval.go`, `docs/maintainer/` |
+
+The current treatment ladder is cumulative:
+
+| Profile | Project instructions | Recommended skills | Atlas MCP |
+| --- | :---: | :---: | :---: |
+| `none` | — | — | — |
+| `agents` | yes | — | — |
+| `agents-skills` | yes | yes | — |
+| `atlas` | yes | yes | yes |
+
+The checked-in 60-session benchmark measured only `none` versus `agents`. It does not establish the value of skills or MCP. The next cost-bearing measurements should compare adjacent profiles with the smoke tier first: `agents` versus `agents-skills`, then `agents-skills` versus `atlas`. Use `none` versus `atlas` only when the complete experience is the question being measured. These runs extend the diagnostic evidence; they do not replace the next architectural phase, which is the authoritative backend described below.
+
+When promoting another evaluation, require all of the following:
+
+- a natural task that does not disclose the expected generator command or verifier recipe;
+- a reusable GoForj scenario whose target state is a reviewed valid implementation;
+- a workflow contract for framework actions that matter to the task;
+- a verifier that checks behavior and boundaries without requiring one arbitrary file, receiver, or type spelling;
+- a supervisor-owned behavior probe when compilation and structure cannot prove the user-visible outcome;
+- at least one compiling semantic mutant that the verifier rejects for the intended reason; and
+- capability-catalog mappings that explain which gap the evaluation closes.
+
+Do not create one evaluation per documentation page. Prefer application-shaped tasks that cross related framework surfaces, as `add-resilient-job` does for typed jobs, retries, idempotency, cancellation, timeouts, repository reloads, deterministic storage, and registration. Leave a capability planned when its only available verifier would be a shallow token check. Frontend loading behavior, for example, remains planned until a browser-capable verifier can observe flicker, retained content, and timing.
+
+For ordinary development, run deterministic unit, integration, golden, and mutant calibration only. Live provider sessions are explicit, metered evidence. Before starting them, use the smoke tier, inspect the printed session count and scratch estimate, keep paired treatments inside one worker assignment, and retain the authenticated artifacts needed to update the benchmark.
 
 ## Publication Handoff
 

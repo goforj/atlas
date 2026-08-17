@@ -46,6 +46,42 @@ func TestRunGuidanceDiagnosticRunsBothIsolatedTreatments(t *testing.T) {
 	}
 }
 
+// TestRunGuidanceDiagnosticRunsExplicitTreatmentPair proves comparisons can isolate incremental Atlas surfaces.
+func TestRunGuidanceDiagnosticRunsExplicitTreatmentPair(t *testing.T) {
+	runner, _, _, _, _ := newFakeRunner(t)
+	definition, err := LoadPromotedDefinition("add-http-controller")
+	if err != nil {
+		t.Fatal(err)
+	}
+	profiles := []string{GuidanceProfileAgents, GuidanceProfileAgentsSkills}
+	result, err := runner.RunGuidanceDiagnostic(context.Background(), GuidanceDiagnosticRequest{
+		LogicalTrialID:  "diagnostic-skills",
+		Definition:      definition,
+		DestinationRoot: "/private/projects",
+		ForjExecutable:  "/tools/forj",
+		Profiles:        profiles,
+		Environments: map[string][]string{
+			GuidanceProfileAgents:       os.Environ(),
+			GuidanceProfileAgentsSkills: os.Environ(),
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunGuidanceDiagnostic(): %v", err)
+	}
+	if len(result.Attempts) != 2 || result.Attempts[0].Profile != profiles[0] || result.Attempts[1].Profile != profiles[1] {
+		t.Fatalf("attempts = %#v", result.Attempts)
+	}
+}
+
+// TestDiagnosticProfilesRejectsInvalidPairs keeps comparison attribution explicit.
+func TestDiagnosticProfilesRejectsInvalidPairs(t *testing.T) {
+	for _, profiles := range [][]string{{GuidanceProfileAgents}, {GuidanceProfileAgents, GuidanceProfileAgents}, {GuidanceProfileAgents, "unknown"}} {
+		if _, err := diagnosticProfiles(profiles); err == nil {
+			t.Fatalf("diagnosticProfiles(%v) succeeded", profiles)
+		}
+	}
+}
+
 // TestRunGuidanceDiagnosticValidatesBothEnvironmentsBeforeMutation keeps a malformed pair atomic at preflight.
 func TestRunGuidanceDiagnosticValidatesBothEnvironmentsBeforeMutation(t *testing.T) {
 	runner, _, preparer, _, _ := newFakeRunner(t)

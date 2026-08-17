@@ -509,6 +509,65 @@ func TestAtlasEventFollowupJobBehavior(t *testing.T) {
 }
 `
 
+const resilientJobBehaviorProbe = `package reports
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+
+	"example.com/scenarioapp/internal/queues"
+	"example.com/scenarioapp/internal/users"
+	"github.com/goforj/storage"
+	"github.com/goforj/storage/driver/memorystorage"
+)
+
+// TestAtlasResilientJobBehavior proves repeated delivery reloads current state and overwrites one deterministic report.
+func TestAtlasResilientJobBehavior(t *testing.T) {
+	ctx := context.Background()
+	t.Setenv("QUEUE_DRIVER", "sync")
+	manager, err := queues.NewManager()
+	if err != nil {
+		t.Fatalf("queues.NewManager(): %v", err)
+	}
+	runtimeQueue := manager.Default()
+	t.Cleanup(func() { _ = runtimeQueue.Shutdown(context.Background()) })
+	disk, err := storage.Build(memorystorage.Config{})
+	if err != nil {
+		t.Fatalf("storage.Build(): %v", err)
+	}
+	repository := users.NewMemoryUserRepository()
+	if _, err := repository.Save(ctx, users.User{ID: "42", Name: "Ada", Email: "first@example.test"}); err != nil {
+		t.Fatalf("Save(): %v", err)
+	}
+	job := NewGenerateJob(manager, NewService(repository, disk))
+	manager.Register(GenerateJobTypeName, job.HandleTask)
+	if err := runtimeQueue.StartWorkers(ctx); err != nil {
+		t.Fatalf("StartWorkers(): %v", err)
+	}
+	if err := job.Queue(ctx, "42"); err != nil {
+		t.Fatalf("Queue(first): %v", err)
+	}
+	if _, err := repository.Save(ctx, users.User{ID: "42", Name: "Ada", Email: "current@example.test"}); err != nil {
+		t.Fatalf("Save(current): %v", err)
+	}
+	if err := job.Queue(ctx, "42"); err != nil {
+		t.Fatalf("Queue(retry): %v", err)
+	}
+	body, err := disk.Get("users/42/profile.json")
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	var report UserReport
+	if err := json.Unmarshal(body, &report); err != nil {
+		t.Fatalf("decode report: %v", err)
+	}
+	if report.UserID != "42" || report.Email != "current@example.test" {
+		t.Fatalf("report = %#v", report)
+	}
+}
+`
+
 const dailyScheduleBehaviorProbe = `package reports
 
 import (

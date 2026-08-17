@@ -122,6 +122,12 @@ func TestPromotedEvaluationPromptsDiscloseProbeContracts(t *testing.T) {
 			},
 		},
 		{
+			id: "add-resilient-job",
+			required: []string{
+				"reports:generate", "user ID", "retry budget", "per-attempt timeout", "deterministic", "caller cancellation",
+			},
+		},
+		{
 			id: "schedule-existing-job",
 			required: []string{
 				"internal/reports/daily_schedule.go", "DailyTargetRepository", "DailyRunner", "DailySchedule", "ListDailyReportTargets", "reports:daily", "24-hour",
@@ -161,6 +167,7 @@ func TestPromotedEvaluationPromptsDoNotLeakWorkflowRecipes(t *testing.T) {
 		{id: "build-json-api-feature", forbidden: []string{"controller workflow", "make:controller"}},
 		{id: "choose-storage-for-files", forbidden: []string{"forj generate --storage"}},
 		{id: "dispatch-event-followup-job", forbidden: []string{"forj make:job"}},
+		{id: "add-resilient-job", forbidden: []string{"forj make:job"}},
 		{id: "schedule-existing-job", forbidden: []string{"forj make:schedule"}},
 		{id: "add-upload-workflow", forbidden: []string{"controller generator", "make:controller"}},
 	}
@@ -239,7 +246,7 @@ func TestPromotedEvaluationIDsReturnsStableSuiteCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PromotedEvaluationIDs(): %v", err)
 	}
-	if len(ids) != 30 || ids[0] != "add-app-command" || ids[len(ids)-1] == "unknown-framework-shape" {
+	if len(ids) != 31 || ids[0] != "add-app-command" || ids[len(ids)-1] == "unknown-framework-shape" {
 		t.Fatalf("ids = %v", ids)
 	}
 }

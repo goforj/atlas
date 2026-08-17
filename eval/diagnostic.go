@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// GuidanceDiagnosticRequest identifies one paired control-versus-AGENTS diagnostic trial.
+// GuidanceDiagnosticRequest identifies one ordered pair of guidance treatments.
 type GuidanceDiagnosticRequest struct {
 	LogicalTrialID    string
 	Definition        EvaluationDefinition
@@ -14,6 +14,7 @@ type GuidanceDiagnosticRequest struct {
 	ForjExecutable    string
 	Environments      map[string][]string
 	Runtime           RuntimeIdentity
+	Profiles          []string
 	TreatmentBoundary func(context.Context) error
 }
 
@@ -31,7 +32,7 @@ type GuidanceDiagnosticResult struct {
 	Attempts       []GuidanceDiagnosticAttempt `json:"attempts"`
 }
 
-// RunGuidanceDiagnostic runs isolated control and AGENTS treatments against the same promoted definition.
+// RunGuidanceDiagnostic runs two isolated treatments against the same promoted definition.
 func (runner Runner) RunGuidanceDiagnostic(ctx context.Context, request GuidanceDiagnosticRequest) (GuidanceDiagnosticResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -42,7 +43,10 @@ func (runner Runner) RunGuidanceDiagnostic(ctx context.Context, request Guidance
 	if strings.TrimSpace(request.DestinationRoot) == "" || strings.TrimSpace(request.ForjExecutable) == "" {
 		return GuidanceDiagnosticResult{}, fmt.Errorf("diagnostic preparation inputs are incomplete")
 	}
-	profiles := []string{GuidanceProfileNone, GuidanceProfileAgents}
+	profiles, err := diagnosticProfiles(request.Profiles)
+	if err != nil {
+		return GuidanceDiagnosticResult{}, err
+	}
 	for _, profile := range profiles {
 		environment, ok := request.Environments[profile]
 		if !ok || environment == nil {
@@ -82,6 +86,25 @@ func (runner Runner) RunGuidanceDiagnostic(ctx context.Context, request Guidance
 		}
 	}
 	return result, nil
+}
+
+// diagnosticProfiles preserves the original comparison by default while validating explicit ordered pairs.
+func diagnosticProfiles(profiles []string) ([]string, error) {
+	if len(profiles) == 0 {
+		return []string{GuidanceProfileNone, GuidanceProfileAgents}, nil
+	}
+	if len(profiles) != 2 {
+		return nil, fmt.Errorf("diagnostic comparison requires exactly two guidance profiles")
+	}
+	if profiles[0] == profiles[1] {
+		return nil, fmt.Errorf("diagnostic comparison guidance profiles must differ")
+	}
+	for _, profile := range profiles {
+		if !SupportedGuidanceProfile(profile) {
+			return nil, fmt.Errorf("unsupported diagnostic guidance profile %q", profile)
+		}
+	}
+	return append([]string(nil), profiles...), nil
 }
 
 // runGuidanceDiagnosticAttempt keeps single and paired diagnostic treatments on one request path.

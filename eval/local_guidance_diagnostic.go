@@ -41,6 +41,7 @@ type LocalGuidanceDiagnosticRequest struct {
 	DestinationRoot   string
 	Environments      map[string][]string
 	LogicalTrialID    string
+	Profiles          []string
 	TreatmentBoundary func(context.Context) error
 }
 
@@ -129,6 +130,7 @@ func (diagnostic *LocalGuidanceDiagnostic) Run(ctx context.Context, request Loca
 		DestinationRoot:   request.DestinationRoot,
 		ForjExecutable:    diagnostic.forjExecutable,
 		Environments:      request.Environments,
+		Profiles:          append([]string(nil), request.Profiles...),
 		Runtime:           diagnostic.runtime,
 		TreatmentBoundary: request.TreatmentBoundary,
 	})
@@ -143,7 +145,7 @@ func (diagnostic *LocalGuidanceDiagnostic) RunTreatment(ctx context.Context, req
 	if err != nil {
 		return GuidanceDiagnosticAttempt{}, err
 	}
-	if request.GuidanceProfile != GuidanceProfileNone && request.GuidanceProfile != GuidanceProfileAgents {
+	if !SupportedGuidanceProfile(request.GuidanceProfile) {
 		return GuidanceDiagnosticAttempt{}, fmt.Errorf("unsupported local diagnostic guidance profile %q", request.GuidanceProfile)
 	}
 	if request.Environment == nil {

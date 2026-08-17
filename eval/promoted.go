@@ -82,6 +82,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 			Requirements: []WorkflowRequirement{qualityInspection("inspect-domain-boundary", "Inspect the existing write workflow before publishing a typed domain fact through the App event bus.", "app/lifecycle.go", "internal/users/**")},
 		},
 		promotedGeneratorWorkflow("goforj-dispatch-event-followup-job/v1", "generate-report-job", "make:job", "reports:generate"),
+		promotedGeneratorWorkflow("goforj-add-resilient-job/v1", "generate-resilient-report-job", "make:job", "reports:generate"),
 		promotedGeneratorWorkflow("goforj-schedule-existing-job/v1", "generate-report-schedule", "make:schedule", "reports:daily", "--every", "24h", "--no-open"),
 		{
 			ID:           "goforj-repair-wire-provider/v1",
