@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -328,6 +329,79 @@ func TestSurfaceVerifierTreatsQualityTestsAsOwnedChanges(t *testing.T) {
 	}
 	if !checkHasStatus(result.Checks, "change-ownership", EndpointPassed) {
 		t.Fatalf("checks = %#v", result.Checks)
+	}
+}
+
+// TestPromotedSurfaceContractsOwnConventionalCompanionChanges protects valid tests and Wire placement from false ownership failures.
+func TestPromotedSurfaceContractsOwnConventionalCompanionChanges(t *testing.T) {
+	contracts := map[string]surfaceContract{}
+	for _, contract := range promotedSurfaceContracts() {
+		contracts[contract.id] = contract
+	}
+	tests := []struct {
+		name     string
+		contract string
+		changes  []ProjectChange
+	}{
+		{
+			name:     "lifecycle test filename",
+			contract: "add-app-lifecycle-hook/v1",
+			changes:  []ProjectChange{{Path: "app/readiness_test.go", After: ProjectPathState{Kind: "file"}}},
+		},
+		{
+			name:     "event test",
+			contract: "add-event-subscriber/v1",
+			changes:  []ProjectChange{{Path: "internal/invoices/paid_event_test.go", After: ProjectPathState{Kind: "file"}}},
+		},
+		{
+			name:     "repository injector",
+			contract: "add-database-transaction/v1",
+			changes:  []ProjectChange{{Path: "app/wire/inject_repositories_app.go", After: ProjectPathState{Kind: "file"}}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			contract, ok := contracts[test.contract]
+			if !ok {
+				t.Fatalf("contract %q not found", test.contract)
+			}
+			ownedPatterns := append(append([]string(nil), contract.allowedChanges...), contract.qualityTestPatterns...)
+			if result := verifySurfaceOwnership(test.changes, ownedPatterns); result.Status != EndpointPassed {
+				t.Fatalf("ownership result = %#v", result)
+			}
+		})
+	}
+}
+
+// TestApplicationBehaviorProbesExerciseDisclosedWorkflows keeps supervisor probes aligned with their public task contracts.
+func TestApplicationBehaviorProbesExerciseDisclosedWorkflows(t *testing.T) {
+	if strings.Contains(lifecycleReadinessBehaviorProbe, `"readiness"`) || !strings.Contains(lifecycleReadinessBehaviorProbe, "lifecycle.Start(ctx)") || !strings.Contains(lifecycleReadinessBehaviorProbe, "errors.Is(err, failure)") {
+		t.Fatalf("lifecycle probe must execute the registered hook without a reserved fixture ID:\n%s", lifecycleReadinessBehaviorProbe)
+	}
+	if strings.Contains(domainEventBehaviorProbe, ".Publish(") || !strings.Contains(domainEventBehaviorProbe, "NewSubscribers(handler).Register") || !strings.Contains(domainEventBehaviorProbe, "service.Create(") {
+		t.Fatalf("event probe must exercise creation through registered handling:\n%s", domainEventBehaviorProbe)
+	}
+	if strings.Contains(receiptMailBehaviorProbe, "receiptContent(") || !strings.Contains(receiptMailBehaviorProbe, "delivery.To[0].Email != recipient") || !strings.Contains(receiptMailBehaviorProbe, `strings.Contains(delivery.Subject, "invoice-42")`) || !strings.Contains(receiptMailBehaviorProbe, `strings.Contains(delivery.Text, "125.00")`) {
+		t.Fatalf("mail probe must inspect one real delivery without a private formatter contract:\n%s", receiptMailBehaviorProbe)
+	}
+
+	httpDefinition, err := LoadDefinition(filepath.Join("evaluations", "add_outbound_http_integration"))
+	if err != nil {
+		t.Fatalf("LoadDefinition(outbound HTTP): %v", err)
+	}
+	for _, requirement := range []string{"NewClient(baseURL string)", "GET /rates/{country}", `{"country":"US","percent":7.25}`} {
+		if !strings.Contains(httpDefinition.Prompt, requirement) {
+			t.Fatalf("outbound HTTP prompt omits remote contract %q: %s", requirement, httpDefinition.Prompt)
+		}
+	}
+	eventDefinition, err := LoadDefinition(filepath.Join("evaluations", "publish_domain_event"))
+	if err != nil {
+		t.Fatalf("LoadDefinition(domain event): %v", err)
+	}
+	for _, requirement := range []string{"Create(ctx, CreateUserInput)", "UserEvents", "NewUserEventPublisher"} {
+		if !strings.Contains(eventDefinition.Prompt, requirement) {
+			t.Fatalf("domain event prompt omits public workflow contract %q: %s", requirement, eventDefinition.Prompt)
+		}
 	}
 }
 

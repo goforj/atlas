@@ -54,8 +54,9 @@ func promotedSurfaceContracts() []surfaceContract {
 			}),
 		},
 		{
-			id:             "add-event-subscriber/v1",
-			allowedChanges: []string{"internal/invoices/*_event.go", "internal/invoices/*_subscriber.go", "internal/invoices/*_subscriber_test.go", "app/wire/inject_subscribers_app.go"},
+			id:                  "add-event-subscriber/v1",
+			allowedChanges:      []string{"internal/invoices/*_event.go", "internal/invoices/*_subscriber.go", "app/wire/inject_subscribers_app.go"},
+			qualityTestPatterns: []string{"internal/invoices/*_event_test.go", "internal/invoices/*_subscriber_test.go"},
 			sources: []sourceContract{
 				{id: "typed-event", paths: []string{"internal/invoices/*_event.go"}, identifiers: []string{"PaidEvent", "InvoiceID", "Topic"}, stringLiterals: []string{"invoices.paid"}},
 				{id: "subscriber-boundary", paths: []string{"internal/invoices/*_subscriber.go"}, identifiers: []string{"PaidSubscriber", "Service"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Handle", receiver: "PaidSubscriber", identifiers: []string{"ctx", "InvoiceID"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
@@ -212,7 +213,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		{
 			id:                  "add-app-lifecycle-hook/v1",
 			allowedChanges:      []string{"app/lifecycle.go"},
-			qualityTestPatterns: []string{"app/lifecycle_test.go"},
+			qualityTestPatterns: []string{"app/*_test.go"},
 			sources: []sourceContract{
 				{id: "application-readiness-hook", paths: []string{"app/lifecycle.go"}, identifiers: []string{"LifecycleRegistry", "NewLifecycleRegistry", "Service"}, forbiddenCalls: []string{"TODO"}, text: []string{"runtime.BeforeStartup"}, declarations: []declarationContract{{name: "Register", receiver: "LifecycleRegistry", selectorCalls: []string{"On"}}, {name: "BeforeStartup", receiver: "LifecycleRegistry", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
 			},
@@ -272,11 +273,12 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "add-database-transaction/v1",
-			allowedChanges: []string{"go.mod", "go.sum", "internal/accounts/*.go", "app/wire/inject_services_app.go"},
+			allowedChanges: []string{"go.mod", "go.sum", "internal/accounts/*.go", "app/wire/inject_repositories_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
 				{id: "transaction-bound-repository", paths: []string{"internal/accounts/repository.go"}, identifiers: []string{"Repository", "WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "WithTransaction", receiver: "Repository", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "Transaction"}}, {name: "AdjustBalance", receiver: "Repository", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "UpdateColumn"}}}},
 				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Transfer", receiver: "Service", selectorCalls: []string{"WithTransaction", "AdjustBalance"}, nestedCalls: []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}}}}},
-				{id: "account-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewRepository", "NewService"}},
+				{id: "account-repository-registration", paths: []string{"app/wire/inject_repositories_app.go"}, identifiers: []string{"NewRepository"}},
+				{id: "account-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
 				id:        "transaction-behavior",
@@ -348,9 +350,9 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges:      []string{"internal/events/*.go", "internal/users/*.go", "internal/notifications/*.go", "app/routes.go", "app/lifecycle.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"},
 			qualityTestPatterns: []string{"internal/users/*_test.go", "internal/notifications/*_test.go"},
 			sources: []sourceContract{
-				{id: "typed-user-event", paths: []string{"internal/events/*.go"}, identifiers: []string{"UserCreated", "UserID", "Topic"}, stringLiterals: []string{"users.created"}},
+				{id: "typed-user-event", paths: []string{"internal/events/*.go"}, identifiers: []string{"UserCreated", "UserID", "Topic"}, stringLiterals: []string{"users.created"}, declarations: []declarationContract{{name: "UserCreated", identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}}},
 				{id: "domain-event-publication", paths: []string{"internal/users/events.go", "internal/users/service.go"}, identifiers: []string{"UserEvents", "UserEventPublisher", "PublishCreated"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "PublishCreated", receiver: "UserEventPublisher", identifiers: []string{"ctx"}, selectorCalls: []string{"Publish", "WithContext"}}}},
-				{id: "event-reaction", paths: []string{"internal/notifications/subscribers.go", "app/lifecycle.go"}, identifiers: []string{"Subscribers", "Register", "Startup"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Register", receiver: "Subscribers", selectorCalls: []string{"Subscribe"}}, {name: "Startup", receiver: "LifecycleRegistry", selectorCalls: []string{"Register"}}}},
+				{id: "event-reaction", paths: []string{"internal/notifications/subscribers.go", "app/lifecycle.go"}, identifiers: []string{"Subscribers", "UserCreatedHandler", "Register", "Startup"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Register", receiver: "Subscribers", identifiers: []string{"UserID"}, selectorCalls: []string{"Subscribe"}}, {name: "Startup", receiver: "LifecycleRegistry", selectorCalls: []string{"Register"}}}},
 			},
 			commands: standardSurfaceCommands(commandContract{
 				id:              "domain-event-behavior",
