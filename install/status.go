@@ -97,7 +97,8 @@ func Status(ctx context.Context, opts StatusOptions) (StatusResult, error) {
 		result.Warnings = append(result.Warnings, "Installed skill list differs from the current Atlas catalog. Run forj atlas:update.")
 	}
 	for _, agent := range result.Agents {
-		missingConfiguredSurface := (cfg.Features.MCP && !agent.MCPPresent) ||
+		missingConfiguredSurface := (cfg.Features.Guidelines && !agent.GuidelinesPresent) ||
+			(cfg.Features.MCP && !agent.MCPPresent) ||
 			(cfg.Features.Skills && !agent.SkillsPresent)
 		if agent.Configured && missingConfiguredSurface {
 			result.Warnings = append(result.Warnings, "Configured agent "+agent.Name+" is missing one or more Atlas files.")

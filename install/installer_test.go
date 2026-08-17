@@ -35,13 +35,8 @@ func TestInstallerWritesAgentFilesAndConfig(t *testing.T) {
 		t.Fatalf("expected 4 agents, got %d", len(result.Agents))
 	}
 
-	if result.Guidance.Version != GuidanceReconciliationVersion || !result.Guidance.Enabled || len(result.Guidance.Targets) != 4 {
-		t.Fatalf("guidance reconciliation = %#v", result.Guidance)
-	}
 	for _, path := range []string{"AGENTS.md", "CLAUDE.md", "GEMINI.md", filepath.Join(".github", "copilot-instructions.md")} {
-		if _, err := os.Stat(filepath.Join(root, path)); !os.IsNotExist(err) {
-			t.Fatalf("Atlas wrote host-owned guideline %s: %v", path, err)
-		}
+		assertContains(t, filepath.Join(root, path), "<!-- goforj-atlas:start -->")
 	}
 	assertContains(t, filepath.Join(root, ".codex", "config.toml"), "atlas:mcp")
 	assertContains(t, filepath.Join(root, ".mcp.json"), "goforj-atlas")
@@ -50,7 +45,7 @@ func TestInstallerWritesAgentFilesAndConfig(t *testing.T) {
 	assertContains(t, filepath.Join(root, ".goforj", "atlas.json"), `"agents"`)
 }
 
-func TestInstallerLeavesUserGuidelineContentForHostReconciliation(t *testing.T) {
+func TestInstallerPreservesUserGuidelineContent(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("# Local Rules\n\nDo not delete me.\n"), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
@@ -69,8 +64,8 @@ func TestInstallerLeavesUserGuidelineContentForHostReconciliation(t *testing.T) 
 	}
 
 	content := readFile(t, filepath.Join(root, "AGENTS.md"))
-	if content != "# Local Rules\n\nDo not delete me.\n" {
-		t.Fatalf("Atlas changed host-owned user content:\n%s", content)
+	if !strings.Contains(content, "# Local Rules\n\nDo not delete me.\n") || !strings.Contains(content, "<!-- goforj-atlas:start -->") {
+		t.Fatalf("Atlas did not preserve user content and add its marker:\n%s", content)
 	}
 }
 
@@ -96,6 +91,102 @@ func TestInstallerDryRunReportsFilesWithoutWriting(t *testing.T) {
 	}
 	if _, err := os.Stat(config.FilePath(root)); !os.IsNotExist(err) {
 		t.Fatalf("dry run wrote atlas config: %v", err)
+	}
+}
+
+func TestHostInstallerReturnsGuidanceIntentWithoutWritingNativeFiles(t *testing.T) {
+	root := t.TempDir()
+	result, err := NewHostInstaller().Install(context.Background(), HostRequest{
+		Root:    root,
+		Agents:  []string{"codex"},
+		Project: project.Project{Root: root, Name: "demo"},
+	})
+	if err != nil {
+		t.Fatalf("host install failed: %v", err)
+	}
+	if result.Guidance.Version != GuidanceReconciliationVersion || !result.Guidance.Enabled || !slices.Equal(result.Guidance.Targets, []string{"codex"}) {
+		t.Fatalf("guidance = %#v", result.Guidance)
+	}
+	if _, err := os.Stat(filepath.Join(root, "AGENTS.md")); !os.IsNotExist(err) {
+		t.Fatalf("host install wrote native guidance: %v", err)
+	}
+	if _, err := os.Stat(config.FilePath(root)); err != nil {
+		t.Fatalf("host install did not write Atlas state: %v", err)
+	}
+}
+
+func TestHostUpdaterDisablesGuidanceWithoutRemovingNativeMarker(t *testing.T) {
+	root := t.TempDir()
+	projectInfo := project.Project{Root: root, Name: "demo"}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
+		t.Fatalf("legacy install failed: %v", err)
+	}
+	path := filepath.Join(root, "AGENTS.md")
+	before := readFile(t, path)
+	disabled := false
+	result, err := NewHostUpdater().Update(context.Background(), HostRequest{
+		Root: root, Project: projectInfo, Guidelines: &disabled,
+	})
+	if err != nil {
+		t.Fatalf("host update failed: %v", err)
+	}
+	if result.Guidance.Enabled {
+		t.Fatalf("guidance = %#v, want disabled", result.Guidance)
+	}
+	if got := readFile(t, path); got != before {
+		t.Fatalf("host update changed native marker:\n%s", got)
+	}
+	cfg, err := config.Load(root)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Features.Guidelines {
+		t.Fatalf("guidelines remain enabled: %#v", cfg.Features)
+	}
+}
+
+// TestHostUpdaterChangesAgentsWithoutMutatingNativeGuidance keeps projection ownership at the GoForj boundary.
+func TestHostUpdaterChangesAgentsWithoutMutatingNativeGuidance(t *testing.T) {
+	root := t.TempDir()
+	projectInfo := project.Project{Root: root, Name: "demo"}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
+		t.Fatalf("legacy install failed: %v", err)
+	}
+	path := filepath.Join(root, "AGENTS.md")
+	before := readFile(t, path)
+	result, err := NewHostUpdater().Update(context.Background(), HostRequest{
+		Root: root, Project: projectInfo, Agents: []string{"claude"},
+	})
+	if err != nil {
+		t.Fatalf("host update failed: %v", err)
+	}
+	if got := readFile(t, path); got != before {
+		t.Fatalf("host update changed deselected native guidance:\n%s", got)
+	}
+	if _, err := os.Stat(filepath.Join(root, "CLAUDE.md")); !os.IsNotExist(err) {
+		t.Fatalf("host update projected selected native guidance: %v", err)
+	}
+	if !slices.Equal(result.Guidance.Targets, []string{"claude"}) {
+		t.Fatalf("guidance targets = %#v", result.Guidance.Targets)
+	}
+}
+
+// TestStatusWarnsWhenLegacyGuidanceIsMissing preserves the direct installer health contract.
+func TestStatusWarnsWhenLegacyGuidanceIsMissing(t *testing.T) {
+	root := t.TempDir()
+	projectInfo := project.Project{Root: root, Name: "demo"}
+	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, "AGENTS.md")); err != nil {
+		t.Fatal(err)
+	}
+	status, err := Status(context.Background(), StatusOptions{Root: root, Project: projectInfo})
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
+	}
+	if len(status.Warnings) == 0 || status.Agents[0].GuidelinesPresent {
+		t.Fatalf("missing guidance status = %#v", status)
 	}
 }
 
@@ -134,7 +225,7 @@ func TestStatusReportsInstalledAndStaleSkills(t *testing.T) {
 	if !status.Installed || status.Project != "demo" || status.GoForjVersion != "0.18.0" || status.DocsRevision != "rev1" {
 		t.Fatalf("status = %#v", status)
 	}
-	if len(status.Agents) != 1 || !status.Agents[0].Configured || !status.Agents[0].MCPPresent || status.Agents[0].GuidelinesPresent {
+	if len(status.Agents) != 1 || !status.Agents[0].Configured || !status.Agents[0].MCPPresent || !status.Agents[0].GuidelinesPresent {
 		t.Fatalf("agents = %#v", status.Agents)
 	}
 	if !status.Skills.Stale || len(status.Warnings) == 0 {
@@ -142,7 +233,7 @@ func TestStatusReportsInstalledAndStaleSkills(t *testing.T) {
 	}
 }
 
-func TestUpdaterLeavesUserGuidelineContentForHostReconciliation(t *testing.T) {
+func TestUpdaterPreservesUserGuidelineContent(t *testing.T) {
 	root := t.TempDir()
 	if _, err := NewInstaller(agents.Codex{}).Install(context.Background(), Options{
 		Root:   root,
@@ -169,8 +260,8 @@ func TestUpdaterLeavesUserGuidelineContentForHostReconciliation(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
-	if got := readFile(t, path); got != content {
-		t.Fatalf("Atlas changed host-owned user content:\n%s", got)
+	if got := readFile(t, path); !strings.Contains(got, content) || !strings.Contains(got, "<!-- goforj-atlas:start -->") {
+		t.Fatalf("Atlas did not preserve user content and add its marker:\n%s", got)
 	}
 }
 
@@ -242,17 +333,17 @@ func TestUpdaterRefreshesOneSurfaceWithoutDisablingOthers(t *testing.T) {
 	}
 }
 
-func TestUpdaterAppliesExplicitSurfaceDisable(t *testing.T) {
+func TestHostUpdaterAppliesExplicitSurfaceDisable(t *testing.T) {
 	root := t.TempDir()
 	projectInfo := project.Project{Root: root, Name: "demo"}
 	if _, err := NewInstaller().Install(context.Background(), Options{Root: root, Agents: []string{"codex"}, Project: projectInfo}); err != nil {
 		t.Fatalf("install Codex: %v", err)
 	}
 	disabled := false
-	result, err := NewUpdater().Update(context.Background(), Options{
-		Root:                root,
-		Project:             projectInfo,
-		GuidelinesSelection: &disabled,
+	result, err := NewHostUpdater().Update(context.Background(), HostRequest{
+		Root:       root,
+		Project:    projectInfo,
+		Guidelines: &disabled,
 	})
 	if err != nil {
 		t.Fatalf("disable guidelines: %v", err)
@@ -286,9 +377,6 @@ func TestUpdaterDiscoverReplacesCommittedAgentSelection(t *testing.T) {
 	}
 	if len(result.Agents) != 1 || result.Agents[0] != "claude" {
 		t.Fatalf("discovered agents = %v, want [claude]", result.Agents)
-	}
-	if result.Guidance.Targets[0] != "claude" {
-		t.Fatalf("guidance targets = %#v", result.Guidance.Targets)
 	}
 }
 
@@ -344,8 +432,8 @@ func TestInstallerPrunesDisabledSurfaces(t *testing.T) {
 	if !cfg.Features.Guidelines || cfg.Features.Skills || cfg.Features.MCP {
 		t.Fatalf("unexpected configured surfaces: %#v", cfg.Features)
 	}
-	if len(cfg.GeneratedFiles["codex"]) != 0 {
-		t.Fatalf("disabled surfaces remain in ownership manifest: %#v", cfg.GeneratedFiles)
+	if !slices.Equal(cfg.GeneratedFiles["codex"], []string{"AGENTS.md"}) {
+		t.Fatalf("guideline ownership missing from manifest: %#v", cfg.GeneratedFiles)
 	}
 	status, err := Status(context.Background(), StatusOptions{Root: root, Project: projectInfo})
 	if err != nil {
