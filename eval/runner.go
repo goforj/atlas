@@ -78,6 +78,8 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	var artifactEvents []Event
 	var agentProperties AgentProperties
 	var backendCapabilities []Capability
+	var promptDelivered bool
+	var sessionClosed bool
 	var err error
 	defer func() {
 		result.FinishedAt = now().UTC()
@@ -198,6 +200,17 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 			result.EvaluationStatus = EvaluationEvaluatorError
 		}
 	}()
+	defer func() {
+		if !promptDelivered || finalTree != "" {
+			return
+		}
+		if !sessionClosed {
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "final_state", Message: "candidate state was not retained because the agent session did not stop cleanly"})
+			result.EvaluationStatus = EvaluationEvaluatorError
+			return
+		}
+		retainPostPromptFinalState(backendEnvironment, baselineDiff, artifacts, &result, &finalTree)
+	}()
 
 	agentPreparation, err := runner.Agent.Prepare(ctx, backendEnvironment.Environment(), resolvedGuidance)
 	if err != nil {
@@ -275,7 +288,6 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	}
 	result.ProviderSessionDigest = sessionIdentity.SessionDigest
 	result.Milestones = append(result.Milestones, MilestoneProviderSessionStarted)
-	sessionClosed := false
 	defer func() {
 		if sessionClosed {
 			return
@@ -284,7 +296,9 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.SecondaryFailures = append(result.SecondaryFailures, failures...)
 		if len(failures) > 0 {
 			result.EvaluationStatus = EvaluationEvaluatorError
+			return
 		}
+		sessionClosed = true
 	}()
 
 	turn, err := session.Turn(runContext, AgentTurn{Prompt: request.Definition.Prompt, Limits: request.Definition.Limits})
@@ -297,6 +311,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.AgentOutcome = AgentAdapterError
 		return result, fmt.Errorf("agent did not accept the prompt")
 	}
+	promptDelivered = true
 	result.Milestones = append(result.Milestones, MilestonePromptDelivered)
 	agentResult, err := session.Wait(runContext)
 	artifactEvents = appendAdapterEvents(artifactEvents, agentResult.Events)
@@ -330,6 +345,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		if containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
 			result.EvaluationStatus = EvaluationEvaluatorError
 		}
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "agent_terminal", Message: err.Error()})
 		return result, fmt.Errorf("wait for agent: %w", err)
 	}
 	supervisorEvents, err = backendEnvironment.ObservedEvents(ctx)
@@ -366,11 +382,42 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 		result.EvaluationStatus = EvaluationEvaluatorError
 		return result, fmt.Errorf("seal candidate Project: %w", err)
 	}
+	if strings.TrimSpace(sealed.Root) != "" && strings.TrimSpace(sealed.TreeDigest) != "" {
+		finalTree = sealed.TreeDigest
+	}
 	if err := verifySealedAttempt(ctx, sealed, baselineDiff, baselineTests, baselineTree, supervisorEvents, agentResult.Message, preparedProject.Result().ForjDigest, available, resolved, request.Intent, artifacts, &result); err != nil {
 		return result, err
 	}
-	finalTree = sealed.TreeDigest
 	return result, nil
+}
+
+// retainPostPromptFinalState seals and records candidate state after a delivered prompt cannot complete normally.
+func retainPostPromptFinalState(backend BackendEnvironment, baseline projectDiffSnapshot, artifacts *AttemptArtifacts, result *AttemptResult, finalTree *string) {
+	cleanupContext, cancel := context.WithTimeout(context.Background(), evaluationCleanupTimeout)
+	defer cancel()
+	sealed, err := backend.Seal(cleanupContext)
+	if err != nil {
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "final_state", Message: err.Error()})
+		result.EvaluationStatus = EvaluationEvaluatorError
+		return
+	}
+	if strings.TrimSpace(sealed.Root) == "" || strings.TrimSpace(sealed.TreeDigest) == "" {
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "final_state", Message: "backend returned an incomplete sealed Project"})
+		result.EvaluationStatus = EvaluationEvaluatorError
+		return
+	}
+	result.FinalTree = sealed.TreeDigest
+	*finalTree = sealed.TreeDigest
+	diff, err := buildProjectDiff(baseline, sealed.Root)
+	if err != nil {
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: err.Error()})
+		result.EvaluationStatus = EvaluationEvaluatorError
+		return
+	}
+	if err := artifacts.WriteText("diff.patch", diff); err != nil {
+		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_diff", Message: err.Error()})
+		result.EvaluationStatus = EvaluationEvaluatorError
+	}
 }
 
 // attemptPreflight contains resolved identities needed after capability and fixture admission.

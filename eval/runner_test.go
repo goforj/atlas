@@ -23,6 +23,36 @@ func hasSecondaryFailurePhase(failures []SecondaryFailure, phase string) bool {
 	return false
 }
 
+// assertPostPromptFailureArtifacts verifies terminal failure evidence still binds the stopped candidate state.
+func assertPostPromptFailureArtifacts(t *testing.T, runner Runner, result AttemptResult, failureContext, secret string) {
+	t.Helper()
+	directory := filepath.Join(runner.Artifacts.root, result.AttemptID)
+	manifest, err := VerifyArtifactManifest(directory, runner.Artifacts.key)
+	if err != nil {
+		t.Fatalf("VerifyArtifactManifest(): %v", err)
+	}
+	if result.FinalTree == "" || manifest.FinalTree != result.FinalTree {
+		t.Fatalf("final tree result=%q manifest=%q", result.FinalTree, manifest.FinalTree)
+	}
+	if _, err := os.ReadFile(filepath.Join(directory, "diff.patch")); err != nil {
+		t.Fatalf("read retained diff: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(directory, "run.json"))
+	if err != nil {
+		t.Fatalf("read retained run: %v", err)
+	}
+	if secret != "" && bytes.Contains(body, []byte(secret)) {
+		t.Fatalf("retained run leaked secret: %q", body)
+	}
+	var retained AttemptResult
+	if err := json.Unmarshal(body, &retained); err != nil {
+		t.Fatalf("decode retained run: %v", err)
+	}
+	if !hasSecondaryFailurePhase(retained.SecondaryFailures, "agent_terminal") || !bytes.Contains(body, []byte(failureContext)) {
+		t.Fatalf("retained terminal failure = %q", body)
+	}
+}
+
 // fakePreparer records whether preflight reached Project mutation.
 type fakePreparer struct {
 	capabilities  PreparationCapabilities
@@ -134,14 +164,20 @@ type fakeBackendEnvironment struct {
 	baseline    BaselineSnapshot
 	events      []Event
 	sealed      SealedProject
+	seal        func(context.Context) (SealedProject, error)
+	sealCalls   int
 	closeLog    *[]string
 	closeErr    error
 }
 
 // Seal records the candidate snapshot only after the agent session has closed.
-func (environment *fakeBackendEnvironment) Seal(context.Context) (SealedProject, error) {
+func (environment *fakeBackendEnvironment) Seal(ctx context.Context) (SealedProject, error) {
+	environment.sealCalls++
 	if len(*environment.closeLog) == 0 || (*environment.closeLog)[0] != "session" {
 		return SealedProject{}, errors.New("candidate sealed before session cleanup")
+	}
+	if environment.seal != nil {
+		return environment.seal(ctx)
 	}
 	return environment.sealed, nil
 }
@@ -240,6 +276,7 @@ type fakeSession struct {
 	result         AgentResult
 	waitErr        error
 	waitForContext bool
+	waitHook       func()
 	closeLog       *[]string
 	closeErr       error
 	lastTurn       AgentTurn
@@ -258,6 +295,7 @@ func (session *fakeSession) Identity() AgentSessionIdentity {
 type capturingVerifier struct {
 	input  VerificationInput
 	result VerificationResult
+	err    error
 }
 
 // ID returns the manifest's promoted verifier identity.
@@ -273,6 +311,9 @@ func (*capturingVerifier) Capabilities() []Capability {
 // Verify records the sealed tree and returns a passing framework outcome.
 func (verifier *capturingVerifier) Verify(_ context.Context, input VerificationInput) (VerificationResult, error) {
 	verifier.input = input
+	if verifier.err != nil {
+		return VerificationResult{}, verifier.err
+	}
 	if verifier.result.FrameworkOutcome.ID != "" {
 		return verifier.result, nil
 	}
@@ -287,6 +328,9 @@ func (session *fakeSession) Turn(_ context.Context, turn AgentTurn) (AgentTurnRe
 
 // Wait returns the configured provider completion.
 func (session *fakeSession) Wait(ctx context.Context) (AgentResult, error) {
+	if session.waitHook != nil {
+		session.waitHook()
+	}
 	if session.waitForContext {
 		<-ctx.Done()
 		return AgentResult{}, ctx.Err()
@@ -922,8 +966,13 @@ func TestRunnerPreservesCleanupFailureBesideAgentOutcome(t *testing.T) {
 
 // TestRunnerClassifiesPostActionProviderFailureAsEvaluatorError verifies non-retryable evidence loss after the first action.
 func TestRunnerClassifiesPostActionProviderFailureAsEvaluatorError(t *testing.T) {
-	runner, _, _, _, agent := newFakeRunner(t)
-	agent.session.waitErr = errors.New("provider disconnected")
+	runner, _, _, backend, agent := newFakeRunner(t)
+	const secret = "provider-secret-canary"
+	runner.Artifacts.redactor = NewRedactor([]string{secret})
+	if err := os.WriteFile(filepath.Join(backend.environment.sealed.Root, "partial.go"), []byte("package partial\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	agent.session.waitErr = errors.New("provider disconnected token=" + secret)
 	agent.session.result.Events = []Event{{Sequence: 1, Kind: EventMessage, Fields: map[string]string{"text": "partial provider explanation"}}}
 	result, err := runner.Run(context.Background(), fakeAttemptRequest())
 	if err == nil {
@@ -935,6 +984,70 @@ func TestRunnerClassifiesPostActionProviderFailureAsEvaluatorError(t *testing.T)
 	transcript, readErr := os.ReadFile(filepath.Join(runner.Artifacts.root, result.AttemptID, "transcript.redacted.txt"))
 	if readErr != nil || !bytes.Contains(transcript, []byte("partial provider explanation")) {
 		t.Fatalf("partial diagnostic transcript = %q, %v", transcript, readErr)
+	}
+	assertPostPromptFailureArtifacts(t, runner, result, "provider disconnected token="+redactedValue, secret)
+	diff, readErr := os.ReadFile(filepath.Join(runner.Artifacts.root, result.AttemptID, "diff.patch"))
+	if readErr != nil || !bytes.Contains(diff, []byte("partial.go")) {
+		t.Fatalf("retained candidate mutation = %q, %v", diff, readErr)
+	}
+}
+
+// TestRunnerDoesNotSealAfterSessionCleanupFailure avoids signing a mutable candidate tree as final evidence.
+func TestRunnerDoesNotSealAfterSessionCleanupFailure(t *testing.T) {
+	runner, _, _, backend, agent := newFakeRunner(t)
+	agent.session.waitErr = errors.New("provider disconnected")
+	agent.session.closeErr = errors.New("process group remained active")
+	result, err := runner.Run(context.Background(), fakeAttemptRequest())
+	if err == nil || result.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("Run() = %#v, %v, want cleanup integrity failure", result, err)
+	}
+	if backend.environment.sealCalls != 0 || result.FinalTree != "" {
+		t.Fatalf("unsafe final state = calls:%d tree:%q", backend.environment.sealCalls, result.FinalTree)
+	}
+	if !hasSecondaryFailurePhase(result.SecondaryFailures, "agent_session") || !hasSecondaryFailurePhase(result.SecondaryFailures, "final_state") {
+		t.Fatalf("secondary failures = %#v", result.SecondaryFailures)
+	}
+}
+
+// TestRunnerRetriesCancelledSealWithFreshCleanupContext retains evidence after successful descendant cleanup.
+func TestRunnerRetriesCancelledSealWithFreshCleanupContext(t *testing.T) {
+	runner, _, _, backend, agent := newFakeRunner(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	agent.session.waitHook = cancel
+	backend.environment.seal = func(ctx context.Context) (SealedProject, error) {
+		if err := ctx.Err(); err != nil {
+			return SealedProject{}, err
+		}
+		return backend.environment.sealed, nil
+	}
+	result, err := runner.Run(ctx, fakeAttemptRequest())
+	if err == nil || result.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("Run() = %#v, %v, want cancelled primary seal", result, err)
+	}
+	if backend.environment.sealCalls != 2 || result.FinalTree != backend.environment.sealed.TreeDigest {
+		t.Fatalf("retained fallback = calls:%d tree:%q", backend.environment.sealCalls, result.FinalTree)
+	}
+	manifest, verifyErr := VerifyArtifactManifest(filepath.Join(runner.Artifacts.root, result.AttemptID), runner.Artifacts.key)
+	if verifyErr != nil || manifest.FinalTree != result.FinalTree {
+		t.Fatalf("fallback manifest final tree = %q, %v", manifest.FinalTree, verifyErr)
+	}
+}
+
+// TestRunnerBindsManifestTreeWhenVerificationFails keeps post-seal failures consistent across retained artifacts.
+func TestRunnerBindsManifestTreeWhenVerificationFails(t *testing.T) {
+	runner, _, _, backend, _ := newFakeRunner(t)
+	verifier := runner.Registry.verifiers["add-http-controller/v1"].(*capturingVerifier)
+	verifier.err = errors.New("verifier unavailable")
+	result, err := runner.Run(context.Background(), fakeAttemptRequest())
+	if err == nil || result.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("Run() = %#v, %v, want verifier failure", result, err)
+	}
+	if backend.environment.sealCalls != 1 || result.FinalTree != backend.environment.sealed.TreeDigest {
+		t.Fatalf("sealed failure = calls:%d tree:%q", backend.environment.sealCalls, result.FinalTree)
+	}
+	manifest, verifyErr := VerifyArtifactManifest(filepath.Join(runner.Artifacts.root, result.AttemptID), runner.Artifacts.key)
+	if verifyErr != nil || manifest.FinalTree != result.FinalTree {
+		t.Fatalf("manifest final tree = %q, %v", manifest.FinalTree, verifyErr)
 	}
 }
 
@@ -968,6 +1081,7 @@ func TestRunnerClassifiesTimeoutAfterFirstActionAndUsesFreshCleanup(t *testing.T
 	if !reflect.DeepEqual(*closeLog, []string{"session", "agent_preparation", "backend", "project"}) {
 		t.Fatalf("cleanup order after timeout = %q", *closeLog)
 	}
+	assertPostPromptFailureArtifacts(t, runner, result, "context deadline exceeded", "")
 }
 
 // TestRunnerClassifiesCancellationAfterFirstAction preserves operator intent without skipping cleanup.
@@ -987,6 +1101,7 @@ func TestRunnerClassifiesCancellationAfterFirstAction(t *testing.T) {
 	if !reflect.DeepEqual(*closeLog, []string{"session", "agent_preparation", "backend", "project"}) {
 		t.Fatalf("cleanup order after cancellation = %q", *closeLog)
 	}
+	assertPostPromptFailureArtifacts(t, runner, result, "context canceled", "")
 }
 
 // newFakeRunner assembles one valid deterministic lifecycle with shared cleanup recording.
