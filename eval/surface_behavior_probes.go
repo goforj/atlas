@@ -172,7 +172,7 @@ func TestAtlasAvatarRevalidationBehavior(t *testing.T) {
 const invoiceValidationBehaviorProbe = `package invoices
 
 import (
-	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -180,23 +180,6 @@ import (
 
 	"github.com/goforj/web/webtest"
 )
-
-// atlasValidationRepository records normalized service input for the supervisor-owned probe.
-type atlasValidationRepository struct {
-	created Invoice
-}
-
-// Find preserves the repository contract without participating in creation behavior.
-func (*atlasValidationRepository) Find(context.Context, string) (Invoice, error) {
-	return Invoice{}, ErrInvoiceNotFound
-}
-
-// Create records the normalized invoice passed across the service boundary.
-func (repository *atlasValidationRepository) Create(_ context.Context, invoice Invoice) (Invoice, error) {
-	repository.created = invoice
-	invoice.ID = "inv-created"
-	return invoice, nil
-}
 
 // TestAtlasInvoiceValidationBehavior proves malformed, invalid, and valid payloads remain distinct.
 func TestAtlasInvoiceValidationBehavior(t *testing.T) {
@@ -211,8 +194,7 @@ func TestAtlasInvoiceValidationBehavior(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			repository := &atlasValidationRepository{}
-			controller := NewController(NewService(repository))
+			controller := NewController(NewService(&MemoryRepository{}))
 			request := httptest.NewRequest(http.MethodPost, "/invoices", strings.NewReader(test.body))
 			request.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
@@ -223,8 +205,14 @@ func TestAtlasInvoiceValidationBehavior(t *testing.T) {
 			if response.Code != test.wantStatus {
 				t.Fatalf("status = %d, want %d", response.Code, test.wantStatus)
 			}
-			if test.name == "valid" && repository.created.CustomerID != "customer-42" {
-				t.Fatalf("created = %#v", repository.created)
+			if test.name == "valid" {
+				var created Invoice
+				if err := json.Unmarshal(response.Body.Bytes(), &created); err != nil {
+					t.Fatalf("decode created invoice: %v", err)
+				}
+				if created.CustomerID != "customer-42" || created.TotalCents != 12500 {
+					t.Fatalf("created = %#v", created)
+				}
 			}
 		})
 	}

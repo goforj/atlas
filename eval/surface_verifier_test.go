@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -358,6 +359,16 @@ func TestPromotedSurfaceContractsOwnConventionalCompanionChanges(t *testing.T) {
 			contract: "add-database-transaction/v1",
 			changes:  []ProjectChange{{Path: "app/wire/inject_repositories_app.go", After: ProjectPathState{Kind: "file"}}},
 		},
+		{
+			name:     "attachment storage driver dependency",
+			contract: "choose-storage-for-files/v1",
+			changes:  []ProjectChange{{Path: "go.mod", After: ProjectPathState{Kind: "file"}}},
+		},
+		{
+			name:     "attachment app registration",
+			contract: "choose-storage-for-files/v1",
+			changes:  []ProjectChange{{Path: "app/wire/app.go", After: ProjectPathState{Kind: "file"}}},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -373,6 +384,97 @@ func TestPromotedSurfaceContractsOwnConventionalCompanionChanges(t *testing.T) {
 	}
 }
 
+// TestChooseStorageForFilesResolvesAttachmentsAtIOBoundary permits construction to retain the manager while requiring named storage for both operations.
+func TestChooseStorageForFilesResolvesAttachmentsAtIOBoundary(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "invoices", "attachment_service.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := `package invoices
+
+import (
+	"context"
+
+	"example.test/internal/storages"
+)
+
+type Attachment struct{ Path string }
+
+type AttachmentService struct{ manager *storages.Manager }
+
+func NewAttachmentService(manager *storages.Manager) *AttachmentService {
+	return &AttachmentService{manager: manager}
+}
+
+func (service *AttachmentService) Store(ctx context.Context, path string, body []byte) (Attachment, error) {
+	if err := service.manager.Attachments().WithContext(ctx).Put(path, body); err != nil {
+		return Attachment{}, err
+	}
+	return Attachment{Path: path}, nil
+}
+
+func (service *AttachmentService) Read(ctx context.Context, path string) ([]byte, error) {
+	return service.manager.Attachments().WithContext(ctx).Get(path)
+}
+`
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var attachmentBoundary sourceContract
+	for _, contract := range promotedSurfaceContracts() {
+		if contract.id != "choose-storage-for-files/v1" {
+			continue
+		}
+		for _, source := range contract.sources {
+			if source.id == "attachment-service-boundary" {
+				attachmentBoundary = source
+				break
+			}
+		}
+	}
+	if attachmentBoundary.id == "" {
+		t.Fatal("attachment storage boundary contract is absent")
+	}
+	if result := verifySurfaceSource(root, attachmentBoundary); result.Status != EndpointPassed {
+		t.Fatalf("attachment boundary result = %#v", result)
+	}
+	constructorResolved := `package invoices
+
+import (
+	"context"
+
+	"example.test/internal/storages"
+	"github.com/goforj/storage"
+)
+
+type Attachment struct{ Path string }
+
+type AttachmentService struct{ disk storage.Storage }
+
+func NewAttachmentService(manager *storages.Manager) *AttachmentService {
+	return &AttachmentService{disk: manager.Attachments()}
+}
+
+func (service *AttachmentService) Store(ctx context.Context, path string, body []byte) (Attachment, error) {
+	if err := service.disk.WithContext(ctx).Put(path, body); err != nil {
+		return Attachment{}, err
+	}
+	return Attachment{Path: path}, nil
+}
+
+func (service *AttachmentService) Read(ctx context.Context, path string) ([]byte, error) {
+	return service.disk.WithContext(ctx).Get(path)
+}
+`
+	if err := os.WriteFile(path, []byte(constructorResolved), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := verifySurfaceSource(root, attachmentBoundary); result.Status != EndpointPassed {
+		t.Fatalf("constructor-resolved attachment boundary result = %#v", result)
+	}
+}
+
 // TestApplicationBehaviorProbesExerciseDisclosedWorkflows keeps supervisor probes aligned with their public task contracts.
 func TestApplicationBehaviorProbesExerciseDisclosedWorkflows(t *testing.T) {
 	if strings.Contains(lifecycleReadinessBehaviorProbe, `"readiness"`) || !strings.Contains(lifecycleReadinessBehaviorProbe, "lifecycle.Start(ctx)") || !strings.Contains(lifecycleReadinessBehaviorProbe, "errors.Is(err, failure)") {
@@ -384,8 +486,11 @@ func TestApplicationBehaviorProbesExerciseDisclosedWorkflows(t *testing.T) {
 	if strings.Contains(receiptMailBehaviorProbe, "receiptContent(") || !strings.Contains(receiptMailBehaviorProbe, "delivery.To[0].Email != recipient") || !strings.Contains(receiptMailBehaviorProbe, `strings.Contains(delivery.Subject, "invoice-42")`) || !strings.Contains(receiptMailBehaviorProbe, `strings.Contains(delivery.Text, "125.00")`) {
 		t.Fatalf("mail probe must inspect one real delivery without a private formatter contract:\n%s", receiptMailBehaviorProbe)
 	}
-	if strings.Contains(jsonAPIFeatureBehaviorProbe, "ada@example.test") || strings.Contains(jsonAPIFeatureBehaviorProbe, "user.Email !=") || !strings.Contains(jsonAPIFeatureBehaviorProbe, `user.ID != "42"`) || !strings.Contains(jsonAPIFeatureBehaviorProbe, `service.Find(context.Background(), "missing")`) {
-		t.Fatalf("JSON API probe must verify lookup identity and reject an unknown nonempty ID without pinning an undocumented fixture email:\n%s", jsonAPIFeatureBehaviorProbe)
+	if strings.Contains(jsonAPIFeatureBehaviorProbe, "ada@example.test") || strings.Contains(jsonAPIFeatureBehaviorProbe, "user.Email !=") || strings.Contains(jsonAPIFeatureBehaviorProbe, ".Show(") || !strings.Contains(jsonAPIFeatureBehaviorProbe, "route.Handler()") || !strings.Contains(jsonAPIFeatureBehaviorProbe, `user.ID != "42"`) {
+		t.Fatalf("JSON API probe must verify HTTP behavior through the registered route without pinning a handler name or undocumented fixture email:\n%s", jsonAPIFeatureBehaviorProbe)
+	}
+	if strings.Contains(uploadWorkflowBehaviorProbe, "memorystorage") || !strings.Contains(uploadWorkflowBehaviorProbe, "disk.putContext != ctx") || !strings.Contains(uploadWorkflowBehaviorProbe, "nested/../../hello.txt") || !strings.Contains(uploadWorkflowBehaviorProbe, "reflect.ValueOf(NewService)") {
+		t.Fatalf("upload probe must verify context-bound traversal-safe behavior across supported storage injection shapes:\n%s", uploadWorkflowBehaviorProbe)
 	}
 
 	httpDefinition, err := LoadDefinition(filepath.Join("evaluations", "add_outbound_http_integration"))
@@ -405,6 +510,39 @@ func TestApplicationBehaviorProbesExerciseDisclosedWorkflows(t *testing.T) {
 		if !strings.Contains(eventDefinition.Prompt, requirement) {
 			t.Fatalf("domain event prompt omits public workflow contract %q: %s", requirement, eventDefinition.Prompt)
 		}
+	}
+}
+
+// TestUploadWorkflowContractAcceptsEitherNamedStorageInjectionShape keeps disk selection at either the provider or service boundary.
+func TestUploadWorkflowContractAcceptsEitherNamedStorageInjectionShape(t *testing.T) {
+	var upload surfaceContract
+	for _, contract := range promotedSurfaceContracts() {
+		if contract.id == "add-upload-workflow/v1" {
+			upload = contract
+			break
+		}
+	}
+	if upload.id == "" {
+		t.Fatal("upload workflow contract is absent")
+	}
+	var boundary, registration *sourceContract
+	for index := range upload.sources {
+		source := &upload.sources[index]
+		switch source.id {
+		case "upload-boundary":
+			boundary = source
+		case "uploads-storage-registration":
+			registration = source
+		}
+	}
+	if boundary == nil || len(boundary.declarations) == 0 {
+		t.Fatal("upload boundary contract is absent")
+	}
+	if len(boundary.declarations[0].selectorCalls) != 0 {
+		t.Fatalf("upload behavior must be established by the probe, not a storage method spelling: %#v", boundary.declarations[0])
+	}
+	if registration == nil || !slices.Contains(registration.selectorCalls, "Uploads") || !slices.Contains(registration.paths, "app/wire/inject_services_app.go") || !slices.Contains(registration.paths, "internal/uploads/service.go") {
+		t.Fatalf("named storage registration must accept provider or service resolution while requiring the purpose-named disk: %#v", registration)
 	}
 }
 
