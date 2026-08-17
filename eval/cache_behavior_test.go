@@ -76,7 +76,7 @@ func TestVerifyCacheDecoratorRegistrationRequiresTheDiscoveredConstructor(t *tes
 		t.Fatal(err)
 	}
 	path := filepath.Join(directory, "inject_services_app.go")
-	if err := os.WriteFile(path, []byte("package wire\nvar provider = users.NewRepository\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("package wire\nimport \"github.com/google/wire\"\nvar provider = wire.NewSet(users.NewRepository)\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := verifyCacheDecoratorRegistration(root, "NewRepository"); err != nil {
@@ -84,6 +84,31 @@ func TestVerifyCacheDecoratorRegistrationRequiresTheDiscoveredConstructor(t *tes
 	}
 	if err := verifyCacheDecoratorRegistration(root, "NewCachedRepository"); err == nil {
 		t.Fatal("missing discovered constructor registration passed")
+	}
+}
+
+// TestVerifyCacheDecoratorRegistrationAcceptsRegisteredWrapper requires the
+// wrapper itself to be in the Wire set, rather than accepting an unused helper.
+func TestVerifyCacheDecoratorRegistrationAcceptsRegisteredWrapper(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "app", "wire")
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(directory, "inject_services_app.go")
+	registered := "package wire\nimport \"github.com/google/wire\"\nfunc provideRepository() any { return users.NewCachedRepository(nil, nil) }\nvar provider = wire.NewSet(provideRepository)\n"
+	if err := os.WriteFile(path, []byte(registered), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyCacheDecoratorRegistration(root, "NewCachedRepository"); err != nil {
+		t.Fatalf("registered wrapper: %v", err)
+	}
+	unregistered := "package wire\nimport \"github.com/google/wire\"\nfunc provideRepository() any { return users.NewCachedRepository(nil, nil) }\nfunc other() any { return nil }\nvar provider = wire.NewSet(other)\n"
+	if err := os.WriteFile(path, []byte(unregistered), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyCacheDecoratorRegistration(root, "NewCachedRepository"); err == nil {
+		t.Fatal("unregistered wrapper passed")
 	}
 }
 

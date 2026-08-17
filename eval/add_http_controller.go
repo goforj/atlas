@@ -22,8 +22,9 @@ type CommandRunner interface {
 
 // VerifierProject combines the sealed candidate with immutable pre-agent tests restored into its private clone.
 type VerifierProject struct {
-	Root          string
-	BaselineTests []TrustedTestFile
+	Root                   string
+	BaselineTests          []TrustedTestFile
+	BaselineTestExclusions []string
 }
 
 // CommandSession executes a bounded sequence against one disposable candidate clone.

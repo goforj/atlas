@@ -371,6 +371,34 @@ func TestVerifierCommandsRestoresTrustedBaselineTests(t *testing.T) {
 	}
 }
 
+// TestVerifierCommandsExcludesOnlyReviewedBaselineCompatibilityTests keeps unrelated
+// pre-agent tests executable while a contract retires a stale API assertion.
+func TestVerifierCommandsExcludesOnlyReviewedBaselineCompatibilityTests(t *testing.T) {
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "go.mod"), []byte("module example.test/feature\n\ngo 1.25\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	session, err := (VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0]}).Open(context.Background(), VerifierProject{
+		Root: source,
+		BaselineTests: []TrustedTestFile{
+			{Path: "internal/users/service_test.go", Body: []byte("package users\n"), Mode: 0o644},
+			{Path: "internal/users/repository_test.go", Body: []byte("package users\n"), Mode: 0o644},
+		},
+		BaselineTestExclusions: []string{"internal/users/service_test.go"},
+	})
+	if err != nil {
+		t.Fatalf("Open(): %v", err)
+	}
+	defer session.Close(context.Background())
+	concrete := session.(*verifierCommandSession)
+	if _, err := os.Stat(filepath.Join(concrete.root, "internal", "users", "service_test.go")); !os.IsNotExist(err) {
+		t.Fatalf("excluded baseline test restored: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(concrete.root, "internal", "users", "repository_test.go")); err != nil {
+		t.Fatalf("unrelated baseline test was not restored: %v", err)
+	}
+}
+
 // TestVerifierCommandsRejectsTrustedTestsThroughCandidateSymlinks proves immutable source cannot be restored through a candidate-controlled alias.
 func TestVerifierCommandsRejectsTrustedTestsThroughCandidateSymlinks(t *testing.T) {
 	source := t.TempDir()

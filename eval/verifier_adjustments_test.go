@@ -30,6 +30,136 @@ func TestCorrectedBehaviorProbesParse(t *testing.T) {
 	}
 }
 
+// TestScheduleBehaviorTargetFollowsApplicationNaming keeps the runtime oracle
+// coupled to the selected constructor without requiring the golden spelling.
+func TestScheduleBehaviorTargetFollowsApplicationNaming(t *testing.T) {
+	root := t.TempDir()
+	writeVerifierFile(t, root, "internal/reports/reconciler.go", `package reports
+type Reconciler struct{}
+func NewDailySchedule() *Reconciler { return &Reconciler{} }
+`)
+	constructor, directory, packageName, err := scheduleBehaviorTarget(root)
+	if err != nil {
+		t.Fatalf("schedule target: %v", err)
+	}
+	if constructor != "NewDailySchedule" || directory != "internal/reports" || packageName != "reports" {
+		t.Fatalf("target = %q, %q, %q", constructor, directory, packageName)
+	}
+	writeVerifierFile(t, root, "internal/reports/other.go", `package reports
+func NewOtherSchedule() *Reconciler { return &Reconciler{} }
+`)
+	if _, _, _, err := scheduleBehaviorTarget(root); err == nil {
+		t.Fatal("ambiguous schedule constructors passed")
+	}
+}
+
+// TestScheduleContractAcceptsAppOwnedSchedule keeps the established app-level
+// generator output eligible without widening ownership to unrelated app files.
+func TestScheduleContractAcceptsAppOwnedSchedule(t *testing.T) {
+	root := t.TempDir()
+	contract := promotedContract(t, "add-schedule/v1")
+	writeVerifierFile(t, root, "app/invoices_reconcile_schedule.go", `package app
+
+import "context"
+
+const ReconcileScheduleTypeName = "invoices:reconcile"
+type Service struct{}
+type InvoiceReconcileSchedule struct{ service *Service }
+func NewInvoiceReconcileSchedule(service *Service) *InvoiceReconcileSchedule { return &InvoiceReconcileSchedule{service: service} }
+func (schedule *InvoiceReconcileSchedule) Interval() string { return "1h" }
+func (schedule *InvoiceReconcileSchedule) Handle(ctx context.Context) error { return schedule.service.Find(ctx) }
+func (*Service) Find(context.Context) error { return nil }
+`)
+	if result := verifySurfaceSource(root, contract.sources[0]); result.Status != EndpointPassed {
+		t.Fatalf("app-owned schedule shape = %#v", result)
+	}
+	constructor, directory, packageName, err := scheduleBehaviorTarget(root)
+	if err != nil || constructor != "NewInvoiceReconcileSchedule" || directory != "app" || packageName != "app" {
+		t.Fatalf("app-owned target = %q, %q, %q, %v", constructor, directory, packageName, err)
+	}
+	if result := verifySurfaceOwnership([]ProjectChange{{Path: "app/invoices_reconcile_schedule.go", After: ProjectPathState{Kind: "file"}}}, contract.allowedChanges); result.Status != EndpointPassed {
+		t.Fatalf("app-owned schedule ownership = %#v", result)
+	}
+	if result := verifySurfaceOwnership([]ProjectChange{{Path: "app/unrelated.go", After: ProjectPathState{Kind: "file"}}}, contract.allowedChanges); result.Status != EndpointFailed {
+		t.Fatalf("unrelated app ownership = %#v, want failure", result)
+	}
+}
+
+// TestPromotedScheduleAndEventContractsAcceptEquivalentPackageShapes prevents golden file and type spellings from becoming requirements.
+func TestPromotedScheduleAndEventContractsAcceptEquivalentPackageShapes(t *testing.T) {
+	contracts := make(map[string]surfaceContract)
+	for _, contract := range promotedSurfaceContracts() {
+		contracts[contract.id] = contract
+	}
+	root := t.TempDir()
+	write := func(path, body string) {
+		t.Helper()
+		path = filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("internal/reports/daily_runner.go", `package reports
+type DailyTargetRepository interface { ListDailyReportTargets(any) ([]string, error) }
+type DailyRunner struct{ targets DailyTargetRepository; queue interface{ Queue(any, string) error } }
+func (runner DailyRunner) Run(ctx any) error { targets, _ := runner.targets.ListDailyReportTargets(ctx); for _, userID := range targets { _ = runner.queue.Queue(ctx, userID) }; return nil }
+type DailySchedule struct{ runner DailyRunner }
+func (schedule DailySchedule) Interval() (string, error) { return "reports:daily", nil }
+func (schedule DailySchedule) Handle(ctx any) error { return schedule.runner.Run(ctx) }
+`)
+	if result := verifySurfaceSource(root, contracts["schedule-existing-job/v1"].sources[0]); result.Status != EndpointPassed {
+		t.Fatalf("daily_runner.go shape = %#v", result)
+	}
+	write("internal/events/user_created_event.go", `package events
+const topic = "users.created"
+type UserCreatedEvent struct { UserID string }
+func (UserCreatedEvent) Topic() string { return topic }
+`)
+	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[0]); result.Status != EndpointPassed {
+		t.Fatalf("UserCreatedEvent shape = %#v", result)
+	}
+	write("internal/events/user_created_event.go", `package events
+const topic = "users.created"
+type UserCreatedEvent struct { UserID string; Email string }
+func (UserCreatedEvent) Topic() string { return topic }
+`)
+	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[0]); result.Status != EndpointFailed {
+		t.Fatalf("event payload mutant = %#v, want failure", result)
+	}
+	write("internal/notifications/subscribers.go", `package notifications
+type UserCreatedHandler interface{}
+type Subscribers struct{}
+func (Subscribers) Register(ctx any, bus interface{ Subscribe() }) { var UserID string; bus.Subscribe(); _, _ = ctx, UserID }
+`)
+	write("app/lifecycle.go", `package app
+type LifecycleRegistry struct{ subscription interface{ Close() } }
+func (registry LifecycleRegistry) Startup(ctx any) { Subscribers{}.Register(ctx, bus{}) }
+func (registry LifecycleRegistry) Shutdown() { registry.subscription.Close() }
+type Subscribers struct{}
+func (Subscribers) Register(any, bus) {}
+type bus struct{}
+func (bus) Subscribe() {}
+`)
+	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[2]); result.Status != EndpointPassed {
+		t.Fatalf("lifecycle-owned subscription shape = %#v", result)
+	}
+	write("app/lifecycle.go", `package app
+type LifecycleRegistry struct{ subscription interface{ Close() } }
+func (registry LifecycleRegistry) Startup(ctx any) { Subscribers{}.Register(ctx, bus{}) }
+func (registry LifecycleRegistry) Shutdown() {}
+type Subscribers struct{}
+func (Subscribers) Register(any, bus) {}
+type bus struct{}
+func (bus) Subscribe() {}
+`)
+	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[2]); result.Status != EndpointFailed {
+		t.Fatalf("unclosed subscription mutant = %#v, want failure", result)
+	}
+}
+
 // TestCorrectedVerifierContractsPreserveBehaviorOverImplementationSpelling locks the reviewed verifier boundaries to their public contracts.
 func TestCorrectedVerifierContractsPreserveBehaviorOverImplementationSpelling(t *testing.T) {
 	contracts := make(map[string]surfaceContract)
@@ -118,6 +248,18 @@ func TestCorrectedVerifierContractsPreserveBehaviorOverImplementationSpelling(t 
 			t.Fatalf("%s does not accept structurally equivalent application services", id)
 		}
 	}
+	if subscriber := contracts["add-event-subscriber/v1"]; slices.Contains(subscriber.sources[2].selectorCalls, "Named") {
+		t.Fatalf("subscriber registration still rejects Default(): %#v", subscriber.sources[2])
+	}
+	if route := contracts["add-named-app-route/v1"]; !slices.Contains(route.allowedChanges, "internal/audit/*.go") || !slices.Contains(route.allowedChanges, "internal/audits/*.go") {
+		t.Fatalf("route ownership does not accept singular and plural feature packages: %#v", route.allowedChanges)
+	}
+	if transaction := contracts["add-database-transaction/v1"]; !slices.Contains(transaction.allowedChanges, "app/wire/app.go") || slices.Contains(transaction.sources[0].forbiddenCalls, "Background") {
+		t.Fatalf("transaction contract rejects supported app wiring or nil-context normalization: %#v", transaction)
+	}
+	if additional := contracts["create-additional-app/v1"]; slices.Contains(additional.sources[0].text, "./bin/statuspage") {
+		t.Fatalf("additional-app contract still requires the legacy binary watch: %#v", additional.sources[0])
+	}
 	for _, requirement := range []string{"disk.putContext != ctx", "nested/../../hello.txt", "context.WithCancel(ctx)", "reflect.ValueOf(NewService)"} {
 		if !strings.Contains(uploadWorkflowBehaviorProbe, requirement) {
 			t.Fatalf("upload probe omits resilient storage behavior %q:\n%s", requirement, uploadWorkflowBehaviorProbe)
@@ -193,6 +335,7 @@ func TestNamedResourceProbesFollowWireConnectedPackages(t *testing.T) {
 		{name: "queue reports", contractID: "add-named-resource/v1", directory: "internal/reports", packageName: "reports", provider: "NewReportDispatcher", accessor: "Reports", manager: "queues"},
 		{name: "cache profiles", contractID: "add-named-cache/v1", directory: "internal/profiles", packageName: "profiles", provider: "NewProfileCache", accessor: "Profiles", manager: "caches"},
 		{name: "storage avatars", contractID: "add-named-storage/v1", directory: "internal/avatars", packageName: "avatars", provider: "NewAvatarStorage", accessor: "Avatars", manager: "storages"},
+		{name: "cache app-owned", contractID: "add-named-cache/v1", directory: "app", packageName: "app", provider: "NewProfileCache", accessor: "Profiles", manager: "caches"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

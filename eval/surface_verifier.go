@@ -22,13 +22,14 @@ const maxWireOutputFiles = 64
 
 // surfaceContract describes one framework surface without turning evaluation manifests into executable policy.
 type surfaceContract struct {
-	id                  string
-	allowedChanges      []string
-	requiredChanges     []string
-	qualityTestPatterns []string
-	sources             []sourceContract
-	forbiddenText       []textExclusion
-	commands            []commandContract
+	id                     string
+	allowedChanges         []string
+	requiredChanges        []string
+	qualityTestPatterns    []string
+	baselineTestExclusions []string
+	sources                []sourceContract
+	forbiddenText          []textExclusion
+	commands               []commandContract
 }
 
 // textExclusion rejects one semantic leak into a protected Project surface.
@@ -251,11 +252,11 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 	}
 	for _, contract := range verifier.contract.commands {
 		if contract.standard {
-			checks = append(checks, runStandardProjectChecks(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}, contract.standardBuilds)...)
+			checks = append(checks, runStandardProjectChecks(ctx, verifier.runner, verifier.project(input), contract.standardBuilds)...)
 			continue
 		}
 		if contract.probe != nil {
-			checks = append(checks, contract.probe(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}))
+			checks = append(checks, contract.probe(ctx, verifier.runner, verifier.project(input)))
 			continue
 		}
 		resolved, details := resolveNamedResourceProbe(input.ProjectRoot, contract)
@@ -263,7 +264,7 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 			checks = append(checks, EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details})
 			continue
 		}
-		checks = append(checks, runIsolatedCommand(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}, resolved))
+		checks = append(checks, runIsolatedCommand(ctx, verifier.runner, verifier.project(input), resolved))
 	}
 	framework := summarizeSurfaceChecks(verifier.ID(), checks)
 	return VerificationResult{
@@ -271,6 +272,12 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		WorkflowConformance: EndpointResult{ID: "workflow-owned-by-runner", Status: EndpointIneligible},
 		Checks:              checks,
 	}, nil
+}
+
+// project keeps candidate tests out of verifier execution while allowing a reviewed
+// contract to omit only baseline tests whose pre-task API is intentionally replaced.
+func (verifier *surfaceVerifier) project(input VerificationInput) VerifierProject {
+	return VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests, BaselineTestExclusions: verifier.contract.baselineTestExclusions}
 }
 
 // namedResourceOwnershipPatterns admits only the Wire-connected application's package and its newly created directory.
@@ -332,6 +339,56 @@ func runStandardProjectChecks(ctx context.Context, runner CommandRunner, project
 		return checks
 	}
 	return append(checks, runCheck(ctx, session, "project-compile", []string{"go", "test", "./..."}, ""))
+}
+
+// runReconcileScheduleBehaviorProbe derives the selected schedule constructor so
+// the behavior oracle follows a coherent application-owned name and package.
+func runReconcileScheduleBehaviorProbe(ctx context.Context, runner CommandRunner, project VerifierProject) EndpointResult {
+	constructor, directory, packageName, err := scheduleBehaviorTarget(project.Root)
+	if err != nil {
+		return EndpointResult{ID: "reconcile-schedule-behavior", Status: EndpointFailed, Details: err.Error()}
+	}
+	body := strings.Replace(reconcileScheduleBehaviorProbe, "package invoices\n", "package "+packageName+"\n", 1)
+	body = strings.ReplaceAll(body, "NewReconcileSchedule", constructor)
+	return runIsolatedCommand(ctx, runner, project, commandContract{
+		id:              "reconcile-schedule-behavior",
+		arguments:       []string{"go", "test", "./" + directory, "-run", "^TestAtlasReconcileScheduleBehavior$", "-count=1"},
+		supervisorFiles: []supervisorFile{{path: filepath.ToSlash(filepath.Join(directory, "atlas_eval_reconcile_schedule_test.go")), body: body}},
+	})
+}
+
+// scheduleBehaviorTarget finds the single constructor for a type that exposes the
+// schedule protocol, avoiding a generator-specific file or constructor spelling.
+func scheduleBehaviorTarget(root string) (string, string, string, error) {
+	paths, err := matchingSurfacePaths(root, []string{"internal/*/*.go", "app/*_schedule.go"})
+	if err != nil {
+		return "", "", "", err
+	}
+	type target struct{ constructor, directory, packageName string }
+	var targets []target
+	for _, path := range paths {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			continue
+		}
+		for _, declaration := range file.Decls {
+			function, ok := declaration.(*ast.FuncDecl)
+			if !ok || function.Recv != nil || !strings.HasPrefix(function.Name.Name, "New") || !strings.Contains(function.Name.Name, "Schedule") {
+				continue
+			}
+			directory, relativeErr := filepath.Rel(root, filepath.Dir(path))
+			if relativeErr == nil {
+				targets = append(targets, target{function.Name.Name, filepath.ToSlash(directory), file.Name.Name})
+			}
+		}
+	}
+	if len(targets) != 1 {
+		return "", "", "", fmt.Errorf("expected one application schedule constructor, found %d", len(targets))
+	}
+	return targets[0].constructor, targets[0].directory, targets[0].packageName, nil
 }
 
 // surfaceChecksFailed avoids executing candidate code after sealed static evidence already proves failure.
@@ -785,7 +842,7 @@ func resolveNamedResourceProbe(root string, contract commandContract) (commandCo
 	if contract.namedResourceProbe == nil {
 		return contract, ""
 	}
-	paths, err := matchingSurfacePaths(root, []string{"internal/*/*.go"})
+	paths, err := matchingSurfacePaths(root, []string{"internal/*/*.go", "app/*.go"})
 	if err != nil {
 		return commandContract{}, err.Error()
 	}
