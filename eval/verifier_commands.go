@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,6 +32,8 @@ type VerifierCommands struct {
 	GoExecutable   string
 	ForjExecutable string
 	Environment    []string
+	// ModuleProxy is the host-owned read-only Go module proxy exposed to verifier commands.
+	ModuleProxy string
 }
 
 // verifierCommandSession owns one private candidate clone and its allowlisted command identities.
@@ -203,7 +204,7 @@ func (runner VerifierCommands) Open(ctx context.Context, project VerifierProject
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("create verifier state: %w", err), removeVerifierOwnedTree(root))
 	}
-	environment, err := privateVerifierEnvironment(runner.Environment, stateRoot)
+	environment, err := privateVerifierEnvironment(runner.Environment, stateRoot, runner.ModuleProxy)
 	if err != nil {
 		return nil, errors.Join(err, removeVerifierOwnedTree(root), removeVerifierOwnedTree(stateRoot))
 	}
@@ -217,7 +218,7 @@ func (runner VerifierCommands) Open(ctx context.Context, project VerifierProject
 }
 
 // privateVerifierEnvironment gives one verifier phase no reusable writable state from another phase or the supervisor.
-func privateVerifierEnvironment(base []string, stateRoot string) ([]string, error) {
+func privateVerifierEnvironment(base []string, stateRoot, moduleProxy string) ([]string, error) {
 	paths := map[string]string{
 		"HOME":            filepath.Join(stateRoot, "home"),
 		"GOCACHE":         filepath.Join(stateRoot, "go-cache"),
@@ -235,7 +236,7 @@ func privateVerifierEnvironment(base []string, stateRoot string) ([]string, erro
 			return nil, fmt.Errorf("create private verifier state: %w", err)
 		}
 	}
-	moduleProxy := verifierModuleProxy(base)
+	moduleProxy = strings.TrimSpace(moduleProxy)
 	environment := make([]string, 0, len(base)+len(paths)+1)
 	for _, entry := range base {
 		name, _, found := strings.Cut(entry, "=")
@@ -257,28 +258,15 @@ func privateVerifierEnvironment(base []string, stateRoot string) ([]string, erro
 	return environment, nil
 }
 
-// verifierModuleProxy reuses only immutable module archives from trusted preparation while keeping every verifier's writable module state private.
-func verifierModuleProxy(environment []string) string {
-	values := verifierEnvironmentMap(environment)
-	moduleCache := strings.TrimSpace(values["GOMODCACHE"])
-	if moduleCache == "" {
-		return ""
+// verifierEnvironmentValue returns the final value for a named entry in an explicit process environment.
+func verifierEnvironmentValue(environment []string, name string) string {
+	for index := len(environment) - 1; index >= 0; index-- {
+		key, value, found := strings.Cut(environment[index], "=")
+		if found && key == name {
+			return value
+		}
 	}
-	downloadRoot := filepath.Join(moduleCache, "cache", "download")
-	info, err := os.Stat(downloadRoot)
-	if err != nil || !info.IsDir() {
-		return ""
-	}
-	proxyPath := filepath.ToSlash(downloadRoot)
-	if filepath.VolumeName(downloadRoot) != "" && !strings.HasPrefix(proxyPath, "/") {
-		proxyPath = "/" + proxyPath
-	}
-	local := (&url.URL{Scheme: "file", Path: proxyPath}).String()
-	upstream := strings.TrimSpace(values["GOPROXY"])
-	if upstream == "" || upstream == "off" {
-		return local
-	}
-	return local + "," + upstream
+	return ""
 }
 
 // verifierEnvironmentMap resolves the final value of each process environment entry.

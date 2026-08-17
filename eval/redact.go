@@ -45,6 +45,11 @@ func (redactor Redactor) withSecrets(secrets []string) Redactor {
 // Text redacts secrets and removes terminal or directional controls so human renderers receive inert content.
 func (redactor Redactor) Text(value string) string {
 	value = ansiControlPattern.ReplaceAllString(value, "")
+	// Exact authority values must be removed before heuristic substitutions can
+	// split a credential at punctuation and leave an unregistered suffix behind.
+	for _, secret := range redactor.secrets {
+		value = strings.ReplaceAll(value, secret, redactedValue)
+	}
 	value = bearerSecretPattern.ReplaceAllString(value, "Bearer "+redactedValue)
 	value = assignmentSecretPattern.ReplaceAllStringFunc(value, func(match string) string {
 		separator := strings.IndexAny(match, ":=")
@@ -53,9 +58,6 @@ func (redactor Redactor) Text(value string) string {
 		}
 		return match[:separator+1] + redactedValue
 	})
-	for _, secret := range redactor.secrets {
-		value = strings.ReplaceAll(value, secret, redactedValue)
-	}
 	return strings.Map(func(character rune) rune {
 		if character == '\n' || character == '\t' || !unicode.IsControl(character) && !isDirectionalControl(character) {
 			return character

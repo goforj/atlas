@@ -2,6 +2,7 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -65,6 +66,52 @@ func TestLocalGuidanceDiagnosticRunsOneTreatment(t *testing.T) {
 	}
 	if attempt.Profile != GuidanceProfileAgents || attempt.Result.LogicalTrialID != "single-treatment" || attempt.Result.AttemptID != "single-treatment-agents" {
 		t.Fatalf("attempt = %#v", attempt)
+	}
+}
+
+// TestLocalGuidanceDiagnosticRunsTreatmentBoundaryBetweenPairs lets hosts inspect their shared tools without rebuilding Atlas treatments.
+func TestLocalGuidanceDiagnosticRunsTreatmentBoundaryBetweenPairs(t *testing.T) {
+	runner, _, preparer, _, agent := newFakeRunner(t)
+	diagnostic := LocalGuidanceDiagnostic{runner: runner, forjExecutable: "/tools/forj", runtime: fakeAttemptRequest().Runtime}
+	boundaries := 0
+	result, err := diagnostic.Run(context.Background(), LocalGuidanceDiagnosticRequest{
+		EvaluationID:    "add-http-controller",
+		DestinationRoot: t.TempDir(),
+		Environments: map[string][]string{
+			GuidanceProfileNone:   {},
+			GuidanceProfileAgents: {},
+		},
+		LogicalTrialID: "paired-boundary",
+		TreatmentBoundary: func(context.Context) error {
+			boundaries++
+			if preparer.prepareCalls != 1 || agent.startCalls != 1 {
+				t.Fatalf("boundary ran at the wrong lifecycle point: prepare=%d start=%d", preparer.prepareCalls, agent.startCalls)
+			}
+			return nil
+		},
+	})
+	if err != nil || boundaries != 1 || len(result.Attempts) != 2 {
+		t.Fatalf("Run() = (%#v, %v), boundaries=%d", result, err, boundaries)
+	}
+}
+
+// TestLocalGuidanceDiagnosticPreservesTreatmentBoundaryFailure stops before the second treatment while retaining the host's cause.
+func TestLocalGuidanceDiagnosticPreservesTreatmentBoundaryFailure(t *testing.T) {
+	runner, _, preparer, _, _ := newFakeRunner(t)
+	diagnostic := LocalGuidanceDiagnostic{runner: runner, forjExecutable: "/tools/forj", runtime: fakeAttemptRequest().Runtime}
+	cause := errors.New("shared tool verification failed")
+	result, err := diagnostic.Run(context.Background(), LocalGuidanceDiagnosticRequest{
+		EvaluationID:    "add-http-controller",
+		DestinationRoot: t.TempDir(),
+		Environments: map[string][]string{
+			GuidanceProfileNone:   {},
+			GuidanceProfileAgents: {},
+		},
+		LogicalTrialID:    "paired-boundary-failure",
+		TreatmentBoundary: func(context.Context) error { return cause },
+	})
+	if !errors.Is(err, cause) || len(result.Attempts) != 1 || preparer.prepareCalls != 1 {
+		t.Fatalf("Run() = (%#v, %v), prepare=%d", result, err, preparer.prepareCalls)
 	}
 }
 

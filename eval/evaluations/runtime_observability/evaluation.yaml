@@ -1,0 +1,12 @@
+schema_version: 1
+id: runtime-observability
+summary: Repair disabled local Lighthouse inspect capture while verifying generated observability surfaces.
+suite: core
+task_kind: repair
+project_scenario: runtime-observability
+workflow: goforj-runtime-observability/v1
+verifier: runtime-observability/v1
+limits:
+  wall_time: 5m
+  commands: 24
+  shell_network: off

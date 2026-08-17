@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -50,6 +51,26 @@ func assertPostPromptFailureArtifacts(t *testing.T, runner Runner, result Attemp
 	}
 	if !hasSecondaryFailurePhase(retained.SecondaryFailures, "agent_terminal") || !bytes.Contains(body, []byte(failureContext)) {
 		t.Fatalf("retained terminal failure = %q", body)
+	}
+}
+
+// TestPathsOverlapResolvesExistingAncestorAliases prevents a missing Project leaf beneath a symlink from reaching artifacts.
+func TestPathsOverlapResolvesExistingAncestorAliases(t *testing.T) {
+	root := t.TempDir()
+	projectRoot := filepath.Join(root, "project")
+	if err := os.Mkdir(projectRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(root, "project-alias")
+	if err := os.Symlink(projectRoot, alias); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	overlap, err := pathsOverlap(filepath.Join(projectRoot, "artifacts", "pending"), filepath.Join(alias, "artifacts", "pending", "next-project"))
+	if err != nil {
+		t.Fatalf("pathsOverlap(): %v", err)
+	}
+	if !overlap {
+		t.Fatal("pathsOverlap() missed artifact and Project overlap through ancestor symlink")
 	}
 }
 
@@ -442,6 +463,26 @@ func TestRunnerPromotesAcceptedClarificationToAbstention(t *testing.T) {
 	}
 }
 
+// TestRunnerRecordsTerminalResponseAsFirstActionOnUnconfinedBackend retains exact terminal evidence when no supervisor monitor exists.
+func TestRunnerRecordsTerminalResponseAsFirstActionOnUnconfinedBackend(t *testing.T) {
+	runner, _, _, backend, agent := newFakeRunner(t)
+	backend.capabilities = nil
+	backend.environment.events = nil
+	agent.session.turn.Events = nil
+	agent.session.result.Events = nil
+	agent.session.result.Message = "I need a decision before changing the Project."
+	agent.capabilities = []Capability{CapabilityFinalResponseCapture}
+	request := fakeAttemptRequest()
+	request.Intent = IntentDiagnostic
+	result, err := runner.Run(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Run(): %v", err)
+	}
+	if !containsMilestone(result.Milestones, MilestoneFirstAgentAction) {
+		t.Fatalf("milestones = %v", result.Milestones)
+	}
+}
+
 // TestEffectiveBackendCapabilitiesIncludesExactFinalResponseCapture keeps adapter claims from promoting action telemetry.
 func TestEffectiveBackendCapabilitiesIncludesExactFinalResponseCapture(t *testing.T) {
 	capabilities := effectiveBackendCapabilities(
@@ -500,6 +541,40 @@ func TestRunnerRepairsTerminalReportsAfterFinalizationFailure(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(directory, "manifest.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("manifest after failed finalization = %v, want absent", statErr)
+	}
+}
+
+// TestRunnerJoinsTerminalAndArtifactFinalizationFailures preserves both actionable error identities across deferred finalization.
+func TestRunnerJoinsTerminalAndArtifactFinalizationFailures(t *testing.T) {
+	runner, _, _, _, agent := newFakeRunner(t)
+	commandFatal := errors.New("command fatal")
+	agent.session.waitErr = commandFatal
+	request := fakeAttemptRequest()
+	agent.prepareHook = func(RunEnvironment, Guidance) error {
+		return os.Mkdir(filepath.Join(runner.Artifacts.root, request.AttemptID, "unexpected"), 0o700)
+	}
+	result, err := runner.Run(context.Background(), request)
+	if !errors.Is(err, commandFatal) {
+		t.Fatalf("Run() error = %v, want command fatal identity", err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "finalize attempt artifacts") || !hasSecondaryFailurePhase(result.SecondaryFailures, "artifact_manifest") {
+		t.Fatalf("Run() = (%#v, %v), want joined artifact finalization failure", result, err)
+	}
+}
+
+// TestRunnerPreservesPreManifestArtifactErrorIdentity keeps operational failures actionable even when manifest finalization also fails.
+func TestRunnerPreservesPreManifestArtifactErrorIdentity(t *testing.T) {
+	runner, _, _, _, agent := newFakeRunner(t)
+	request := fakeAttemptRequest()
+	agent.prepareHook = func(RunEnvironment, Guidance) error {
+		return os.Mkdir(filepath.Join(runner.Artifacts.root, request.AttemptID, "summary.txt"), 0o700)
+	}
+	result, err := runner.Run(context.Background(), request)
+	if !errors.Is(err, os.ErrExist) {
+		t.Fatalf("Run() error = %v, want artifact write identity", err)
+	}
+	if !hasSecondaryFailurePhase(result.SecondaryFailures, "artifact_summary") {
+		t.Fatalf("secondary failures = %#v, want artifact_summary", result.SecondaryFailures)
 	}
 }
 
@@ -953,7 +1028,7 @@ func TestRunnerPreservesCleanupFailureBesideAgentOutcome(t *testing.T) {
 	runner, _, preparer, _, _ := newFakeRunner(t)
 	preparer.project.closeErr = errors.New("cleanup failed")
 	result, err := runner.Run(context.Background(), fakeAttemptRequest())
-	if err == nil || !strings.Contains(err.Error(), "deferred cleanup") {
+	if err == nil || !strings.Contains(err.Error(), "finalize attempt artifacts") || !errors.Is(err, preparer.project.closeErr) {
 		t.Fatalf("Run() = %#v, %v, want deferred cleanup failure", result, err)
 	}
 	if result.AgentOutcome != AgentCompleted || result.EvaluationStatus != EvaluationEvaluatorError {
@@ -1030,6 +1105,22 @@ func TestRunnerRetriesCancelledSealWithFreshCleanupContext(t *testing.T) {
 	manifest, verifyErr := VerifyArtifactManifest(filepath.Join(runner.Artifacts.root, result.AttemptID), runner.Artifacts.key)
 	if verifyErr != nil || manifest.FinalTree != result.FinalTree {
 		t.Fatalf("fallback manifest final tree = %q, %v", manifest.FinalTree, verifyErr)
+	}
+}
+
+// TestRunnerPreservesDeferredFinalStateResourceExhaustion keeps cleanup-path disk failures classifiable by the orchestrator.
+func TestRunnerPreservesDeferredFinalStateResourceExhaustion(t *testing.T) {
+	runner, _, _, backend, agent := newFakeRunner(t)
+	agent.session.waitErr = errors.New("provider disconnected")
+	backend.environment.seal = func(context.Context) (SealedProject, error) {
+		return SealedProject{}, &os.PathError{Op: "seal", Path: "candidate", Err: syscall.ENOSPC}
+	}
+	result, err := runner.Run(context.Background(), fakeAttemptRequest())
+	if !errors.Is(err, syscall.ENOSPC) {
+		t.Fatalf("Run() error = %v, want ENOSPC identity", err)
+	}
+	if len(result.SecondaryFailures) == 0 || !errors.Is(result.SecondaryFailures[len(result.SecondaryFailures)-1].Cause, syscall.ENOSPC) {
+		t.Fatalf("secondary failures = %#v, want retained ENOSPC cause", result.SecondaryFailures)
 	}
 }
 

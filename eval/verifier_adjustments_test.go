@@ -13,10 +13,11 @@ import (
 // TestCorrectedBehaviorProbesParse catches malformed supervisor code before a rendered calibration spends setup time.
 func TestCorrectedBehaviorProbesParse(t *testing.T) {
 	for name, source := range map[string]string{
-		"JSON API":         jsonAPIFeatureBehaviorProbe,
-		"route middleware": tokenPolicyBehaviorProbe,
-		"upload":           uploadWorkflowBehaviorProbe,
-		"validated write":  invoiceValidationBehaviorProbe,
+		"JSON API":              jsonAPIFeatureBehaviorProbe,
+		"local inspect capture": runtimeObservabilityBehaviorProbe,
+		"route middleware":      tokenPolicyBehaviorProbe,
+		"upload":                uploadWorkflowBehaviorProbe,
+		"validated write":       invoiceValidationBehaviorProbe,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := parser.ParseFile(token.NewFileSet(), "probe_test.go", source, parser.AllErrors); err != nil {
@@ -96,13 +97,106 @@ func TestCorrectedVerifierContractsPreserveBehaviorOverImplementationSpelling(t 
 	if strings.Contains(jsonAPIFeatureBehaviorProbe, ".Show(") || strings.Contains(jsonAPIFeatureBehaviorProbe, ".Get(") {
 		t.Fatalf("JSON API probe still depends on a handler method name:\n%s", jsonAPIFeatureBehaviorProbe)
 	}
+	for _, id := range []string{"add-named-cache/v1", "add-named-resource/v1", "add-named-storage/v1"} {
+		contract := contracts[id]
+		if !slices.Contains(contract.requiredChanges, "app/wire/inject_services_app.go") {
+			t.Fatalf("%s does not require service registration: %#v", id, contract)
+		}
+		structural := false
+		for _, source := range contract.sources {
+			if source.providerConnection != nil {
+				structural = true
+				if source.providerConnection.accessor == "" || len(source.providerConnection.wirePaths) == 0 {
+					t.Fatalf("%s provider connection is incomplete: %#v", id, source)
+				}
+			}
+		}
+		if !structural {
+			t.Fatalf("%s does not accept structurally equivalent application services", id)
+		}
+	}
 	for _, requirement := range []string{"disk.putContext != ctx", "nested/../../hello.txt", "context.WithCancel(ctx)", "reflect.ValueOf(NewService)"} {
 		if !strings.Contains(uploadWorkflowBehaviorProbe, requirement) {
 			t.Fatalf("upload probe omits resilient storage behavior %q:\n%s", requirement, uploadWorkflowBehaviorProbe)
 		}
 	}
-	if !strings.Contains(receiptJobBehaviorProbe, `ReceiptJobPayload{InvoiceID: "missing"}`) {
-		t.Fatalf("receipt job probe does not observe payload identity:\n%s", receiptJobBehaviorProbe)
+}
+
+// TestNamedResourceProviderConnectionRejectsDisconnectedAccessorHelpers keeps the selected accessor attached to the provider App Wire constructs.
+func TestNamedResourceProviderConnectionRejectsDisconnectedAccessorHelpers(t *testing.T) {
+	for _, resource := range []struct {
+		name          string
+		accessor      string
+		managerImport string
+	}{
+		{name: "queue", accessor: "Reports", managerImport: "queues"},
+		{name: "cache", accessor: "Profiles", managerImport: "caches"},
+		{name: "storage", accessor: "Avatars", managerImport: "storages"},
+	} {
+		t.Run(resource.name, func(t *testing.T) {
+			root := t.TempDir()
+			servicePath := filepath.Join(root, "internal", "invoices", "service.go")
+			wirePath := filepath.Join(root, "app", "wire", "inject_services_app.go")
+			if err := os.MkdirAll(filepath.Dir(servicePath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Dir(wirePath), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			service := "package invoices\n\nimport \"project/internal/" + resource.managerImport + "\"\n\nfunc NewConnected(manager *" + resource.managerImport + ".Manager) any { return manager." + resource.accessor + "() }\nfunc disconnected(manager *" + resource.managerImport + ".Manager) any { return manager." + resource.accessor + "() }\nfunc NewOther() any { return nil }\n"
+			if err := os.WriteFile(servicePath, []byte(service), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			contract := sourceContract{id: "named-resource", paths: []string{"internal/*/*.go"}, providerConnection: &providerConnectionContract{accessor: resource.accessor, managerImportSuffix: "/internal/" + resource.managerImport, wirePaths: []string{"app/wire/inject_services_app.go"}}}
+			if err := os.WriteFile(wirePath, []byte("package wire\n\nimport (\n\t\"github.com/google/wire\"\n\t\"project/internal/invoices\"\n)\n\nvar appSet = wire.NewSet(invoices.NewConnected)\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+				t.Fatalf("connected provider = %#v", result)
+			}
+			unrelated := strings.ReplaceAll(service, "project/internal/"+resource.managerImport, "project/internal/unrelated")
+			unrelated = strings.ReplaceAll(unrelated, resource.managerImport+".Manager", "unrelated.Manager")
+			if err := os.WriteFile(servicePath, []byte(unrelated), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+				t.Fatalf("unrelated manager = %#v, want failure", result)
+			}
+			if err := os.WriteFile(servicePath, []byte(service), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(wirePath, []byte("package wire\n\nimport (\n\t\"github.com/google/wire\"\n\t\"project/internal/invoices\"\n)\n\nvar appSet = wire.NewSet(invoices.NewOther)\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+				t.Fatalf("disconnected helper = %#v, want failure", result)
+			}
+		})
+	}
+}
+
+// TestStructuralDeclarationContractAcceptsApplicationOwnedNaming keeps semantic evidence independent from a preferred service name.
+func TestStructuralDeclarationContractAcceptsApplicationOwnedNaming(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "delivery.go")
+	if err := os.WriteFile(path, []byte(`package delivery
+type Manager struct{}
+func (Manager) Reports() any { return nil }
+func assembleDelivery(manager *Manager) any { return manager.Reports() }
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contract := sourceContract{
+		id:    "named-resource",
+		paths: []string{"delivery.go"},
+		declarations: []declarationContract{{
+			anyName:       true,
+			identifiers:   []string{"Manager"},
+			selectorCalls: []string{"Reports"},
+		}},
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("result = %#v, want structurally equivalent constructor accepted", result)
 	}
 }
 
@@ -182,13 +276,29 @@ func TestCorrectedOwnershipContractsAcceptRelatedFrameworkFiles(t *testing.T) {
 			}
 		})
 	}
+	for _, id := range []string{"add-job/v1", "add-schedule/v1", "add-event-subscriber/v1"} {
+		contract := promotedContract(t, id)
+		if len(contract.commands) != 2 || !contract.commands[0].standard || contract.commands[1].id == "" {
+			t.Fatalf("scaffold contract %q must retain a gating generated-shape behavior probe: %#v", id, contract.commands)
+		}
+	}
 }
 
-// TestJobContractAllowsServiceDelegation keeps the static contract compatible with a small handler while the supervisor probe owns behavior.
-func TestJobContractAllowsServiceDelegation(t *testing.T) {
-	contract := promotedSourceContract(t, "add-job/v1", "typed-job")
-	root := t.TempDir()
-	writeVerifierFile(t, root, "internal/invoices/receipt_job.go", `package invoices
+// TestScaffoldContractsAllowInternalVariations keeps static calibration bounded to generated scaffold shapes.
+func TestScaffoldContractsAllowInternalVariations(t *testing.T) {
+	tests := []struct {
+		name       string
+		contractID string
+		sourceID   string
+		path       string
+		body       string
+	}{
+		{
+			name:       "job service delegation",
+			contractID: "add-job/v1",
+			sourceID:   "typed-job",
+			path:       "internal/invoices/receipt_job.go",
+			body: `package invoices
 
 import "context"
 
@@ -210,9 +320,56 @@ func (job *ReceiptJob) HandleTask(ctx context.Context, task *Task) error {
 	return job.reloadInvoice(ctx, payload)
 }
 func (job *ReceiptJob) reloadInvoice(context.Context, ReceiptJobPayload) error { return nil }
-`)
-	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
-		t.Fatalf("delegating handler result = %#v", result)
+`,
+		},
+		{
+			name:       "schedule direct service delegation",
+			contractID: "add-schedule/v1",
+			sourceID:   "schedule-shape",
+			path:       "internal/invoices/reconcile_schedule.go",
+			body: `package invoices
+
+import "context"
+
+const ReconcileScheduleTypeName = "invoices:reconcile"
+type Service struct{}
+type ReconcileSchedule struct{ service *Service }
+
+func (schedule *ReconcileSchedule) Interval() string { return "1h" }
+func (schedule *ReconcileSchedule) Handle(ctx context.Context) error {
+	return schedule.service.Find(ctx)
+}
+func (*Service) Find(context.Context) error { return nil }
+`,
+		},
+		{
+			name:       "subscriber direct service delegation",
+			contractID: "add-event-subscriber/v1",
+			sourceID:   "subscriber-boundary",
+			path:       "internal/invoices/paid_subscriber.go",
+			body: `package invoices
+
+import "context"
+
+type Service struct{}
+type PaidEvent struct{ InvoiceID string }
+type PaidSubscriber struct{ service *Service }
+
+func (subscriber *PaidSubscriber) Handle(ctx context.Context, event PaidEvent) error {
+	return subscriber.service.Find(ctx, event.InvoiceID)
+}
+func (*Service) Find(context.Context, string) error { return nil }
+`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeVerifierFile(t, root, test.path, test.body)
+			if result := verifySurfaceSource(root, promotedSourceContract(t, test.contractID, test.sourceID)); result.Status != EndpointPassed {
+				t.Fatalf("internal variation result = %#v", result)
+			}
+		})
 	}
 }
 

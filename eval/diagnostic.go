@@ -8,12 +8,13 @@ import (
 
 // GuidanceDiagnosticRequest identifies one paired control-versus-AGENTS diagnostic trial.
 type GuidanceDiagnosticRequest struct {
-	LogicalTrialID  string
-	Definition      EvaluationDefinition
-	DestinationRoot string
-	ForjExecutable  string
-	Environments    map[string][]string
-	Runtime         RuntimeIdentity
+	LogicalTrialID    string
+	Definition        EvaluationDefinition
+	DestinationRoot   string
+	ForjExecutable    string
+	Environments      map[string][]string
+	Runtime           RuntimeIdentity
+	TreatmentBoundary func(context.Context) error
 }
 
 // GuidanceDiagnosticAttempt retains one treatment's result and any operational error independently.
@@ -21,6 +22,7 @@ type GuidanceDiagnosticAttempt struct {
 	Profile string        `json:"profile"`
 	Result  AttemptResult `json:"result"`
 	Error   string        `json:"error,omitempty"`
+	Cause   error         `json:"-"`
 }
 
 // GuidanceDiagnosticResult contains both treatments even when one attempt fails operationally.
@@ -48,9 +50,17 @@ func (runner Runner) RunGuidanceDiagnostic(ctx context.Context, request Guidance
 		}
 	}
 	result := GuidanceDiagnosticResult{LogicalTrialID: request.LogicalTrialID}
-	for _, profile := range profiles {
+	for index, profile := range profiles {
 		record, _ := runner.runGuidanceDiagnosticAttempt(ctx, request, profile)
 		result.Attempts = append(result.Attempts, record)
+		if IsResourceExhaustion(record.Cause) {
+			return result, record.Cause
+		}
+		if index == 0 && request.TreatmentBoundary != nil {
+			if err := request.TreatmentBoundary(ctx); err != nil {
+				return result, fmt.Errorf("diagnostic treatment boundary: %w", err)
+			}
+		}
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
@@ -95,6 +105,7 @@ func (runner Runner) runGuidanceDiagnosticAttempt(ctx context.Context, request G
 	record := GuidanceDiagnosticAttempt{Profile: profile, Result: attempt}
 	if err != nil {
 		record.Error = err.Error()
+		record.Cause = err
 	}
 	return record, err
 }

@@ -18,7 +18,7 @@ import (
 	git "github.com/go-git/go-git/v5"
 )
 
-// TestLiveCodexAppServerFeasibility proves freshness, attribution, interruption, and descendant cleanup against an installed Codex CLI.
+// TestLiveCodexAppServerFeasibility proves freshness, attribution, interruption, and cleanup of one observed descendant against an installed Codex CLI.
 func TestLiveCodexAppServerFeasibility(t *testing.T) {
 	if os.Getenv("ATLAS_LIVE_CODEX") != "1" {
 		t.Skip("set ATLAS_LIVE_CODEX=1 to run the live Codex feasibility test")

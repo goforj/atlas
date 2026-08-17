@@ -11,7 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
+	"strings"
 )
 
 const artifactManifestSchemaVersion = 1
@@ -84,6 +86,7 @@ type ArtifactManifest struct {
 type AttemptArtifacts struct {
 	directory         string
 	directoryIdentity os.FileInfo
+	root              *os.Root
 	attemptID         string
 	key               []byte
 	redactor          Redactor
@@ -100,7 +103,14 @@ func NewArtifactStore(root string, key []byte, redactor Redactor) (*ArtifactStor
 	if err := validateArtifactAuthenticationKey(key); err != nil {
 		return nil, err
 	}
-	return &ArtifactStore{root: root, key: append([]byte(nil), key...), redactor: redactor}, nil
+	// The authentication key is trusted authority, but it can still appear in
+	// diagnostics (for example through an accidentally logged environment). Keep
+	// it on the same durable-output denylist as provider credentials.
+	keySecrets := []string{string(key)}
+	if trimmed := strings.TrimSpace(string(key)); trimmed != "" && trimmed != string(key) {
+		keySecrets = append(keySecrets, trimmed)
+	}
+	return &ArtifactStore{root: root, key: append([]byte(nil), key...), redactor: redactor.withSecrets(keySecrets)}, nil
 }
 
 // Begin creates one private attempt directory outside any agent-provided path.
@@ -118,19 +128,33 @@ func (store *ArtifactStore) Begin(attemptID string) (*AttemptArtifacts, error) {
 	if err := os.Mkdir(directory, 0o700); err != nil {
 		return nil, fmt.Errorf("create attempt artifacts: %w", err)
 	}
-	events, err := os.OpenFile(filepath.Join(directory, "events.jsonl"), os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_APPEND, 0o600)
+	directoryRoot, err := os.OpenRoot(directory)
 	if err != nil {
-		return nil, fmt.Errorf("create event artifact: %w", err)
+		_ = os.RemoveAll(directory)
+		return nil, fmt.Errorf("open attempt artifacts: %w", err)
 	}
-	directoryIdentity, err := os.Stat(directory)
+	directoryIdentity, err := directoryRoot.Stat(".")
 	if err != nil {
-		_ = events.Close()
+		_ = directoryRoot.Close()
 		_ = os.RemoveAll(directory)
 		return nil, fmt.Errorf("inspect attempt artifacts: %w", err)
+	}
+	pathIdentity, err := os.Lstat(directory)
+	if err != nil || pathIdentity.Mode()&os.ModeSymlink != 0 || !os.SameFile(directoryIdentity, pathIdentity) {
+		_ = directoryRoot.Close()
+		_ = os.RemoveAll(directory)
+		return nil, fmt.Errorf("attempt artifact directory changed while opening")
+	}
+	events, err := directoryRoot.OpenFile("events.jsonl", os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		_ = directoryRoot.Close()
+		_ = os.RemoveAll(directory)
+		return nil, fmt.Errorf("create event artifact: %w", err)
 	}
 	return &AttemptArtifacts{
 		directory:         directory,
 		directoryIdentity: directoryIdentity,
+		root:              directoryRoot,
 		attemptID:         attemptID,
 		key:               append([]byte(nil), store.key...),
 		redactor:          store.redactor,
@@ -150,7 +174,7 @@ func prepareArtifactRoot(root string) error {
 	if rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
 		return fmt.Errorf("artifact root must be a real directory")
 	}
-	if rootInfo.Mode().Perm() != 0o700 {
+	if runtime.GOOS != "windows" && rootInfo.Mode().Perm() != 0o700 {
 		return fmt.Errorf("artifact root permissions must be 0700")
 	}
 	return nil
@@ -201,7 +225,7 @@ func (artifacts *AttemptArtifacts) WriteText(name, content string) error {
 	if len(body) > maxArtifactFileSize {
 		return fmt.Errorf("artifact %s exceeds %d bytes", name, maxArtifactFileSize)
 	}
-	return os.WriteFile(filepath.Join(artifacts.directory, name), body, 0o600)
+	return writeArtifactFile(artifacts.root, name, body)
 }
 
 // WriteJSON writes one typed artifact after recursively redacting its serialized representation.
@@ -228,7 +252,7 @@ func (artifacts *AttemptArtifacts) WriteJSON(name string, value any) error {
 	if len(body) > maxArtifactFileSize {
 		return fmt.Errorf("artifact %s exceeds %d bytes", name, maxArtifactFileSize)
 	}
-	return os.WriteFile(filepath.Join(artifacts.directory, name), body, 0o600)
+	return writeArtifactFile(artifacts.root, name, body)
 }
 
 // Finalize closes streaming evidence and writes the authenticated manifest last.
@@ -236,15 +260,29 @@ func (artifacts *AttemptArtifacts) Finalize(planDigest, baselineTree, finalTree 
 	if artifacts == nil || artifacts.closed {
 		return ArtifactManifest{}, fmt.Errorf("attempt artifacts are closed")
 	}
+	directoryRoot := artifacts.root
+	artifacts.root = nil
+	defer directoryRoot.Close()
 	if err := artifacts.events.Close(); err != nil {
 		return ArtifactManifest{}, fmt.Errorf("close event artifact: %w", err)
 	}
 	artifacts.closed = true
-	directory, err := openArtifactDirectory(artifacts.directory)
+	directoryInfo, err := directoryRoot.Stat(".")
+	if err != nil {
+		return ArtifactManifest{}, fmt.Errorf("inspect anchored artifact directory: %w", err)
+	}
+	if !directoryInfo.IsDir() || !os.SameFile(artifacts.directoryIdentity, directoryInfo) {
+		return ArtifactManifest{}, fmt.Errorf("artifact directory identity changed before finalization")
+	}
+	pathInfo, err := os.Lstat(artifacts.directory)
+	if err != nil || pathInfo.Mode()&os.ModeSymlink != 0 || !os.SameFile(artifacts.directoryIdentity, pathInfo) {
+		return ArtifactManifest{}, fmt.Errorf("artifact directory path changed before finalization")
+	}
+	entries, err := readArtifactDirectoryEntries(directoryRoot)
 	if err != nil {
 		return ArtifactManifest{}, err
 	}
-	defer directory.close()
+	directory := &artifactDirectory{root: directoryRoot, entries: entries, attemptID: artifacts.attemptID}
 	if _, exists := directory.entries[artifactManifestName]; exists {
 		return ArtifactManifest{}, fmt.Errorf("artifact manifest already exists")
 	}
@@ -485,8 +523,21 @@ func writeArtifactManifest(root *os.Root, body []byte) error {
 		return err
 	}
 	_, writeErr := file.Write(body)
+	syncErr := file.Sync()
 	closeErr := file.Close()
-	return errors.Join(writeErr, closeErr)
+	return errors.Join(writeErr, syncErr, closeErr)
+}
+
+// writeArtifactFile creates one supervisor-selected artifact without following or replacing an existing entry.
+func writeArtifactFile(root *os.Root, name string, body []byte) error {
+	file, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	_, writeErr := file.Write(body)
+	syncErr := file.Sync()
+	closeErr := file.Close()
+	return errors.Join(writeErr, syncErr, closeErr)
 }
 
 // close releases the descriptor-anchored artifact directory.

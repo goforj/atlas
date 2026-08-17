@@ -30,15 +30,18 @@ type LocalGuidanceDiagnosticOptions struct {
 	GoExecutable        string
 	ForjExecutable      string
 	VerifierEnvironment []string
+	// VerifierModuleProxy is the host-owned read-only Go module proxy for verifier commands.
+	VerifierModuleProxy string
 	Runtime             RuntimeIdentity
 }
 
 // LocalGuidanceDiagnosticRequest identifies one paired treatment while keeping host-private environments outside Atlas policy wiring.
 type LocalGuidanceDiagnosticRequest struct {
-	EvaluationID    string
-	DestinationRoot string
-	Environments    map[string][]string
-	LogicalTrialID  string
+	EvaluationID      string
+	DestinationRoot   string
+	Environments      map[string][]string
+	LogicalTrialID    string
+	TreatmentBoundary func(context.Context) error
 }
 
 // LocalDiagnosticTreatmentRequest identifies one guidance treatment without requiring a paired comparison.
@@ -76,6 +79,7 @@ func NewLocalGuidanceDiagnostic(options LocalGuidanceDiagnosticOptions) (*LocalG
 		GoExecutable:   options.GoExecutable,
 		ForjExecutable: options.ForjExecutable,
 		Environment:    verifierEnvironment,
+		ModuleProxy:    options.VerifierModuleProxy,
 	}
 	registry, err := NewRegistry(PromotedWorkflows(), PromotedVerifiers(verifierCommands))
 	if err != nil {
@@ -120,12 +124,13 @@ func (diagnostic *LocalGuidanceDiagnostic) Run(ctx context.Context, request Loca
 		}
 	}
 	return diagnostic.runner.RunGuidanceDiagnostic(ctx, GuidanceDiagnosticRequest{
-		LogicalTrialID:  trialID,
-		Definition:      definition,
-		DestinationRoot: request.DestinationRoot,
-		ForjExecutable:  diagnostic.forjExecutable,
-		Environments:    request.Environments,
-		Runtime:         diagnostic.runtime,
+		LogicalTrialID:    trialID,
+		Definition:        definition,
+		DestinationRoot:   request.DestinationRoot,
+		ForjExecutable:    diagnostic.forjExecutable,
+		Environments:      request.Environments,
+		Runtime:           diagnostic.runtime,
+		TreatmentBoundary: request.TreatmentBoundary,
 	})
 }
 

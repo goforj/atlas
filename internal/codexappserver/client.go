@@ -67,7 +67,7 @@ type Notification struct {
 	Params json.RawMessage
 }
 
-// Client owns one initialized app-server connection and its complete process group.
+// Client owns one initialized app-server connection and the local process cleanup boundary available on this host.
 type Client struct {
 	process   *processgroup.Process
 	stdin     *os.File
@@ -408,7 +408,7 @@ func (client *Client) StderrDropped() uint64 {
 	return client.stderr.Dropped()
 }
 
-// Close terminates the complete app-server process group with a fresh cleanup budget.
+// Close terminates the app-server leader and every descendant qualified by the host tracker with a fresh cleanup budget.
 func (client *Client) Close(ctx context.Context) error {
 	if client == nil {
 		return nil

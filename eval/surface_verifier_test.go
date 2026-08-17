@@ -388,7 +388,7 @@ func TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality(t *testing.T) {
 	if result.FrameworkOutcome.Status != EndpointPassed {
 		t.Fatalf("framework outcome = %#v, want quality signal to remain non-gating", result.FrameworkOutcome)
 	}
-	if len(result.Checks) < 2 || result.Checks[1].ID != "focused-tests-added" || result.Checks[1].Kind != RequirementQuality || result.Checks[1].Status != EndpointFailed {
+	if len(result.Checks) < 2 || result.Checks[1].ID != "test-function-added" || result.Checks[1].Kind != RequirementQuality || result.Checks[1].Status != EndpointFailed {
 		t.Fatalf("quality check = %#v", result.Checks)
 	}
 	testPath := filepath.Join(root, "internal", "feature", "service_test.go")
@@ -408,6 +408,19 @@ func TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality(t *testing.T) {
 	}
 	if result.Checks[1].Status != EndpointPassed {
 		t.Fatalf("quality check = %#v, want focused test reported", result.Checks[1])
+	}
+}
+
+// TestRequiredSurfaceChangesRejectsDisconnectedApplicationCode requires a framework registration edit without dictating the constructor name.
+func TestRequiredSurfaceChangesRejectsDisconnectedApplicationCode(t *testing.T) {
+	patterns := []string{"app/wire/inject_services_app.go"}
+	disconnected := []ProjectChange{{Path: "internal/reports/delivery.go", After: ProjectPathState{Kind: "file"}}}
+	if result := verifyRequiredSurfaceChanges(disconnected, patterns); result.Status != EndpointFailed {
+		t.Fatalf("disconnected result = %#v, want registration failure", result)
+	}
+	connected := append(disconnected, ProjectChange{Path: "app/wire/inject_services_app.go", After: ProjectPathState{Kind: "file"}})
+	if result := verifyRequiredSurfaceChanges(connected, patterns); result.Status != EndpointPassed {
+		t.Fatalf("connected result = %#v", result)
 	}
 }
 
@@ -594,7 +607,7 @@ func TestApplicationBehaviorProbesExerciseDisclosedWorkflows(t *testing.T) {
 	if strings.Contains(jsonAPIFeatureBehaviorProbe, "ada@example.test") || strings.Contains(jsonAPIFeatureBehaviorProbe, "user.Email !=") || strings.Contains(jsonAPIFeatureBehaviorProbe, ".Show(") || !strings.Contains(jsonAPIFeatureBehaviorProbe, "route.Handler()") || !strings.Contains(jsonAPIFeatureBehaviorProbe, `user.ID != "42"`) {
 		t.Fatalf("JSON API probe must verify HTTP behavior through the registered route without pinning a handler name or undocumented fixture email:\n%s", jsonAPIFeatureBehaviorProbe)
 	}
-	if strings.Contains(uploadWorkflowBehaviorProbe, "memorystorage") || !strings.Contains(uploadWorkflowBehaviorProbe, "disk.putContext != ctx") || !strings.Contains(uploadWorkflowBehaviorProbe, "nested/../../hello.txt") || !strings.Contains(uploadWorkflowBehaviorProbe, "reflect.ValueOf(NewService)") {
+	if strings.Contains(uploadWorkflowBehaviorProbe, "memorystorage") || !strings.Contains(uploadWorkflowBehaviorProbe, "disk.putContext != ctx") || !strings.Contains(uploadWorkflowBehaviorProbe, "manager.WithObserver(storages.ObserverFunc") || !strings.Contains(uploadWorkflowBehaviorProbe, "manager.Uploads().Get(upload.Path)") || !strings.Contains(uploadWorkflowBehaviorProbe, "managerPutContext != ctx") || !strings.Contains(uploadWorkflowBehaviorProbe, "nested/../../hello.txt") || !strings.Contains(uploadWorkflowBehaviorProbe, "reflect.ValueOf(NewService)") {
 		t.Fatalf("upload probe must verify context-bound traversal-safe behavior across supported storage injection shapes:\n%s", uploadWorkflowBehaviorProbe)
 	}
 
