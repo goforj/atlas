@@ -251,7 +251,7 @@ func (session *fakeSession) Identity() AgentSessionIdentity {
 	if session.identity != (AgentSessionIdentity{}) {
 		return session.identity
 	}
-	return AgentSessionIdentity{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider"}
+	return AgentSessionIdentity{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", SessionDigest: "sha256:default-session"}
 }
 
 // capturingVerifier records the exact sealed input passed across the verifier boundary.
@@ -350,6 +350,30 @@ func TestRunnerCompletesLifecycleAndCleansInReverseOrder(t *testing.T) {
 	}
 	if agent.session.lastTurn.Prompt != fakeAttemptRequest().Definition.Prompt || !reflect.DeepEqual(agent.session.lastTurn.Limits, fakeAttemptRequest().Definition.Limits) {
 		t.Fatalf("agent turn = %#v", agent.session.lastTurn)
+	}
+}
+
+// TestRunnerPersistsProviderSessionIdentity retains the session identity in the returned result and run artifact.
+func TestRunnerPersistsProviderSessionIdentity(t *testing.T) {
+	runner, _, _, _, agent := newFakeRunner(t)
+	agent.sessionIdentities = []AgentSessionIdentity{{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", SessionDigest: "sha256:session"}}
+	result, err := runner.Run(context.Background(), fakeAttemptRequest())
+	if err != nil {
+		t.Fatalf("Run(): %v", err)
+	}
+	if result.ProviderSessionDigest != "sha256:session" {
+		t.Fatalf("result provider session digest = %q", result.ProviderSessionDigest)
+	}
+	body, err := os.ReadFile(filepath.Join(runner.Artifacts.root, result.AttemptID, "run.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var retained AttemptResult
+	if err := json.Unmarshal(body, &retained); err != nil {
+		t.Fatal(err)
+	}
+	if retained.ProviderSessionDigest != result.ProviderSessionDigest {
+		t.Fatalf("retained provider session digest = %q, want %q", retained.ProviderSessionDigest, result.ProviderSessionDigest)
 	}
 }
 
@@ -1023,6 +1047,10 @@ func newFakeRunner(t *testing.T) (Runner, *[]string, *fakePreparer, *fakeBackend
 	}
 	agent := &fakeAgent{
 		capabilities: []Capability{CapabilityCommands, CapabilityCredentialIsolation},
+		sessionIdentities: []AgentSessionIdentity{
+			{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", SessionDigest: "sha256:session-none"},
+			{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", SessionDigest: "sha256:session-agents"},
+		},
 		preparation: &fakeAgentPreparation{
 			agent:    PreparedAgent{Name: "fake-agent", Executable: "/tools/agent", ExecutableDigest: "sha256:agent", Model: "fake-model"},
 			closeLog: closeLog,

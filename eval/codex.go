@@ -270,6 +270,7 @@ func (adapter *CodexAgent) Start(ctx context.Context, agent PreparedAgent) (Eval
 			Model:           thread.Model,
 			ModelProvider:   thread.ModelProvider,
 			AuthorityDigest: state.authorityDigest,
+			SessionDigest:   digestBytes([]byte(thread.ID)),
 		},
 		eventLimit:     defaultProviderEventLimit,
 		eventByteLimit: defaultProviderEventByteLimit,

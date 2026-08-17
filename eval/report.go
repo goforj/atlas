@@ -87,6 +87,9 @@ func attemptSummary(request AttemptRequest, result AttemptResult) string {
 		fmt.Fprintf(&summary, " · %s", result.Model)
 	}
 	summary.WriteByte('\n')
+	if result.ProviderSessionDigest != "" {
+		fmt.Fprintf(&summary, "Provider session: %s\n", result.ProviderSessionDigest)
+	}
 	if result.Runtime.Framework.Version != "" || result.Runtime.Supervisor.Version != "" {
 		fmt.Fprintf(&summary, "Runtime: GoForj %s · Atlas %s · %s\n", result.Runtime.Framework.Version, result.Runtime.Supervisor.Version, result.Runtime.GoVersion)
 	}

@@ -331,6 +331,7 @@ type AgentSessionIdentity struct {
 	Model           string
 	ModelProvider   string
 	AuthorityDigest string
+	SessionDigest   string
 }
 
 // EvaluationSession owns one fresh provider session and its complete descendant job.
@@ -550,6 +551,7 @@ type AttemptResult struct {
 	AgentExecutable         string                 `json:"agent_executable,omitempty"`
 	AgentDigest             string                 `json:"agent_digest,omitempty"`
 	ProviderAuthorityDigest string                 `json:"provider_authority_digest,omitempty"`
+	ProviderSessionDigest   string                 `json:"provider_session_digest,omitempty"`
 	ProviderTelemetry       *ProviderTelemetry     `json:"provider_telemetry,omitempty"`
 	AgentVersion            string                 `json:"agent_version,omitempty"`
 	Model                   string                 `json:"model,omitempty"`

@@ -115,3 +115,63 @@ func TestRunGuidanceDiagnosticRejectsDifferentPairIdentities(t *testing.T) {
 		t.Fatalf("RunGuidanceDiagnostic() = (%#v, %v), want pair identity failure", result, err)
 	}
 }
+
+// TestRunGuidanceDiagnosticRejectsIncompleteOrReusedProviderSessions prevents paired treatments from sharing or omitting model-context identities.
+func TestRunGuidanceDiagnosticRejectsIncompleteOrReusedProviderSessions(t *testing.T) {
+	tests := []struct {
+		name       string
+		identities []AgentSessionIdentity
+	}{
+		{
+			name: "both missing",
+			identities: []AgentSessionIdentity{
+				{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", AuthorityDigest: "sha256:authority"},
+				{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", AuthorityDigest: "sha256:authority"},
+			},
+		},
+		{
+			name: "control missing",
+			identities: []AgentSessionIdentity{
+				{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", AuthorityDigest: "sha256:authority"},
+				{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", AuthorityDigest: "sha256:authority", SessionDigest: "sha256:treatment"},
+			},
+		},
+		{
+			name: "treatment missing",
+			identities: []AgentSessionIdentity{
+				{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", AuthorityDigest: "sha256:authority", SessionDigest: "sha256:control"},
+				{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", AuthorityDigest: "sha256:authority"},
+			},
+		},
+		{
+			name: "reused",
+			identities: []AgentSessionIdentity{
+				{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", AuthorityDigest: "sha256:authority", SessionDigest: "sha256:reused"},
+				{Version: "fake-agent/1", Model: "fake-model", ModelProvider: "fake-provider", AuthorityDigest: "sha256:authority", SessionDigest: "sha256:reused"},
+			},
+		},
+	}
+	definition, err := LoadPromotedDefinition("add-http-controller")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runner, _, _, _, agent := newFakeRunner(t)
+			agent.sessionIdentities = test.identities
+			result, err := runner.RunGuidanceDiagnostic(context.Background(), GuidanceDiagnosticRequest{
+				LogicalTrialID:  "diagnostic-01",
+				Definition:      definition,
+				DestinationRoot: "/private/projects",
+				ForjExecutable:  "/tools/forj",
+				Environments: map[string][]string{
+					GuidanceProfileNone:   os.Environ(),
+					GuidanceProfileAgents: os.Environ(),
+				},
+			})
+			if err == nil || !strings.Contains(err.Error(), "distinct non-empty provider session identities") || len(result.Attempts) != 2 {
+				t.Fatalf("RunGuidanceDiagnostic() = (%#v, %v), want provider-session identity failure", result, err)
+			}
+		})
+	}
+}

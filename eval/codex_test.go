@@ -102,7 +102,7 @@ func TestAdapterRunsFreshAttributedDiagnosticSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start(): %v", err)
 	}
-	if identity := session.Identity(); identity.Version != "fake-codex/1" || identity.Model != "gpt-test" || identity.ModelProvider != "openai" {
+	if identity := session.Identity(); identity.Version != "fake-codex/1" || identity.Model != "gpt-test" || identity.ModelProvider != "openai" || !strings.HasPrefix(identity.SessionDigest, "sha256:") {
 		t.Fatalf("session identity = %#v", identity)
 	}
 	defer func() {
