@@ -7,9 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -170,7 +168,7 @@ func (adapter *CodexAgent) Prepare(_ context.Context, environment RunEnvironment
 	if strings.TrimSpace(environment.ProjectRoot) == "" || strings.TrimSpace(environment.HomeRoot) == "" {
 		return nil, fmt.Errorf("Codex Project and private home roots are required")
 	}
-	executable, digest, err := resolveExecutable(adapter.options.Executable)
+	launcher, err := codexappserver.ResolveLauncher(adapter.options.Executable)
 	if err != nil {
 		return nil, err
 	}
@@ -195,8 +193,8 @@ func (adapter *CodexAgent) Prepare(_ context.Context, environment RunEnvironment
 		return nil, err
 	}
 	state := preparedState{
-		executable:       executable,
-		executableDigest: digest,
+		executable:       launcher.Path,
+		executableDigest: launcher.Digest,
 		authorityDigest:  adapter.credential.digest,
 		environment:      environment,
 		guidance:         cloneGuidance(guidance),
@@ -209,8 +207,8 @@ func (adapter *CodexAgent) Prepare(_ context.Context, environment RunEnvironment
 		adapter: adapter,
 		agent: PreparedAgent{
 			Name:             adapter.Name(),
-			Executable:       executable,
-			ExecutableDigest: digest,
+			Executable:       launcher.Path,
+			ExecutableDigest: launcher.Digest,
 			AuthorityDigest:  adapter.credential.digest,
 			Model:            adapter.options.Model,
 			Environment:      environment,
@@ -218,9 +216,9 @@ func (adapter *CodexAgent) Prepare(_ context.Context, environment RunEnvironment
 	}, nil
 }
 
-// Start re-resolves the launcher immediately before app-server startup and rejects identity or instruction sources that differ from the prepared treatment.
+// Start requires the app-server boundary to recheck the prepared launcher path and digest immediately before process startup.
 //
-// This is a pre-exec launcher-integrity check. It does not establish immutable execution closure when the launcher can be modified by the same UID after this check.
+// This pre-exec launcher digest check does not make the launcher, its interpreter, or loaded modules immutable, and it leaves a residual check-to-exec race.
 func (adapter *CodexAgent) Start(ctx context.Context, agent PreparedAgent) (EvaluationSession, error) {
 	if adapter == nil {
 		return nil, fmt.Errorf("Codex adapter is required")
@@ -234,19 +232,16 @@ func (adapter *CodexAgent) Start(ctx context.Context, agent PreparedAgent) (Eval
 	if agent.Name != adapter.Name() || agent.Executable != state.executable || agent.ExecutableDigest != state.executableDigest || agent.AuthorityDigest != state.authorityDigest || agent.Model != adapter.options.Model || agent.Environment.ProjectRoot != state.environment.ProjectRoot || agent.Environment.HomeRoot != state.environment.HomeRoot {
 		return nil, fmt.Errorf("Codex prepared identity differs from adapter state")
 	}
-	executable, digest, err := resolveExecutable(adapter.options.Executable)
-	if err != nil {
-		return nil, err
-	}
-	if executable != state.executable || digest != state.executableDigest {
-		return nil, fmt.Errorf("Codex launcher changed after preparation")
-	}
 	processEnvironment := privateProcessEnvironment(mergeProcessEnvironment(adapter.options.Environment, state.environment.Environment), state.environment.HomeRoot)
 	client, err := codexappserver.Start(ctx, codexappserver.StartOptions{
-		Executable: state.executable,
-		Arguments:  append([]string(nil), adapter.options.Arguments...),
-		Dir:        state.environment.ProjectRoot,
-		Env:        processEnvironment,
+		Launcher: codexappserver.PreparedLauncher{
+			Candidate: adapter.options.Executable,
+			Path:      state.executable,
+			Digest:    state.executableDigest,
+		},
+		Arguments: append([]string(nil), adapter.options.Arguments...),
+		Dir:       state.environment.ProjectRoot,
+		Env:       processEnvironment,
 	})
 	if err != nil {
 		return nil, err
@@ -548,28 +543,6 @@ func (session *session) appendEvent(kind EventKind, fields map[string]string) bo
 	session.events = append(session.events, event)
 	session.eventBytes += retainedBytes
 	return true
-}
-
-// resolveExecutable records the exact Codex binary rather than trusting later PATH lookup.
-func resolveExecutable(candidate string) (string, string, error) {
-	path, err := exec.LookPath(candidate)
-	if err != nil {
-		return "", "", fmt.Errorf("resolve Codex executable: %w", err)
-	}
-	path, err = filepath.Abs(path)
-	if err != nil {
-		return "", "", fmt.Errorf("resolve absolute Codex executable: %w", err)
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return "", "", fmt.Errorf("open Codex executable: %w", err)
-	}
-	defer file.Close()
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", "", fmt.Errorf("digest Codex executable: %w", err)
-	}
-	return path, fmt.Sprintf("sha256:%x", hash.Sum(nil)), nil
 }
 
 // materializeGuidance writes only treatment-owned relative files and refuses to replace pre-existing Project content.

@@ -15,11 +15,12 @@ const terminationPollInterval = 25 * time.Millisecond
 
 // Options configures one supervised process without exposing os/exec mutation after startup.
 type Options struct {
-	Dir    string
-	Env    []string
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	Dir         string
+	Env         []string
+	Stdin       io.Reader
+	Stdout      io.Writer
+	Stderr      io.Writer
+	BeforeStart func() error
 }
 
 // Process owns one subprocess and any descendants observed by the platform tracker.
@@ -49,6 +50,11 @@ func Start(executable string, args []string, options Options) (*Process, error) 
 	command.Stderr = options.Stderr
 	configureProcessGroup(command)
 
+	if options.BeforeStart != nil {
+		if err := options.BeforeStart(); err != nil {
+			return nil, err
+		}
+	}
 	if err := command.Start(); err != nil {
 		return nil, fmt.Errorf("start %s: %w", executable, err)
 	}

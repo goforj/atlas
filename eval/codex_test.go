@@ -166,7 +166,7 @@ func TestCodexAgentStartRejectsLauncherDigestDrift(t *testing.T) {
 	if err := os.WriteFile(launcher, []byte("replacement"), 0o700); err != nil {
 		t.Fatalf("replace launcher: %v", err)
 	}
-	if _, err := adapter.Start(context.Background(), prepared.Agent()); err == nil || !strings.Contains(err.Error(), "launcher changed") {
+	if _, err := adapter.Start(context.Background(), prepared.Agent()); err == nil || !strings.Contains(err.Error(), "pre-exec launcher digest") {
 		t.Fatalf("Start() error = %v, want launcher integrity failure", err)
 	}
 }
@@ -200,7 +200,7 @@ func TestCodexAgentStartRejectsLauncherPathDrift(t *testing.T) {
 	}
 	defer prepared.Close(context.Background())
 	t.Setenv("PATH", secondDirectory)
-	if _, err := adapter.Start(context.Background(), prepared.Agent()); err == nil || !strings.Contains(err.Error(), "launcher changed") {
+	if _, err := adapter.Start(context.Background(), prepared.Agent()); err == nil || !strings.Contains(err.Error(), "pre-exec launcher digest") {
 		t.Fatalf("Start() error = %v, want launcher integrity failure", err)
 	}
 }
