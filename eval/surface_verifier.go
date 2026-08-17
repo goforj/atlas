@@ -3,6 +3,7 @@ package eval
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"go/ast"
@@ -10,11 +11,14 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
+
+const maxWireOutputFiles = 64
 
 // surfaceContract describes one framework surface without turning evaluation manifests into executable policy.
 type surfaceContract struct {
@@ -46,6 +50,7 @@ type sourceContract struct {
 	declarations      []declarationContract
 	assignments       []assignmentContract
 	text              []string
+	commentOnly       bool
 }
 
 // assignmentContract relates a named local value to the calls and identifiers used to build it.
@@ -90,6 +95,74 @@ type commandContract struct {
 	contains        string
 	supervisorFiles []supervisorFile
 	probe           func(context.Context, CommandRunner, VerifierProject) EndpointResult
+	standard        bool
+}
+
+// readableCommandSession exposes candidate-derived files from a verifier-owned clone without expanding the public command-session contract.
+type readableCommandSession interface {
+	ReadFile(string) ([]byte, error)
+	FilesNamed(string) ([]string, error)
+}
+
+// verifyWireOutputParity proves checked-in Wire output is the result of the supported full build path.
+func verifyWireOutputParity() func(context.Context, CommandRunner, VerifierProject) EndpointResult {
+	return func(ctx context.Context, runner CommandRunner, project VerifierProject) (result EndpointResult) {
+		session, err := runner.Open(ctx, project)
+		if err != nil {
+			return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("open isolated verifier session: %v", err)}
+		}
+		defer func() {
+			cleanupContext, cancel := context.WithTimeout(context.Background(), verifierCleanupTimeout)
+			defer cancel()
+			if closeErr := session.Close(cleanupContext); closeErr != nil && result.Status == EndpointPassed {
+				result = EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("close isolated verifier session: %v", closeErr)}
+			}
+		}()
+		return verifyWireOutputParityInSession(ctx, session)
+	}
+}
+
+// verifyWireOutputParityInSession keeps regeneration and compilation in one private clone so the latter can reuse the former's build cache.
+func verifyWireOutputParityInSession(ctx context.Context, session CommandSession) EndpointResult {
+	reader, ok := session.(readableCommandSession)
+	if !ok {
+		return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: "isolated verifier session cannot read regenerated Wire output"}
+	}
+	beforePaths, listErr := reader.FilesNamed("wire_gen.go")
+	if listErr != nil {
+		return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("list checked-in Wire output: %v", listErr)}
+	}
+	if len(beforePaths) > maxWireOutputFiles {
+		return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("checked-in Wire output exceeds %d files", maxWireOutputFiles)}
+	}
+	before := make(map[string][sha256.Size]byte, len(beforePaths))
+	for _, path := range beforePaths {
+		body, readErr := reader.ReadFile(path)
+		if readErr != nil {
+			return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("read checked-in Wire output %q: %v", path, readErr)}
+		}
+		before[path] = sha256.Sum256(body)
+	}
+	if _, err := session.Run(ctx, []string{"forj", "build"}); err != nil {
+		return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("regenerate Wire through supported build path: %v", err)}
+	}
+	afterPaths, listErr := reader.FilesNamed("wire_gen.go")
+	if listErr != nil {
+		return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("list regenerated Wire output: %v", listErr)}
+	}
+	if !slices.Equal(beforePaths, afterPaths) {
+		return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: "checked-in Wire output paths differ from supported regeneration"}
+	}
+	for _, path := range beforePaths {
+		after, readErr := reader.ReadFile(path)
+		if readErr != nil {
+			return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("read regenerated Wire output %q: %v", path, readErr)}
+		}
+		if before[path] != sha256.Sum256(after) {
+			return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("checked-in Wire output %q differs from supported regeneration", path)}
+		}
+	}
+	return EndpointResult{ID: "wire-output-parity", Status: EndpointPassed}
 }
 
 // supervisorFile installs verifier-owned executable evidence after candidate tests have been removed.
@@ -143,6 +216,10 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		}, nil
 	}
 	for _, contract := range verifier.contract.commands {
+		if contract.standard {
+			checks = append(checks, runStandardProjectChecks(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests})...)
+			continue
+		}
 		if contract.probe != nil {
 			checks = append(checks, contract.probe(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}))
 			continue
@@ -155,6 +232,27 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		WorkflowConformance: EndpointResult{ID: "workflow-owned-by-runner", Status: EndpointIneligible},
 		Checks:              checks,
 	}, nil
+}
+
+// runStandardProjectChecks proves generated parity and compilation in one isolated phase without sharing state with hidden probes.
+func runStandardProjectChecks(ctx context.Context, runner CommandRunner, project VerifierProject) (checks []EndpointResult) {
+	session, err := runner.Open(ctx, project)
+	if err != nil {
+		return []EndpointResult{{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("open isolated verifier session: %v", err)}}
+	}
+	defer func() {
+		cleanupContext, cancel := context.WithTimeout(context.Background(), verifierCleanupTimeout)
+		defer cancel()
+		if closeErr := session.Close(cleanupContext); closeErr != nil && !surfaceChecksFailed(checks) {
+			checks = append(checks, EndpointResult{ID: "project-compile", Status: EndpointFailed, Details: fmt.Sprintf("close isolated verifier session: %v", closeErr)})
+		}
+	}()
+	parity := verifyWireOutputParityInSession(ctx, session)
+	checks = append(checks, parity)
+	if parity.Status != EndpointPassed {
+		return checks
+	}
+	return append(checks, runCheck(ctx, session, "project-compile", []string{"go", "test", "./..."}, ""))
 }
 
 // surfaceChecksFailed avoids executing candidate code after sealed static evidence already proves failure.
@@ -434,7 +532,45 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required configuration %q is absent", required)}
 		}
 	}
+	if contract.commentOnly && !sqlCommentsOnly(text.String()) {
+		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: "migration must not contain executable SQL"}
+	}
 	return EndpointResult{ID: contract.id, Status: EndpointPassed}
+}
+
+// sqlCommentsOnly accepts SQL comment syntax without treating a generator's particular comment wording as an outcome requirement.
+func sqlCommentsOnly(source string) bool {
+	inBlockComment := false
+	for index := 0; index < len(source); {
+		if inBlockComment {
+			end := strings.Index(source[index:], "*/")
+			if end < 0 {
+				return false
+			}
+			index += end + 2
+			inBlockComment = false
+			continue
+		}
+		if source[index] == '/' && index+1 < len(source) && source[index+1] == '*' {
+			inBlockComment = true
+			index += 2
+			continue
+		}
+		if source[index] == '-' && index+1 < len(source) && source[index+1] == '-' {
+			newline := strings.IndexByte(source[index:], '\n')
+			if newline < 0 {
+				return true
+			}
+			index += newline + 1
+			continue
+		}
+		character, size := utf8.DecodeRuneInString(source[index:])
+		if !unicode.IsSpace(character) {
+			return false
+		}
+		index += size
+	}
+	return !inBlockComment
 }
 
 // sourceFacts retains the syntax classes used by promoted surface contracts.

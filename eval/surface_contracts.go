@@ -32,8 +32,8 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "add-migration/v1",
 			allowedChanges: []string{"migrations/*_add_status_to_invoices.up.sql", "migrations/*_add_status_to_invoices.down.sql"},
 			sources: []sourceContract{
-				{id: "migration-up", paths: []string{"migrations/*_add_status_to_invoices.up.sql"}, text: []string{"-- Up migration (sqlite)"}},
-				{id: "migration-down", paths: []string{"migrations/*_add_status_to_invoices.down.sql"}, text: []string{"-- Down migration (sqlite)"}},
+				{id: "migration-up", paths: []string{"migrations/*_add_status_to_invoices.up.sql"}, commentOnly: true},
+				{id: "migration-down", paths: []string{"migrations/*_add_status_to_invoices.down.sql"}, commentOnly: true},
 			},
 			commands: standardSurfaceCommands(),
 		},
@@ -460,8 +460,7 @@ func TestAtlasRequireTokenBehavior(t *testing.T) {
 // standardSurfaceCommands proves the complete Project after source-level checks pass.
 func standardSurfaceCommands(additional ...commandContract) []commandContract {
 	commands := []commandContract{
-		{id: "app-build", arguments: []string{"forj", "build"}},
-		{id: "project-compile", arguments: []string{"go", "test", "./..."}},
+		{standard: true},
 	}
 	return append(commands, additional...)
 }

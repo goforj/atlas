@@ -1,12 +1,14 @@
 package eval
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -21,10 +23,28 @@ func TestVerifierCommandsUsesPrivateCloneAndAllowlistedTools(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "fixture_test.go"), []byte("package fixture\nimport \"testing\"\nfunc TestFixture(t *testing.T) {}\n"), 0o644); err != nil {
 		t.Fatalf("write test: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(source, "app", "wire"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "app", "wire", "wire_gen.go"), []byte("package wire\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	runner := VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: os.Environ()}
 	session, err := runner.Open(context.Background(), VerifierProject{Root: source})
 	if err != nil {
 		t.Fatalf("Open(): %v", err)
+	}
+	reader, ok := session.(readableCommandSession)
+	if !ok {
+		t.Fatal("session does not expose verifier-owned reads")
+	}
+	module, err := reader.ReadFile("go.mod")
+	if err != nil || string(module) != "module example.test/fixture\n\ngo 1.25\n" {
+		t.Fatalf("ReadFile(go.mod) = %q, %v", module, err)
+	}
+	files, err := reader.FilesNamed("wire_gen.go")
+	if err != nil || !slices.Equal(files, []string{"app/wire/wire_gen.go"}) {
+		t.Fatalf("FilesNamed(wire_gen.go) = %v, %v", files, err)
 	}
 	if err := session.WriteFile("oracle_test.go", []byte("package fixture\n")); err != nil {
 		t.Fatalf("WriteFile(): %v", err)
@@ -43,6 +63,24 @@ func TestVerifierCommandsUsesPrivateCloneAndAllowlistedTools(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(source, "oracle_test.go")); !os.IsNotExist(err) {
 		t.Fatalf("supervisor oracle leaked into source evidence: %v", err)
+	}
+}
+
+// TestVerifierCommandReadFileBoundsCandidateContent prevents parity checks from retaining arbitrarily large candidate files.
+func TestVerifierCommandReadFileBoundsCandidateContent(t *testing.T) {
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "wire_gen.go"), bytes.Repeat([]byte("x"), maxVerifierReadFile+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runner := VerifierCommands{WorkRoot: t.TempDir(), ForjExecutable: os.Args[0], Environment: os.Environ()}
+	session, err := runner.Open(context.Background(), VerifierProject{Root: source})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close(context.Background())
+	reader := session.(readableCommandSession)
+	if _, err := reader.ReadFile("wire_gen.go"); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("ReadFile() error = %v, want size rejection", err)
 	}
 }
 
@@ -378,6 +416,15 @@ func TestVerifierCommandsRestrictsSupervisorFiles(t *testing.T) {
 	for _, path := range []string{"../escape.go", "alias/oracle.go", "safe/existing.go", "missing/oracle.go"} {
 		if err := session.WriteFile(path, []byte("package safe\n")); err == nil {
 			t.Fatalf("WriteFile(%q) unexpectedly succeeded", path)
+		}
+	}
+	reader, ok := session.(readableCommandSession)
+	if !ok {
+		t.Fatal("session does not expose verifier-owned reads")
+	}
+	for _, path := range []string{"../escape.go", "alias/existing.go", "safe"} {
+		if _, err := reader.ReadFile(path); err == nil {
+			t.Fatalf("ReadFile(%q) unexpectedly succeeded", path)
 		}
 	}
 	if err := session.WriteFile("safe/oracle.go", []byte("package safe\n")); err != nil {

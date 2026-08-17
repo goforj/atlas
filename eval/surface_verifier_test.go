@@ -2,12 +2,96 @@ package eval
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 )
+
+// TestWireOutputParityRequiresAuthoritativeRegeneration verifies generated output is compared only inside a disposable verifier clone.
+func TestWireOutputParityRequiresAuthoritativeRegeneration(t *testing.T) {
+	runner := &fakeCommandRunner{files: map[string][]byte{"app/wire/wire_gen.go": []byte("generated")}}
+	probe := verifyWireOutputParity()
+	result := probe(context.Background(), runner, VerifierProject{})
+	if result.Status != EndpointPassed {
+		t.Fatalf("golden parity = %#v", result)
+	}
+	if len(runner.commands) != 1 || !slices.Equal(runner.commands[0], []string{"forj", "build"}) {
+		t.Fatalf("commands = %#v", runner.commands)
+	}
+
+	runner = &fakeCommandRunner{files: map[string][]byte{"app/wire/wire_gen.go": []byte("manual edit")}}
+	runner.onRun = func(command []string) {
+		if slices.Equal(command, []string{"forj", "build"}) {
+			runner.files["app/wire/wire_gen.go"] = []byte("generated")
+		}
+	}
+	result = probe(context.Background(), runner, VerifierProject{})
+	if result.Status != EndpointFailed || result.ID != "wire-output-parity" {
+		t.Fatalf("manual output mutant = %#v", result)
+	}
+
+	runner = &fakeCommandRunner{}
+	runner.onRun = func(command []string) {
+		if slices.Equal(command, []string{"forj", "build"}) {
+			runner.files["app/wire/wire_gen.go"] = []byte("generated")
+		}
+	}
+	result = probe(context.Background(), runner, VerifierProject{})
+	if result.Status != EndpointFailed || result.ID != "wire-output-parity" {
+		t.Fatalf("missing generated output mutant = %#v", result)
+	}
+
+	files := make(map[string][]byte, maxWireOutputFiles+1)
+	for index := 0; index <= maxWireOutputFiles; index++ {
+		files[fmt.Sprintf("app/%02d/wire_gen.go", index)] = []byte("generated")
+	}
+	runner = &fakeCommandRunner{files: files}
+	result = probe(context.Background(), runner, VerifierProject{})
+	if result.Status != EndpointFailed || !strings.Contains(result.Details, "exceeds") || len(runner.commands) != 0 {
+		t.Fatalf("oversized Wire surface = %#v; commands = %#v", result, runner.commands)
+	}
+}
+
+// TestStandardProjectChecksReuseOnePrivateSession keeps full compilation on the cache warmed by authoritative Wire regeneration.
+func TestStandardProjectChecksReuseOnePrivateSession(t *testing.T) {
+	runner := &fakeCommandRunner{files: map[string][]byte{"app/wire/wire_gen.go": []byte("generated")}}
+	checks := runStandardProjectChecks(context.Background(), runner, VerifierProject{})
+	if len(checks) != 2 || checks[0].ID != "wire-output-parity" || checks[1].ID != "project-compile" {
+		t.Fatalf("checks = %#v", checks)
+	}
+	if runner.opens != 1 {
+		t.Fatalf("isolated verifier sessions = %d, want 1", runner.opens)
+	}
+	want := [][]string{{"forj", "build"}, {"go", "test", "./..."}}
+	if !slices.EqualFunc(runner.commands, want, func(left, right []string) bool { return slices.Equal(left, right) }) {
+		t.Fatalf("commands = %#v, want %#v", runner.commands, want)
+	}
+}
+
+// TestSQLCommentsOnlySeparatesEmptyMigrationIntentFromGeneratorCommentText verifies comment wording is not part of the migration outcome.
+func TestSQLCommentsOnlySeparatesEmptyMigrationIntentFromGeneratorCommentText(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source string
+		want   bool
+	}{
+		{name: "alternate comments", source: "-- later invoice status work\n-- deliberately empty\n", want: true},
+		{name: "block comments", source: "/* later invoice status work */\n/* deliberately\nempty */\n", want: true},
+		{name: "empty", source: "\n", want: true},
+		{name: "unterminated block comment", source: "/* deliberately empty", want: false},
+		{name: "comment then mutation", source: "/* header */\nALTER TABLE invoices ADD status text;", want: false},
+		{name: "schema mutation", source: "CREATE TABLE invoices (id text);\n", want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := sqlCommentsOnly(test.source); got != test.want {
+				t.Fatalf("sqlCommentsOnly(%q) = %v, want %v", test.source, got, test.want)
+			}
+		})
+	}
+}
 
 // TestSurfaceVerifierUsesSyntaxAndStopsBeforeExecutingInvalidCandidates proves comments cannot satisfy contracts and static failures do not run code.
 func TestSurfaceVerifierUsesSyntaxAndStopsBeforeExecutingInvalidCandidates(t *testing.T) {
