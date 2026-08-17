@@ -85,7 +85,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges:      []string{".db-relationships.yaml", "internal/content/*.go", "internal/models/*.go", "app/wire/inject_repositories_app.go"},
 			qualityTestPatterns: []string{"internal/content/*_test.go", "internal/models/*_test.go"},
 			sources: []sourceContract{
-				{id: "relationship-contract", paths: []string{".db-relationships.yaml"}, compactText: []string{"users:", "1-many id -> posts:user_id"}},
+				{id: "relationship-contract", paths: []string{".db-relationships.yaml"}, normalizedText: []string{"users:", "1-many id -> posts:user_id"}},
 				{id: "related-model-shape", paths: []string{"internal/content/*.go", "internal/models/*.go"}, identifiers: []string{"User", "Post", "Posts", "UserRepo", "PostRepo", "Relationships", "WithContext"}, stringLiterals: []string{"Posts"}},
 				{id: "related-repository-registration", paths: []string{"app/wire/inject_repositories_app.go"}, identifiers: []string{"NewUserRepo", "NewPostRepo"}},
 			},
