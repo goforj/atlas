@@ -160,53 +160,198 @@ const uploadWorkflowBehaviorProbe = `package uploads
 
 import (
 	"context"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
+	"example.com/scenarioapp/internal/storages"
 	"github.com/goforj/storage"
-	"github.com/goforj/storage/driver/memorystorage"
 )
 
-// TestAtlasUploadWorkflowBehavior proves unsafe names are normalized and decoded bytes reach the portable storage boundary.
+// atlasUploadStorage records the context-bound write without selecting a storage driver the scenario did not declare.
+type atlasUploadStorage struct {
+	context context.Context
+	putContext context.Context
+	path    string
+	body    []byte
+}
+
+// WithContext records the context supplied to the portable storage boundary.
+func (disk *atlasUploadStorage) WithContext(ctx context.Context) storage.Storage {
+	disk.context = ctx
+	return disk
+}
+
+// Get returns the stored body when the probe requests the recorded path.
+func (disk *atlasUploadStorage) Get(path string) ([]byte, error) {
+	if path != disk.path {
+		return nil, storage.ErrNotFound
+	}
+	return disk.body, nil
+}
+
+// Put records a portable storage write for the behavior assertion.
+func (disk *atlasUploadStorage) Put(path string, body []byte) error {
+	disk.putContext = disk.context
+	disk.path = path
+	disk.body = append([]byte(nil), body...)
+	return nil
+}
+
+// MakeDir satisfies the storage contract; upload behavior does not create directories.
+func (*atlasUploadStorage) MakeDir(string) error { return nil }
+
+// Delete satisfies the storage contract; upload behavior does not delete objects.
+func (*atlasUploadStorage) Delete(string) error { return nil }
+
+// Stat satisfies the storage contract; upload behavior returns its own metadata.
+func (*atlasUploadStorage) Stat(string) (storage.Entry, error) { return storage.Entry{}, storage.ErrNotFound }
+
+// Exists satisfies the storage contract; upload behavior does not query existence.
+func (*atlasUploadStorage) Exists(string) (bool, error) { return false, nil }
+
+// List satisfies the storage contract; upload behavior does not list objects.
+func (*atlasUploadStorage) List(string) ([]storage.Entry, error) { return nil, nil }
+
+// Walk satisfies the storage contract; upload behavior does not walk objects.
+func (*atlasUploadStorage) Walk(string, func(storage.Entry) error) error { return storage.ErrUnsupported }
+
+// Copy satisfies the storage contract; upload behavior does not copy objects.
+func (*atlasUploadStorage) Copy(string, string) error { return storage.ErrUnsupported }
+
+// Move satisfies the storage contract; upload behavior does not move objects.
+func (*atlasUploadStorage) Move(string, string) error { return storage.ErrUnsupported }
+
+// URL satisfies the storage contract; upload behavior does not request object URLs.
+func (*atlasUploadStorage) URL(string) (string, error) { return "", storage.ErrUnsupported }
+
+// TestAtlasUploadWorkflowBehavior proves unsafe names are normalized and decoded bytes reach a context-bound portable storage boundary.
 func TestAtlasUploadWorkflowBehavior(t *testing.T) {
-	disk, err := storage.Build(memorystorage.Config{})
+	type contextKey string
+	ctx := context.WithValue(context.Background(), contextKey("probe"), "upload")
+	t.Setenv("STORAGE_DRIVER", "local")
+	t.Setenv("STORAGE_ROOT", filepath.Join(t.TempDir(), "default"))
+	t.Setenv("STORAGE_UPLOADS_DRIVER", "local")
+	t.Setenv("STORAGE_UPLOADS_ROOT", filepath.Join(t.TempDir(), "uploads"))
+	manager, err := storages.NewManager()
 	if err != nil {
-		t.Fatalf("storage.Build(): %v", err)
+		t.Fatalf("storages.NewManager(): %v", err)
 	}
-	upload, err := NewService(disk).Store(context.Background(), StoreInput{Filename: "../hello.txt", ContentType: "text/plain", BodyBase64: "aGVsbG8="})
-	if err != nil {
-		t.Fatalf("Store(): %v", err)
+	t.Cleanup(func() {
+		if err := manager.Close(); err != nil {
+			t.Errorf("manager.Close(): %v", err)
+		}
+	})
+	disk := &atlasUploadStorage{}
+	service, directStorage := atlasUploadService(t, disk, manager)
+	for _, filename := range []string{"../hello.txt", "nested/../../hello.txt", ` + "`" + `..\hello.txt` + "`" + `} {
+		upload, err := service.Store(ctx, StoreInput{Filename: filename, ContentType: "text/plain", BodyBase64: "aGVsbG8="})
+		if err != nil {
+			t.Fatalf("Store(%q): %v", filename, err)
+		}
+		if !atlasSafeUploadPath(upload.Path) || upload.Size != 5 || upload.ContentType != "text/plain" {
+			t.Fatalf("upload for %q = %#v", filename, upload)
+		}
+		if directStorage && (disk.putContext != ctx || disk.path != upload.Path || string(disk.body) != "hello") {
+			t.Fatalf("storage write = context preserved %v path %q body %q", disk.putContext == ctx, disk.path, disk.body)
+		}
 	}
-	if !strings.HasSuffix(upload.Path, "/hello.txt") || upload.Size != 5 || upload.ContentType != "text/plain" {
-		t.Fatalf("upload = %#v", upload)
+	if !directStorage {
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+		if _, err := service.Store(cancelled, StoreInput{Filename: "cancelled.txt", ContentType: "text/plain", BodyBase64: "aGVsbG8="}); err == nil {
+			t.Fatal("Store() succeeded after its caller context was cancelled")
+		}
 	}
-	body, err := disk.Get(upload.Path)
-	if err != nil || string(body) != "hello" {
-		t.Fatalf("stored body = %q, %v", body, err)
+}
+
+// atlasUploadService supports either a directly injected disk or a service that retains the generated storage manager.
+func atlasUploadService(t *testing.T, disk storage.Storage, manager *storages.Manager) (*Service, bool) {
+	t.Helper()
+	factory := reflect.ValueOf(NewService)
+	if factory.Type().NumIn() != 1 || factory.Type().NumOut() != 1 {
+		t.Fatalf("NewService signature = %s, want one dependency and one service", factory.Type())
 	}
+	parameter := factory.Type().In(0)
+	storageValue := reflect.ValueOf(disk)
+	managerValue := reflect.ValueOf(manager)
+	dependency := reflect.Value{}
+	directStorage := false
+	switch {
+	case managerValue.Type().AssignableTo(parameter):
+		dependency = managerValue
+	case storageValue.Type().AssignableTo(parameter), parameter.Kind() == reflect.Interface && storageValue.Type().Implements(parameter):
+		dependency = storageValue
+		directStorage = true
+	default:
+		t.Fatalf("NewService dependency = %s, want storage.Storage or *storages.Manager", parameter)
+	}
+	result := factory.Call([]reflect.Value{dependency})[0].Interface()
+	service, ok := result.(*Service)
+	if !ok || service == nil {
+		t.Fatalf("NewService result = %T, want *Service", result)
+	}
+	return service, directStorage
+}
+
+// atlasSafeUploadPath rejects every traversal segment after normalizing platform separators.
+func atlasSafeUploadPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	for _, segment := range strings.Split(strings.ReplaceAll(path, "\\", "/"), "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
 }
 `
 
 const jsonAPIFeatureBehaviorProbe = `package users
 
 import (
-	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/goforj/web/webtest"
 )
 
-// TestAtlasJSONAPIFeatureBehavior proves the application boundary returns the requested user and rejects invalid identities.
+// TestAtlasJSONAPIFeatureBehavior proves the registered HTTP route returns the requested user and rejects invalid identities.
 func TestAtlasJSONAPIFeatureBehavior(t *testing.T) {
-	service := NewService()
-	user, err := service.Find(context.Background(), "42")
-	if err != nil || user.ID != "42" {
-		t.Fatalf("Find(42) = %#v, %v", user, err)
+	controller := NewController(NewService())
+	response := atlasUserResponse(t, controller, "42")
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET user status = %d, want %d", response.Code, http.StatusOK)
 	}
-	if _, err := service.Find(context.Background(), ""); err == nil {
-		t.Fatal("Find(empty) succeeded")
+	var user struct{ ID string }
+	if err := json.Unmarshal(response.Body.Bytes(), &user); err != nil || user.ID != "42" {
+		t.Fatalf("GET user response = %#v, %v", user, err)
 	}
-	if _, err := service.Find(context.Background(), "missing"); err == nil {
-		t.Fatal("Find(unknown) succeeded")
+	if response := atlasUserResponse(t, controller, "missing"); response.Code < http.StatusBadRequest {
+		t.Fatalf("GET missing user status = %d, want an HTTP error", response.Code)
 	}
+}
+
+// atlasUserResponse invokes the registered user route so the probe remains independent of the handler method name.
+func atlasUserResponse(t *testing.T, controller *Controller, id string) *httptest.ResponseRecorder {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, "/users/"+id, nil)
+	response := httptest.NewRecorder()
+	for _, route := range controller.Routes() {
+		if route.Method() != http.MethodGet || route.Path() != "/users/:id" {
+			continue
+		}
+		if err := route.Handler()(webtest.NewContext(request, response, route.Path(), webtest.PathParams{"id": id})); err != nil {
+			t.Fatalf("GET user: %v", err)
+		}
+		return response
+	}
+	t.Fatal("GET /users/:id route is absent")
+	return nil
 }
 `
 

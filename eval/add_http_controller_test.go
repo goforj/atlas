@@ -479,7 +479,7 @@ func TestJSONAPIFeatureBehaviorProbeRejectsUnknownNonemptyID(t *testing.T) {
 		t.Fatalf("JSON API behavior probe does not reject an unknown nonempty ID:\n%s", jsonAPIFeatureBehaviorProbe)
 	}
 
-	emptyIDMutant := strings.Replace(jsonAPIFeatureBehaviorProbe, `service.Find(context.Background(), "missing")`, `service.Find(context.Background(), "")`, 1)
+	emptyIDMutant := strings.Replace(jsonAPIFeatureBehaviorProbe, `atlasUserResponse(t, controller, "missing")`, `atlasUserResponse(t, controller, "")`, 1)
 	if jsonAPIProbeRejectsUnknownNonemptyID(emptyIDMutant) {
 		t.Fatalf("empty-ID mutant still rejects an unknown nonempty ID:\n%s", emptyIDMutant)
 	}
@@ -487,7 +487,7 @@ func TestJSONAPIFeatureBehaviorProbeRejectsUnknownNonemptyID(t *testing.T) {
 
 // jsonAPIProbeRejectsUnknownNonemptyID reports whether a probe preserves the independent unknown-ID failure assertion.
 func jsonAPIProbeRejectsUnknownNonemptyID(source string) bool {
-	return strings.Contains(source, `if _, err := service.Find(context.Background(), "missing"); err == nil {`) && strings.Contains(source, `t.Fatal("Find(unknown) succeeded")`)
+	return strings.Contains(source, `atlasUserResponse(t, controller, "missing")`) && strings.Contains(source, `response.Code < http.StatusBadRequest`)
 }
 
 // decodeInvoiceProbeError decodes an executable fixture in the same loose JSON shape accepted by the behavior probe.

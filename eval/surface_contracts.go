@@ -136,17 +136,17 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "choose-storage-for-files/v1",
-			allowedChanges:      generatedEnvironmentChanges("internal/storages/*_gen.go", "internal/invoices/*attachment*.go", "app/wire/inject_services_app.go"),
+			allowedChanges:      generatedEnvironmentChanges("go.mod", "internal/storages/*_gen.go", "internal/invoices/*attachment*.go", "app/wire/inject_services_app.go", "app/wire/app.go"),
 			qualityTestPatterns: []string{"internal/invoices/*attachment*_test.go"},
 			sources: []sourceContract{
 				{id: "attachment-storage-config", paths: []string{".env"}, text: []string{"STORAGE_ATTACHMENTS_DRIVER=", "STORAGE_ATTACHMENTS_ROOT="}},
 				{id: "attachment-storage-accessor", paths: []string{"internal/storages/*_gen.go"}, identifiers: []string{"Attachments"}},
-				{id: "attachment-service-boundary", paths: []string{"internal/invoices/*attachment*.go"}, identifiers: []string{"Attachment", "AttachmentService"}, forbiddenCalls: []string{"Background", "WriteFile", "ReadFile"}, declarations: []declarationContract{
-					{name: "NewAttachmentService", identifiers: []string{"Manager"}, selectorCalls: []string{"Attachments"}},
+				{id: "attachment-service-boundary", paths: []string{"internal/invoices/*attachment*.go"}, identifiers: []string{"Attachment", "AttachmentService"}, selectorCalls: []string{"Attachments"}, forbiddenCalls: []string{"Background", "WriteFile", "ReadFile"}, declarations: []declarationContract{
+					{name: "NewAttachmentService", identifiers: []string{"Manager"}},
 					{name: "Store", receiver: "AttachmentService", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "Put"}, forbiddenCalls: []string{"Background", "WriteFile"}},
 					{name: "Read", receiver: "AttachmentService", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "Get"}, forbiddenCalls: []string{"Background", "ReadFile"}},
 				}},
-				{id: "attachment-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewAttachmentService"}},
+				{id: "attachment-service-registration", paths: []string{"app/wire/inject_services_app.go", "app/wire/app.go"}, identifiers: []string{"NewAttachmentService"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
 				id:        "attachment-storage-behavior",
@@ -188,7 +188,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "build-json-api-feature/v1",
 			allowedChanges: []string{"internal/users/*.go", "app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
-				{id: "users-application-boundary", paths: []string{"internal/users/*.go"}, identifiers: []string{"User", "Controller"}, identifierChoices: [][]string{{"Service", "UseCase", "Query"}, {"Find", "Get", "Lookup"}, {"Show", "Get"}}, forbiddenCalls: []string{"TODO"}, stringLiterals: []string{"/users/:id"}, declarations: []declarationContract{{name: "Routes", receiver: "Controller", selectorCalls: []string{"NewRoute"}}, {nameChoices: []string{"Show", "Get"}, receiver: "Controller", selectorCalls: []string{"Param", "JSON"}, forbiddenCalls: []string{"Background"}}}},
+				{id: "users-application-boundary", paths: []string{"internal/users/*.go"}, identifiers: []string{"User", "Controller"}, identifierChoices: [][]string{{"Service", "UseCase", "Query"}, {"Find", "Get", "Lookup"}}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"/users/:id"}, declarations: []declarationContract{{name: "Routes", receiver: "Controller", selectorCalls: []string{"NewRoute"}}}},
 				{id: "users-registration", paths: []string{"app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewController"}, identifierChoices: [][]string{{"NewService", "NewUseCase", "NewQuery"}}},
 			},
 			commands: append(standardSurfaceCommands(commandContract{
@@ -225,7 +225,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "add-outbound-http-integration/v1",
-			allowedChanges:      []string{"go.mod", "go.sum", "internal/taxrates/*.go", "app/wire/inject_services_app.go"},
+			allowedChanges:      []string{".env.example", "go.mod", "go.sum", "internal/taxrates/*.go", "app/wire/inject_services_app.go"},
 			qualityTestPatterns: []string{"internal/taxrates/*_test.go"},
 			sources: []sourceContract{
 				{id: "typed-http-client", paths: []string{"internal/taxrates/*.go"}, identifiers: []string{"Rate", "Client", "NewClient"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Find", receiver: "Client", identifiers: []string{"ctx"}, forbiddenCalls: []string{"Background"}}}},
@@ -259,8 +259,8 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges:      []string{"internal/invoices/controller.go", "internal/invoices/middleware.go", "internal/invoices/middleware_test.go", "app/wire/inject_http_controllers_app.go"},
 			qualityTestPatterns: []string{"internal/invoices/*_test.go"},
 			sources: []sourceContract{
-				{id: "invoice-token-policy", paths: []string{"internal/invoices/middleware.go", "internal/invoices/controller.go"}, identifiers: []string{"RequireToken"}, selectorCalls: []string{"NewRoute"}, forbiddenCalls: []string{"Background", "TODO"}, text: []string{"RequireToken(controller.token)"}, declarations: []declarationContract{{name: "RequireToken", selectorCalls: []string{"Request", "Get", "JSON"}, stringLiterals: []string{"X-Invoice-Token", "unauthorized"}}}},
-				{id: "resolved-token-provider", paths: []string{"app/wire/inject_http_controllers_app.go"}, identifiers: []string{"provideInvoiceController"}, declarations: []declarationContract{{name: "provideInvoiceController", selectorCalls: []string{"Get", "NewController"}, stringLiterals: []string{"INVOICE_HTTP_TOKEN", ""}, forbiddenLiterals: []string{"invoice-secret"}}}},
+				{id: "invoice-token-policy", paths: []string{"internal/invoices/middleware.go", "internal/invoices/controller.go"}, identifiers: []string{"RequireToken"}, selectorCalls: []string{"NewRoute"}, forbiddenCalls: []string{"Background", "TODO"}, text: []string{"RequireToken(controller.token)"}},
+				{id: "resolved-token-provider", paths: []string{"app/wire/inject_http_controllers_app.go"}, identifiers: []string{"provideInvoiceController"}, declarations: []declarationContract{{name: "provideInvoiceController", identifiers: []string{"NewController"}, forbiddenLiterals: []string{"invoice-secret"}, argumentFlows: []callArgumentFlowContract{{call: "NewController", literal: "INVOICE_HTTP_TOKEN"}}}}},
 			},
 			commands: standardSurfaceCommands(commandContract{
 				id:        "token-policy-behavior",
@@ -332,8 +332,8 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges:      generatedEnvironmentChanges("go.mod", "internal/storages/*_gen.go", "internal/uploads/*.go", "app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"),
 			qualityTestPatterns: []string{"internal/uploads/*_test.go"},
 			sources: []sourceContract{
-				{id: "upload-boundary", paths: []string{"internal/uploads/service.go", "internal/uploads/controller.go"}, identifiers: []string{"StoreInput", "StoredUpload", "Service", "Controller", "Store", "Routes"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"/uploads"}, declarations: []declarationContract{{name: "Store", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "Put"}}, {name: "Store", receiver: "Controller", selectorCalls: []string{"Bind", "Store"}}, {name: "Routes", receiver: "Controller", selectorCalls: []string{"NewRoute"}}}},
-				{id: "uploads-storage-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}, selectorCalls: []string{"Uploads"}},
+				{id: "upload-boundary", paths: []string{"internal/uploads/service.go", "internal/uploads/controller.go"}, identifiers: []string{"StoreInput", "StoredUpload", "Service", "Controller", "Store", "Routes"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"/uploads"}, declarations: []declarationContract{{name: "Store", receiver: "Service", identifiers: []string{"ctx"}}, {name: "Store", receiver: "Controller", selectorCalls: []string{"Bind", "Store"}}, {name: "Routes", receiver: "Controller", selectorCalls: []string{"NewRoute"}}}},
+				{id: "uploads-storage-registration", paths: []string{"app/wire/inject_services_app.go", "internal/uploads/service.go"}, identifiers: []string{"NewService"}, selectorCalls: []string{"Uploads"}},
 			},
 			commands: append(standardSurfaceCommands(commandContract{
 				id:              "upload-workflow-behavior",
@@ -397,6 +397,7 @@ func generatedEnvironmentChanges(paths ...string) []string {
 const tokenPolicyBehaviorProbe = `package invoices
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -408,14 +409,15 @@ import (
 // TestAtlasRequireTokenBehavior verifies rejected and accepted policy paths through a supervisor-owned oracle.
 func TestAtlasRequireTokenBehavior(t *testing.T) {
 	tests := []struct {
-		name string
+		name     string
 		expected string
 		provided string
-		want int
+		want     int
+		next     bool
 	}{
 		{name: "unconfigured", want: http.StatusUnauthorized},
 		{name: "missing", expected: "secret", want: http.StatusUnauthorized},
-		{name: "accepted", expected: "secret", provided: "secret", want: http.StatusNoContent},
+		{name: "accepted", expected: "secret", provided: "secret", want: http.StatusNoContent, next: true},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -423,12 +425,32 @@ func TestAtlasRequireTokenBehavior(t *testing.T) {
 			request.Header.Set("X-Invoice-Token", test.provided)
 			response := httptest.NewRecorder()
 			context := webtest.NewContext(request, response, "/invoices/:id", nil)
-			next := func(context web.Context) error { return context.NoContent(http.StatusNoContent) }
+			calledNext := false
+			next := func(context web.Context) error {
+				calledNext = true
+				return context.NoContent(http.StatusNoContent)
+			}
 			if err := RequireToken(test.expected)(next)(context); err != nil {
 				t.Fatalf("middleware: %v", err)
 			}
 			if response.Code != test.want {
 				t.Fatalf("status = %d, want %d", response.Code, test.want)
+			}
+			if calledNext != test.next {
+				t.Fatalf("next called = %v, want %v", calledNext, test.next)
+			}
+			if !test.next {
+				var payload map[string]string
+				if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+					t.Fatalf("decode unauthorized response: %v", err)
+				}
+				found := false
+				for _, value := range payload {
+					found = found || value == "unauthorized"
+				}
+				if !found {
+					t.Fatalf("unauthorized response = %#v", payload)
+				}
 			}
 		})
 	}

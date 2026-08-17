@@ -68,12 +68,19 @@ type declarationContract struct {
 	stringLiterals       []string
 	forbiddenLiterals    []string
 	nestedCalls          []nestedCallContract
+	argumentFlows        []callArgumentFlowContract
 }
 
 // nestedCallContract proves an inner call occurs within an outer call expression, including callback arguments.
 type nestedCallContract struct {
 	outer string
 	inner string
+}
+
+// callArgumentFlowContract requires a call argument to originate from an accessor call containing a configured literal.
+type callArgumentFlowContract struct {
+	call    string
+	literal string
 }
 
 // commandContract defines one supervisor-owned executable check.
@@ -344,6 +351,7 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 	}
 	facts := newSourceFacts()
 	declarations := map[string]*sourceFacts{}
+	declarationNodes := map[string]ast.Node{}
 	assignments := map[string]*sourceFacts{}
 	var text strings.Builder
 	for _, path := range paths {
@@ -362,7 +370,7 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 		if err != nil {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("parse %s: %v", filepath.ToSlash(path), err)}
 		}
-		collectSourceFacts(file, &facts, declarations, assignments)
+		collectSourceFacts(file, &facts, declarations, declarationNodes, assignments)
 	}
 	if details := verifySourceFacts(facts, contract.identifiers, contract.identifierChoices, contract.selectorCalls, contract.forbiddenCalls, contract.stringLiterals, contract.forbiddenLiterals); details != "" {
 		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: details}
@@ -399,6 +407,11 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 		for _, nested := range declaration.nestedCalls {
 			if !scope.nestedCalls[nested.outer+">"+nested.inner] {
 				return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q does not call %q within %q", key, nested.inner, nested.outer)}
+			}
+		}
+		for _, flow := range declaration.argumentFlows {
+			if !declarationArgumentFlowsFromLiteral(declarationNodes[key], flow) {
+				return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("declaration %q does not pass a value resolved from %q to %q", key, flow.literal, flow.call)}
 			}
 		}
 	}
@@ -485,19 +498,19 @@ func verifySourceFacts(facts sourceFacts, identifiers []string, identifierChoice
 }
 
 // collectSourceFacts records package-wide and named-declaration evidence while excluding comments.
-func collectSourceFacts(file *ast.File, facts *sourceFacts, declarations, assignments map[string]*sourceFacts) {
+func collectSourceFacts(file *ast.File, facts *sourceFacts, declarations map[string]*sourceFacts, declarationNodes map[string]ast.Node, assignments map[string]*sourceFacts) {
 	collectNodeFacts(file, facts)
 	for _, declaration := range file.Decls {
 		switch value := declaration.(type) {
 		case *ast.FuncDecl:
-			collectDeclarationFacts(value.Name.Name, value, declarations)
+			collectDeclarationFacts(value.Name.Name, value, declarations, declarationNodes)
 			if receiver := functionReceiverName(value); receiver != "" {
-				collectDeclarationFacts(receiver+"."+value.Name.Name, value, declarations)
+				collectDeclarationFacts(receiver+"."+value.Name.Name, value, declarations, declarationNodes)
 			}
 		case *ast.GenDecl:
 			for _, spec := range value.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok {
-					collectDeclarationFacts(typeSpec.Name.Name, typeSpec, declarations)
+					collectDeclarationFacts(typeSpec.Name.Name, typeSpec, declarations, declarationNodes)
 				}
 			}
 		}
@@ -541,14 +554,106 @@ func functionReceiverName(declaration *ast.FuncDecl) string {
 }
 
 // collectDeclarationFacts merges declarations with the same name so reviewed method families remain supported.
-func collectDeclarationFacts(name string, node ast.Node, declarations map[string]*sourceFacts) {
+func collectDeclarationFacts(name string, node ast.Node, declarations map[string]*sourceFacts, declarationNodes map[string]ast.Node) {
 	facts := declarations[name]
 	if facts == nil {
 		value := newSourceFacts()
 		facts = &value
 		declarations[name] = facts
 	}
+	declarationNodes[name] = node
 	collectNodeFacts(node, facts)
+}
+
+// declarationArgumentFlowsFromLiteral follows local values from a literal-bearing accessor call into a constructor call.
+func declarationArgumentFlowsFromLiteral(node ast.Node, contract callArgumentFlowContract) bool {
+	function, ok := node.(*ast.FuncDecl)
+	if !ok || function.Body == nil {
+		return false
+	}
+	values := map[string]ast.Expr{}
+	ast.Inspect(function.Body, func(node ast.Node) bool {
+		switch statement := node.(type) {
+		case *ast.AssignStmt:
+			for index, left := range statement.Lhs {
+				name, ok := left.(*ast.Ident)
+				if ok && index < len(statement.Rhs) {
+					values[name.Name] = statement.Rhs[index]
+				}
+			}
+		case *ast.ValueSpec:
+			for index, name := range statement.Names {
+				if index < len(statement.Values) {
+					values[name.Name] = statement.Values[index]
+				}
+			}
+		}
+		return true
+	})
+	resolved := map[string]bool{}
+	for changed := true; changed; {
+		changed = false
+		for name, value := range values {
+			if resolved[name] || expressionFlowsFromLiteral(value, contract.literal, resolved) {
+				if !resolved[name] {
+					resolved[name] = true
+					changed = true
+				}
+			}
+		}
+	}
+	flows := false
+	ast.Inspect(function.Body, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok || callName(call) != contract.call {
+			return true
+		}
+		for _, argument := range call.Args {
+			if expressionFlowsFromLiteral(argument, contract.literal, resolved) {
+				flows = true
+				return false
+			}
+		}
+		return true
+	})
+	return flows
+}
+
+// expressionFlowsFromLiteral recognizes an accessor call carrying the literal or a local value derived from one.
+func expressionFlowsFromLiteral(expression ast.Expr, literal string, resolved map[string]bool) bool {
+	found := false
+	ast.Inspect(expression, func(node ast.Node) bool {
+		switch value := node.(type) {
+		case *ast.Ident:
+			if resolved[value.Name] {
+				found = true
+			}
+		case *ast.CallExpr:
+			if callName(value) != "" && callContainsStringLiteral(value, literal) {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+// callContainsStringLiteral keeps provider checks independent of the environment or configuration accessor spelling.
+func callContainsStringLiteral(call *ast.CallExpr, literal string) bool {
+	found := false
+	for _, argument := range call.Args {
+		ast.Inspect(argument, func(node ast.Node) bool {
+			value, ok := node.(*ast.BasicLit)
+			if ok && value.Kind == token.STRING && strings.Trim(value.Value, "`\"") == literal {
+				found = true
+			}
+			return !found
+		})
+		if found {
+			return true
+		}
+	}
+	return false
 }
 
 // collectNodeFacts records identifiers, calls, literals, and call containment for one syntax boundary.
