@@ -132,18 +132,33 @@ func ownershipChecks(changes []ProjectChange) []EndpointResult {
 		if derivedSurfaceProjectChange(change) {
 			continue
 		}
-		if !isAllowedControllerChange(path) {
+		if !isAllowedControllerChange(change, changes) {
 			return []EndpointResult{{ID: "change-ownership", Status: EndpointFailed, Details: fmt.Sprintf("candidate changed unrelated path %q", path)}}
 		}
 	}
 	return []EndpointResult{{ID: "generated-file-ownership", Status: EndpointPassed}, {ID: "change-ownership", Status: EndpointPassed}}
 }
 
-// isAllowedControllerChange keeps seeded domain implementation immutable while allowing controller implementation, focused tests, and its two composition registrations.
-func isAllowedControllerChange(path string) bool {
+// isAllowedControllerChange permits directory scaffolding only when the same diff contains an owned controller descendant.
+func isAllowedControllerChange(change ProjectChange, changes []ProjectChange) bool {
+	path := filepath.ToSlash(change.Path)
 	if path == "app/routes.go" || path == "app/wire/inject_http_controllers_app.go" {
 		return true
 	}
+	if strings.HasPrefix(path, "internal/") && (change.Before.Kind == "directory" || change.After.Kind == "directory") {
+		for _, candidate := range changes {
+			candidatePath := filepath.ToSlash(candidate.Path)
+			if strings.HasPrefix(candidatePath, path+"/") && isAllowedControllerFile(candidatePath) {
+				return true
+			}
+		}
+		return false
+	}
+	return isAllowedControllerFile(path)
+}
+
+// isAllowedControllerFile keeps seeded domain implementation immutable while allowing controller implementation and focused tests.
+func isAllowedControllerFile(path string) bool {
 	base := filepath.Base(path)
 	return strings.HasPrefix(path, "internal/") && (base == "controller.go" || base == "controller_test.go" || strings.HasSuffix(base, "_controller.go") || strings.HasSuffix(base, "_controller_test.go"))
 }
