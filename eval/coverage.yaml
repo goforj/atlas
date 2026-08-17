@@ -1,0 +1,287 @@
+schema_version: 1
+capabilities:
+  - id: architecture.cancellation
+    area: architecture
+    summary: Propagate cancellation across application and infrastructure boundaries.
+    tier: smoke
+    evaluations: [add-outbound-http-integration, add-upload-workflow]
+  - id: architecture.dependency-injection
+    area: architecture
+    summary: Register application-owned services and repair missing providers through Wire.
+    tier: smoke
+    evaluations: [build-json-api-feature, repair-wire-provider]
+  - id: architecture.flat-packages
+    area: architecture
+    summary: Keep cohesive application behavior in flat, self-contained Go packages.
+    tier: core
+    evaluations: [build-json-api-feature]
+  - id: architecture.repository-boundary
+    area: architecture
+    summary: Keep persistence access behind repositories and application services.
+    tier: smoke
+    evaluations: [add-cached-repository, add-database-transaction]
+  - id: architecture.structured-results
+    area: architecture
+    summary: Prefer a result type when application behavior needs several related return values.
+    tier: extended
+    evaluations: []
+  - id: async.event-followup-job
+    area: async
+    summary: Convert an event reaction into durable typed follow-up work.
+    tier: core
+    evaluations: [dispatch-event-followup-job]
+  - id: async.events
+    area: async
+    summary: Publish typed domain events and invoke registered reactions.
+    tier: smoke
+    evaluations: [add-event-subscriber, publish-domain-event]
+  - id: async.jobs
+    area: async
+    summary: Generate, register, dispatch, and handle typed jobs.
+    tier: smoke
+    evaluations: [add-job]
+  - id: async.retries-idempotency
+    area: async
+    summary: Make retried job work safe and configure an intentional retry policy.
+    tier: core
+    evaluations: [add-resilient-job]
+  - id: async.scheduler
+    area: async
+    summary: Register scheduled behavior and dispatch existing jobs on a recurring interval.
+    tier: smoke
+    evaluations: [add-schedule, schedule-existing-job]
+  - id: async.worker-failure
+    area: async
+    summary: Preserve useful failure behavior across worker retries and shutdown.
+    tier: extended
+    evaluations: []
+  - id: data.cache-aside
+    area: data
+    summary: Read through a repository and populate cache without moving persistence into controllers.
+    tier: smoke
+    evaluations: [add-cached-repository]
+  - id: data.driver-swap
+    area: data
+    summary: Change a local resource driver without changing application behavior.
+    tier: core
+    evaluations: []
+  - id: data.migrations
+    area: data
+    summary: Generate connection-aware migration pairs.
+    tier: smoke
+    evaluations: [add-migration]
+  - id: data.models
+    area: data
+    summary: Generate database-derived models and repositories.
+    tier: smoke
+    evaluations: [create-model]
+  - id: data.multi-connection
+    area: data
+    summary: Place models, repositories, and migrations against the intended named database connection.
+    tier: core
+    evaluations: []
+  - id: data.relationships
+    area: data
+    summary: Model schema relationships without leaking database work into delivery code.
+    tier: core
+    evaluations: [model-relationships]
+  - id: data.transactions
+    area: data
+    summary: Keep a multi-write application operation atomic through a transaction-bound repository.
+    tier: smoke
+    evaluations: [add-database-transaction]
+  - id: frontend.asset-build
+    area: frontend
+    summary: Build current frontend assets for deployment without unnecessary rebuilds.
+    tier: core
+    evaluations: []
+  - id: frontend.component-loading
+    area: frontend
+    summary: Load data near its consuming component without fast-response flicker or global state leakage.
+    tier: core
+    evaluations: []
+  - id: frontend.forms
+    area: frontend
+    summary: Build accessible functional forms with server validation and stable error presentation.
+    tier: core
+    evaluations: []
+  - id: frontend.multi-spa
+    area: frontend
+    summary: Add and build an independent SPA for an additional App.
+    tier: core
+    evaluations: []
+  - id: frontend.starter-kits
+    area: frontend
+    summary: Extend the selected Vue, React, or templ plus htmx starter kit through its established conventions.
+    tier: extended
+    evaluations: []
+  - id: generation.additional-app
+    area: generation
+    summary: Generate an independently runnable additional App without mutating the default App.
+    tier: smoke
+    evaluations: [create-additional-app]
+  - id: generation.command
+    area: generation
+    summary: Generate and register a context-aware App command.
+    tier: smoke
+    evaluations: [add-app-command]
+  - id: generation.controller
+    area: generation
+    summary: Generate a controller and preserve its route and Wire registration points.
+    tier: smoke
+    evaluations: [add-http-controller, add-named-app-route]
+  - id: generation.event-subscriber
+    area: generation
+    summary: Generate typed events and subscribers with their registration points.
+    tier: core
+    evaluations: [add-event-subscriber]
+  - id: generation.job
+    area: generation
+    summary: Generate typed job payloads, handlers, and registrations.
+    tier: smoke
+    evaluations: [add-job]
+  - id: generation.migration
+    area: generation
+    summary: Generate matching up and down migrations.
+    tier: core
+    evaluations: [add-migration]
+  - id: generation.model
+    area: generation
+    summary: Generate a model and repository from an existing database table.
+    tier: core
+    evaluations: [create-model, model-relationships]
+  - id: generation.schedule
+    area: generation
+    summary: Generate and register recurring work.
+    tier: core
+    evaluations: [add-schedule]
+  - id: http.authentication
+    area: http
+    summary: Protect application routes through generated Auth composition.
+    tier: smoke
+    evaluations: [protect-route-with-auth]
+  - id: http.cache-revalidation
+    area: http
+    summary: Serve unchanged file content with caching and revalidation headers.
+    tier: core
+    evaluations: [serve-cacheable-image]
+  - id: http.controllers
+    area: http
+    summary: Keep request translation in controllers and application behavior in services.
+    tier: smoke
+    evaluations: [add-http-controller, build-json-api-feature]
+  - id: http.middleware
+    area: http
+    summary: Apply application-owned middleware to the intended route boundary.
+    tier: core
+    evaluations: [add-route-middleware]
+  - id: http.oauth
+    area: http
+    summary: Add an OAuth provider while preserving redirect and identity policy.
+    tier: extended
+    evaluations: []
+  - id: http.outbound-client
+    area: http
+    summary: Build a typed context-aware outbound HTTP integration.
+    tier: core
+    evaluations: [add-outbound-http-integration]
+  - id: http.rate-limiting
+    area: http
+    summary: Rate-limit a route with explicit identity, policy, and response behavior.
+    tier: core
+    evaluations: []
+  - id: http.sessions-cookies
+    area: http
+    summary: Preserve session expiry, refresh, revocation, cookie, and CSRF boundaries.
+    tier: extended
+    evaluations: []
+  - id: http.validation-errors
+    area: http
+    summary: Validate writes and return stable public errors without leaking domain internals.
+    tier: smoke
+    evaluations: [add-validated-write-endpoint]
+  - id: operations.backups
+    area: operations
+    summary: Configure and verify a recoverable application backup workflow.
+    tier: extended
+    evaluations: []
+  - id: operations.deployment
+    area: operations
+    summary: Build, migrate, verify readiness, activate, and roll back an application release.
+    tier: core
+    evaluations: []
+  - id: operations.diagnostics
+    area: operations
+    summary: Use Lighthouse and framework inspection to diagnose a runtime failure.
+    tier: core
+    evaluations: [runtime-observability]
+  - id: operations.logging-metrics
+    area: operations
+    summary: Preserve useful structured logs and application metrics while repairing observability.
+    tier: core
+    evaluations: [runtime-observability]
+  - id: resources.mail
+    area: resources
+    summary: Send application mail through the generated manager rather than a provider SDK.
+    tier: core
+    evaluations: [add-mail-workflow]
+  - id: resources.named-cache
+    area: resources
+    summary: Configure, inject, and use a generated named cache accessor.
+    tier: smoke
+    evaluations: [add-named-cache]
+  - id: resources.named-queue
+    area: resources
+    summary: Configure, inject, and use a generated named queue accessor.
+    tier: smoke
+    evaluations: [add-named-resource]
+  - id: resources.named-storage
+    area: resources
+    summary: Configure, inject, and use a generated named storage accessor.
+    tier: smoke
+    evaluations: [add-named-storage]
+  - id: resources.storage-selection
+    area: resources
+    summary: Recognize a durable file category and introduce an appropriate named storage boundary.
+    tier: core
+    evaluations: [choose-storage-for-files]
+  - id: resources.uploads
+    area: resources
+    summary: Validate and persist uploaded content through named storage.
+    tier: core
+    evaluations: [add-upload-workflow]
+  - id: runtime.configuration
+    area: runtime
+    summary: Put framework and application configuration in the correct durable and environment-owned surfaces.
+    tier: core
+    evaluations: []
+  - id: runtime.graceful-shutdown
+    area: runtime
+    summary: Stop HTTP, workers, and schedules within cancellation and shutdown budgets.
+    tier: core
+    evaluations: []
+  - id: runtime.lifecycle-readiness
+    area: runtime
+    summary: Add application readiness through the lifecycle registry.
+    tier: smoke
+    evaluations: [add-app-lifecycle-hook]
+  - id: runtime.maintenance
+    area: runtime
+    summary: Enter and leave maintenance mode without hiding health or operational control surfaces.
+    tier: extended
+    evaluations: []
+  - id: runtime.multi-app
+    area: runtime
+    summary: Keep additional App routes, commands, resources, and generated wiring isolated.
+    tier: smoke
+    evaluations: [add-named-app-route, create-additional-app]
+  - id: runtime.timeouts
+    area: runtime
+    summary: Apply consistent request, connection, worker, and shutdown timeout policy.
+    tier: core
+    evaluations: [add-resilient-job]
+  - id: safety.abstention
+    area: safety
+    summary: Ask for a missing architectural decision instead of inventing a framework primitive.
+    tier: smoke
+    evaluations: [unknown-framework-shape]

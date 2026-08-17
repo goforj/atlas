@@ -391,6 +391,21 @@ func promotedSurfaceContracts() []surfaceContract {
 			}),
 		},
 		{
+			id:                  "add-resilient-job/v1",
+			allowedChanges:      generatedEnvironmentChanges("internal/jobs/*.go", "internal/reports/*.go", "internal/notifications/*.go", "internal/storages/*_gen.go", "app/lifecycle.go", "app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go", "app/wire/inject_subscribers_app.go"),
+			qualityTestPatterns: []string{"internal/reports/*_test.go", "internal/notifications/*_test.go"},
+			sources: []sourceContract{
+				{id: "retry-safe-report-job", paths: []string{"internal/reports/*.go"}, identifiers: []string{"GeneratePayload", "GenerateJob", "GenerateJobTypeName", "HandleTask"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:generate", "profile.json"}, declarations: []declarationContract{{name: "GeneratePayload", identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}, {name: "GenerateForUser", receiver: "Service", selectorCalls: []string{"Find", "Put"}}, {name: "HandleTask", receiver: "GenerateJob", selectorCalls: []string{"Bind", "GenerateForUser"}}, {name: "Queue", receiver: "GenerateJob", selectorCalls: []string{"Dispatch", "Retry", "Timeout"}}}},
+				{id: "resilient-job-boundary", paths: []string{"internal/notifications/service.go"}, identifiers: []string{"HandleUserCreated", "ReportQueue"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "HandleUserCreated", receiver: "Service", selectorCalls: []string{"Queue"}}}},
+				{id: "resilient-job-registration", paths: []string{"app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewGenerateJob", "NewService"}},
+			},
+			commands: standardSurfaceCommands(commandContract{
+				id:              "resilient-job-behavior",
+				arguments:       []string{"go", "test", "./internal/reports", "-run", "^TestAtlasResilientJobBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{path: "internal/reports/atlas_eval_resilient_job_test.go", body: resilientJobBehaviorProbe}},
+			}),
+		},
+		{
 			id:             "schedule-existing-job/v1",
 			allowedChanges: []string{"internal/reports/*.go", "internal/users/*.go", "app/wire/inject_schedules_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{

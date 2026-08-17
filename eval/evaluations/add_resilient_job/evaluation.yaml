@@ -1,0 +1,12 @@
+schema_version: 1
+id: add-resilient-job
+summary: Add retry-safe report generation with an explicit attempt budget.
+suite: core
+task_kind: feature
+project_scenario: reports-generate-job
+workflow: goforj-add-resilient-job/v1
+verifier: add-resilient-job/v1
+limits:
+  wall_time: 10m
+  commands: 80
+  shell_network: off

@@ -18,6 +18,7 @@ func TestCorrectedBehaviorProbesParse(t *testing.T) {
 		"named storage":         namedStorageBehaviorProbe,
 		"JSON API":              jsonAPIFeatureBehaviorProbe,
 		"local inspect capture": runtimeObservabilityBehaviorProbe,
+		"resilient job":         resilientJobBehaviorProbe,
 		"route middleware":      tokenPolicyBehaviorProbe,
 		"upload":                uploadWorkflowBehaviorProbe,
 		"validated write":       invoiceValidationBehaviorProbe,
@@ -677,6 +678,56 @@ func (job GenerateJob) Queue(ctx context.Context, id string) error {
 	contract := promotedSourceContract(t, "dispatch-event-followup-job/v1", "typed-report-job")
 	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
 		t.Fatalf("consumer-owned queue boundary result = %#v", result)
+	}
+}
+
+// TestResilientJobContractRequiresAttemptAndTimeoutPolicy keeps retry safety explicit at the dispatch boundary.
+func TestResilientJobContractRequiresAttemptAndTimeoutPolicy(t *testing.T) {
+	root := t.TempDir()
+	path := "internal/reports/generate_job.go"
+	writeVerifierFile(t, root, path, `package reports
+
+import "context"
+
+const GenerateJobTypeName = "reports:generate"
+type GeneratePayload struct{ UserID string }
+type Task struct{}
+type Builder struct{}
+type QueueManager struct{}
+type Repository struct{}
+type Service struct{ repository Repository }
+type GenerateJob struct{ queue QueueManager; service Service }
+func (*Task) Bind(any) error { return nil }
+func (Builder) Retry(int) Builder { return Builder{} }
+func (Builder) Timeout(int) Builder { return Builder{} }
+func (QueueManager) Dispatch(context.Context, Builder) error { return nil }
+func (Repository) Find(context.Context, string) error { return nil }
+func (Service) Put(context.Context, string) error { return nil }
+func (service Service) GenerateForUser(ctx context.Context, id string) error {
+	if err := service.repository.Find(ctx, id); err != nil { return err }
+	return service.Put(ctx, "profile.json")
+}
+func (job GenerateJob) HandleTask(ctx context.Context, task *Task) error {
+	var payload GeneratePayload
+	if err := task.Bind(&payload); err != nil { return err }
+	return job.service.GenerateForUser(ctx, payload.UserID)
+}
+func (job GenerateJob) Queue(ctx context.Context, _ string) error {
+	return job.queue.Dispatch(ctx, Builder{}.Retry(3).Timeout(30))
+}
+`)
+	contract := promotedSourceContract(t, "add-resilient-job/v1", "retry-safe-report-job")
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("resilient job result = %#v", result)
+	}
+	data, err := os.ReadFile(filepath.Join(root, path))
+	if err != nil {
+		t.Fatalf("read resilient job: %v", err)
+	}
+	mutant := strings.Replace(string(data), ".Retry(3)", "", 1)
+	writeVerifierFile(t, root, path, mutant)
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+		t.Fatalf("missing retry result = %#v, want failure", result)
 	}
 }
 
