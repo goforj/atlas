@@ -336,6 +336,26 @@ func TestOwnershipChecksAllowsFocusedControllerTests(t *testing.T) {
 	}
 }
 
+// TestOwnershipChecksAllowsGeneratedControllerDirectories keeps package scaffolding from failing while its files remain independently constrained.
+func TestOwnershipChecksAllowsGeneratedControllerDirectories(t *testing.T) {
+	checks := ownershipChecks([]ProjectChange{
+		{Path: "internal/invoices/http", After: ProjectPathState{Kind: "directory"}},
+		{Path: "internal/invoices/http/controller.go", After: ProjectPathState{Kind: "file"}},
+		{Path: "internal/invoices/http/controller_test.go", After: ProjectPathState{Kind: "file"}},
+	})
+	if !checkHasStatus(checks, "change-ownership", EndpointPassed) {
+		t.Fatalf("ownership checks = %#v", checks)
+	}
+}
+
+// TestOwnershipChecksRejectsUnrelatedControllerDirectories keeps empty package scaffolding inside the ownership budget.
+func TestOwnershipChecksRejectsUnrelatedControllerDirectories(t *testing.T) {
+	checks := ownershipChecks([]ProjectChange{{Path: "internal/invoices/notes", After: ProjectPathState{Kind: "directory"}}})
+	if !checkHasStatus(checks, "change-ownership", EndpointFailed) {
+		t.Fatalf("ownership checks = %#v", checks)
+	}
+}
+
 // TestControllerHandlerCheckRequiresFindRequestContext rejects unrelated Context calls when Find receives a background context.
 func TestControllerHandlerCheckRequiresFindRequestContext(t *testing.T) {
 	valid, err := parser.ParseFile(token.NewFileSet(), "controller.go", validControllerSource("service *Service"), 0)
