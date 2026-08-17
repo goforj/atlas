@@ -300,6 +300,12 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	agentResult, err := session.Wait(runContext)
 	artifactEvents = appendAdapterEvents(artifactEvents, agentResult.Events)
 	result.ProviderTelemetry = cloneProviderTelemetry(agentResult.Telemetry)
+	if err == nil && agentResult.Outcome != "" && agentResult.Outcome != AgentCompleted {
+		err = &AgentFailure{
+			Outcome: agentResult.Outcome,
+			Err:     fmt.Errorf("agent reached terminal outcome %q", agentResult.Outcome),
+		}
+	}
 	if request.Intent == IntentDiagnostic && adapterCommandCount(turn.Events, agentResult) > uint64(request.Definition.Limits.Commands) {
 		result.AgentOutcome = AgentAdapterError
 		result.EvaluationStatus = EvaluationDiagnostic

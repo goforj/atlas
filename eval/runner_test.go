@@ -573,6 +573,20 @@ func TestRunnerClassifiesTypedStartAndTurnFailures(t *testing.T) {
 	}
 }
 
+// TestRunnerRejectsUnsuccessfulTerminalOutcome prevents an adapter from turning a provider failure into a verified attempt by returning a nil error.
+func TestRunnerRejectsUnsuccessfulTerminalOutcome(t *testing.T) {
+	runner, _, _, _, agent := newFakeRunner(t)
+	agent.session.result.Outcome = AgentProviderError
+
+	result, err := runner.Run(context.Background(), fakeAttemptRequest())
+	if err == nil || !strings.Contains(err.Error(), `agent reached terminal outcome "provider_error"`) {
+		t.Fatalf("Run() = %#v, %v, want provider terminal failure", result, err)
+	}
+	if result.AgentOutcome != AgentProviderError || result.EvaluationStatus != EvaluationEvaluatorError {
+		t.Fatalf("attempt result = %#v", result)
+	}
+}
+
 // TestRunnerRejectsCommandBudgetOverrun verifies provider adapters cannot silently exceed manifest policy.
 func TestRunnerRejectsCommandBudgetOverrun(t *testing.T) {
 	runner, _, _, backend, _ := newFakeRunner(t)
