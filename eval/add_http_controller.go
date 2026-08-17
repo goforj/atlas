@@ -77,7 +77,7 @@ func (verifier *AddHTTPControllerVerifier) Verify(ctx context.Context, input Ver
 	project := VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}
 	checks = append(checks, verifier.runIsolatedCheck(ctx, project, "project-compile", []string{"go", "test", "./..."}, ""))
 	checks = append(checks, runInvoiceBehaviorProbe(ctx, verifier.runner, project))
-	checks = append(checks, verifier.runIsolatedCheck(ctx, project, "app-build", []string{"forj", "build"}, ""))
+	checks = append(checks, verifyWireOutputParity()(ctx, verifier.runner, project))
 	checks = append(checks, verifier.runIsolatedCheck(ctx, project, "route-visible", []string{"forj", "route:list"}, "/api/v1/invoices/:id"))
 
 	failed := 0

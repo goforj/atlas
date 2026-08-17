@@ -174,6 +174,32 @@ func TestPromotedEvaluationPromptsDoNotLeakWorkflowRecipes(t *testing.T) {
 	}
 }
 
+// TestImplementationFlexiblePromptsAvoidAnswerLeakage keeps framework discovery and domain design distinct from hidden verifier details.
+func TestImplementationFlexiblePromptsAvoidAnswerLeakage(t *testing.T) {
+	tests := []struct {
+		id        string
+		forbidden []string
+	}{
+		{id: "add-named-resource", forbidden: []string{"internal/invoices/report_dispatcher.go", "NewReportDispatcher", "manager.Reports()"}},
+		{id: "add-named-cache", forbidden: []string{"internal/invoices/profile_cache.go", "NewProfileCache", "manager.Profiles()"}},
+		{id: "add-named-storage", forbidden: []string{"internal/invoices/avatar_storage.go", "NewAvatarStorage", "manager.Avatars()"}},
+		{id: "create-additional-app", forbidden: []string{"cmd/statuspage/main.go", "InitializeApplication", "app/statuspage/wire"}},
+	}
+	for _, test := range tests {
+		t.Run(test.id, func(t *testing.T) {
+			definition, err := LoadPromotedDefinition(test.id)
+			if err != nil {
+				t.Fatalf("LoadPromotedDefinition(): %v", err)
+			}
+			for _, forbidden := range test.forbidden {
+				if strings.Contains(definition.Prompt, forbidden) {
+					t.Errorf("prompt leaks an implementation answer %q", forbidden)
+				}
+			}
+		})
+	}
+}
+
 // TestPromotedMajorSurfaceEvaluationsResolve keeps every shipped manifest joined to reviewed workflow and verifier contracts.
 func TestPromotedMajorSurfaceEvaluationsResolve(t *testing.T) {
 	runner := &fakeCommandRunner{}

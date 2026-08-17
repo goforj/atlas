@@ -11,6 +11,7 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -22,6 +23,7 @@ type fakeCommandRunner struct {
 	commands     [][]string
 	files        map[string][]byte
 	opens        int
+	onRun        func([]string)
 }
 
 // Open records isolated phases while retaining supervisor files for assertions.
@@ -45,9 +47,33 @@ func (runner *fakeCommandRunner) WriteFile(path string, body []byte) error {
 	return nil
 }
 
+// ReadFile returns supervisor or candidate fixture content recorded by the fake session.
+func (runner *fakeCommandRunner) ReadFile(path string) ([]byte, error) {
+	body, ok := runner.files[path]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return append([]byte(nil), body...), nil
+}
+
+// FilesNamed lists fake candidate files by basename in deterministic order.
+func (runner *fakeCommandRunner) FilesNamed(name string) ([]string, error) {
+	var paths []string
+	for path := range runner.files {
+		if filepath.Base(path) == name {
+			paths = append(paths, path)
+		}
+	}
+	slices.Sort(paths)
+	return paths, nil
+}
+
 // Run records verifier commands and returns the promoted route listing.
 func (runner *fakeCommandRunner) Run(_ context.Context, command []string) (string, error) {
 	runner.commands = append(runner.commands, append([]string(nil), command...))
+	if runner.onRun != nil {
+		runner.onRun(command)
+	}
 	if len(command) > 1 && command[1] == runner.failCommand {
 		return "", errors.New("command failed")
 	}
@@ -255,7 +281,7 @@ func TestAddHTTPControllerVerifierRejectsTargetedMutants(t *testing.T) {
 		{name: "missing context", controller: strings.Replace(valid, "request.Context()", "context.Background()", 1), registration: true, wantCheck: "invoice-handler"},
 		{name: "missing registration", controller: valid, registration: false, wantCheck: "route-registration"},
 		{name: "behavior oracle failure", controller: valid, registration: true, failContains: "./internal/invoices", wantCheck: "invoice-behavior"},
-		{name: "build failure", controller: valid, registration: true, failCommand: "build", wantCheck: "app-build"},
+		{name: "build failure", controller: valid, registration: true, failCommand: "build", wantCheck: "wire-output-parity"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

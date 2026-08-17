@@ -258,6 +258,98 @@ func TestReadVerifiedAttemptSummaryReturnsOnlyAuthenticatedContent(t *testing.T)
 	}
 }
 
+// TestVerifyArtifactManifestRejectsAttemptDirectoryReplay binds authenticated evidence to its signed attempt address.
+func TestVerifyArtifactManifestRejectsAttemptDirectoryReplay(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "artifacts")
+	key := []byte("0123456789abcdef0123456789abcdef")
+	store, err := NewArtifactStore(root, key, NewRedactor(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := store.Begin("attempt-original")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := artifacts.WriteText("summary.txt", "original\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+		t.Fatal(err)
+	}
+	original := filepath.Join(root, "attempt-original")
+	replayed := filepath.Join(root, "attempt-replayed")
+	if err := os.Rename(original, replayed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := VerifyArtifactManifest(replayed, key); err == nil || !strings.Contains(err.Error(), "does not match directory") {
+		t.Fatalf("VerifyArtifactManifest() error = %v, want attempt-address rejection", err)
+	}
+}
+
+// TestReadVerifiedAttemptSummaryAcceptsAuthenticatedEmptyContent distinguishes an empty summary from a missing artifact.
+func TestReadVerifiedAttemptSummaryAcceptsAuthenticatedEmptyContent(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "artifacts")
+	key := []byte("0123456789abcdef0123456789abcdef")
+	store, err := NewArtifactStore(root, key, NewRedactor(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := store.Begin("attempt-empty-summary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := artifacts.WriteText("summary.txt", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+		t.Fatal(err)
+	}
+	summary, _, err := ReadVerifiedAttemptSummary(filepath.Join(root, "attempt-empty-summary"), key)
+	if err != nil || summary != "" {
+		t.Fatalf("ReadVerifiedAttemptSummary() = %q, %v", summary, err)
+	}
+}
+
+// TestReadVerifiedAttemptSummaryReturnsBytesFromAuthenticationPass prevents a post-verification replacement from changing rendered evidence.
+func TestReadVerifiedAttemptSummaryReturnsBytesFromAuthenticationPass(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "artifacts")
+	key := []byte("0123456789abcdef0123456789abcdef")
+	store, err := NewArtifactStore(root, key, NewRedactor(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifacts, err := store.Begin("attempt-atomic-summary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := artifacts.WriteText("summary.txt", "authenticated summary\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+		t.Fatal(err)
+	}
+	directory := filepath.Join(root, "attempt-atomic-summary")
+	artifactRoot, err := openArtifactDirectory(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer artifactRoot.close()
+	var summary string
+	_, err = verifyArtifactManifestWithInspect(artifactRoot, key, func(name string, body []byte) error {
+		if name != "summary.txt" {
+			return nil
+		}
+		summary = string(body)
+		return os.WriteFile(filepath.Join(directory, "summary.txt"), []byte("replacement\n"), 0o600)
+	})
+	if err != nil {
+		t.Fatalf("verifyArtifactManifestWithInspect(): %v", err)
+	}
+	if summary != "authenticated summary\n" {
+		t.Fatalf("authenticated summary = %q", summary)
+	}
+}
+
 // TestVerifyArtifactManifestRejectsNonCanonicalJSON prevents parser differentials from authenticating altered raw evidence.
 func TestVerifyArtifactManifestRejectsNonCanonicalJSON(t *testing.T) {
 	key := []byte("0123456789abcdef0123456789abcdef")

@@ -49,8 +49,9 @@ var allowedArtifactFiles = func() map[string]bool {
 
 // artifactDirectory holds one descriptor-anchored view of an attempt directory and its bounded entries.
 type artifactDirectory struct {
-	root    *os.Root
-	entries map[string]os.FileInfo
+	root      *os.Root
+	entries   map[string]os.FileInfo
+	attemptID string
 }
 
 // ArtifactStore creates private supervisor-owned attempt directories and manifests with post-run tamper evidence.
@@ -301,31 +302,31 @@ func ReadVerifiedAttemptSummary(directory string, key []byte) (string, ArtifactM
 		return "", ArtifactManifest{}, err
 	}
 	defer artifactRoot.close()
-	manifest, err := verifyArtifactManifest(artifactRoot, key)
+	var summary []byte
+	var summaryFound bool
+	manifest, err := verifyArtifactManifestWithInspect(artifactRoot, key, func(name string, body []byte) error {
+		if name == "summary.txt" {
+			summary = append(summary[:0], body...)
+			summaryFound = true
+		}
+		return nil
+	})
 	if err != nil {
 		return "", ArtifactManifest{}, err
 	}
-	info, ok := artifactRoot.entries["summary.txt"]
-	if !ok {
+	if !summaryFound {
 		return "", ArtifactManifest{}, fmt.Errorf("attempt summary is missing")
 	}
-	file, err := openArtifactFile(artifactRoot.root, "summary.txt", info)
-	if err != nil {
-		return "", ArtifactManifest{}, err
-	}
-	body, readErr := io.ReadAll(io.LimitReader(file, maxArtifactFileSize+1))
-	closeErr := file.Close()
-	if err := errors.Join(readErr, closeErr); err != nil {
-		return "", ArtifactManifest{}, fmt.Errorf("read attempt summary: %w", err)
-	}
-	if len(body) > maxArtifactFileSize {
-		return "", ArtifactManifest{}, fmt.Errorf("attempt summary exceeds %d bytes", maxArtifactFileSize)
-	}
-	return string(body), manifest, nil
+	return string(summary), manifest, nil
 }
 
 // verifyArtifactManifest authenticates one already anchored artifact directory.
 func verifyArtifactManifest(artifactRoot *artifactDirectory, key []byte) (ArtifactManifest, error) {
+	return verifyArtifactManifestWithInspect(artifactRoot, key, nil)
+}
+
+// verifyArtifactManifestWithInspect authenticates each artifact from the exact bytes supplied to inspect.
+func verifyArtifactManifestWithInspect(artifactRoot *artifactDirectory, key []byte, inspect func(string, []byte) error) (ArtifactManifest, error) {
 	body, err := readArtifactManifest(artifactRoot)
 	if err != nil {
 		return ArtifactManifest{}, err
@@ -350,6 +351,9 @@ func verifyArtifactManifest(artifactRoot *artifactDirectory, key []byte) (Artifa
 	if manifest.SchemaVersion != artifactManifestSchemaVersion {
 		return ArtifactManifest{}, fmt.Errorf("unsupported artifact manifest schema %d", manifest.SchemaVersion)
 	}
+	if manifest.AttemptID != artifactRoot.attemptID {
+		return ArtifactManifest{}, fmt.Errorf("artifact manifest attempt ID %q does not match directory %q", manifest.AttemptID, artifactRoot.attemptID)
+	}
 	signature := manifest.Signature
 	manifest.Signature = ""
 	want, err := signArtifactManifest(manifest, key)
@@ -360,7 +364,7 @@ func verifyArtifactManifest(artifactRoot *artifactDirectory, key []byte) (Artifa
 		return ArtifactManifest{}, fmt.Errorf("artifact manifest signature is invalid")
 	}
 	manifest.Signature = signature
-	actual, err := collectArtifactFiles(artifactRoot, nil)
+	actual, err := collectArtifactFiles(artifactRoot, inspect)
 	if err != nil {
 		return ArtifactManifest{}, err
 	}
@@ -418,7 +422,7 @@ func openArtifactDirectory(path string) (*artifactDirectory, error) {
 		_ = root.Close()
 		return nil, err
 	}
-	return &artifactDirectory{root: root, entries: entries}, nil
+	return &artifactDirectory{root: root, entries: entries, attemptID: filepath.Base(filepath.Clean(path))}, nil
 }
 
 // readArtifactDirectoryEntries reads at most one entry beyond the fixed artifact surface before rejecting it.

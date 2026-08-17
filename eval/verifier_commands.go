@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ const (
 	// verifierCommandTimeout allows a generated Project to compile from a private cold build cache without permitting an indefinite child process.
 	verifierCommandTimeout = 2 * time.Minute
 	maxVerifierOutput      = 1 << 20
+	maxVerifierReadFile    = 4 << 20
 	maxProjectTreeEntries  = 25_000
 	maxProjectTreeBytes    = int64(2 << 30)
 )
@@ -42,6 +44,107 @@ type verifierCommandSession struct {
 	environment    []string
 	closeOnce      sync.Once
 	closeErr       error
+}
+
+// FilesNamed lists regular candidate files by basename without allowing the caller to traverse outside the disposable Project.
+func (session *verifierCommandSession) FilesNamed(name string) ([]string, error) {
+	if session == nil {
+		return nil, fmt.Errorf("verifier command session is required")
+	}
+	if filepath.Base(name) != name || name == "." || name == "" {
+		return nil, fmt.Errorf("verifier filename %q must be a basename", name)
+	}
+	var matches []string
+	err := filepath.WalkDir(session.root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && path != session.root {
+			switch entry.Name() {
+			case ".git", "node_modules":
+				return filepath.SkipDir
+			}
+		}
+		if entry.Name() != name || entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+		relative, err := filepath.Rel(session.root, path)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("verifier file %q escapes the disposable Project", path)
+		}
+		matches = append(matches, filepath.ToSlash(relative))
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list verifier files named %q: %w", name, err)
+	}
+	slices.Sort(matches)
+	return matches, nil
+}
+
+// ReadFile returns one regular candidate file from the disposable Project.
+func (session *verifierCommandSession) ReadFile(relativePath string) ([]byte, error) {
+	if session == nil {
+		return nil, fmt.Errorf("verifier command session is required")
+	}
+	if !filepath.IsLocal(relativePath) || filepath.Clean(relativePath) == "." {
+		return nil, fmt.Errorf("verifier file path %q must remain relative to the disposable Project", relativePath)
+	}
+	path := filepath.Join(session.root, filepath.Clean(relativePath))
+	within, err := filepath.Rel(session.root, path)
+	if err != nil || within == ".." || strings.HasPrefix(within, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("verifier file path %q escapes the disposable Project", relativePath)
+	}
+	parent := filepath.Dir(path)
+	parentWithin, err := filepath.Rel(session.root, parent)
+	if err != nil || parentWithin == ".." || strings.HasPrefix(parentWithin, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("verifier file path %q escapes the disposable Project", relativePath)
+	}
+	current := session.root
+	if parentWithin != "." {
+		for _, component := range strings.Split(parentWithin, string(filepath.Separator)) {
+			current = filepath.Join(current, component)
+			parentInfo, parentErr := os.Lstat(current)
+			if parentErr != nil {
+				return nil, fmt.Errorf("inspect verifier file parent %q: %w", relativePath, parentErr)
+			}
+			if !parentInfo.IsDir() || parentInfo.Mode()&os.ModeSymlink != 0 {
+				return nil, fmt.Errorf("verifier file parent %q must contain only existing directories", relativePath)
+			}
+		}
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("inspect verifier file %q: %w", relativePath, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("verifier file %q must be a regular file", relativePath)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open verifier file %q: %w", relativePath, err)
+	}
+	opened, statErr := file.Stat()
+	if statErr != nil || !os.SameFile(info, opened) {
+		_ = file.Close()
+		return nil, fmt.Errorf("verifier file %q changed while it was opened", relativePath)
+	}
+	body, readErr := io.ReadAll(io.LimitReader(file, maxVerifierReadFile+1))
+	closeErr := file.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		return nil, fmt.Errorf("read verifier file %q: %w", relativePath, err)
+	}
+	if len(body) > maxVerifierReadFile {
+		return nil, fmt.Errorf("verifier file %q exceeds %d bytes", relativePath, maxVerifierReadFile)
+	}
+	return body, nil
 }
 
 // WriteFile installs supervisor-owned verifier source without allowing candidate paths to escape the disposable clone.
