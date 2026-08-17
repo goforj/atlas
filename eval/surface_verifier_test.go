@@ -298,6 +298,113 @@ func TestSurfaceVerifierAcceptsReviewedIdentifierFamilies(t *testing.T) {
 	}
 }
 
+// TestAdditionalAppConfigurationContractAcceptsPersistedAppAndRejectsWatcherOnlyConfig keeps the App declaration independent from its dev watcher.
+func TestAdditionalAppConfigurationContractAcceptsPersistedAppAndRejectsWatcherOnlyConfig(t *testing.T) {
+	root := t.TempDir()
+	contract := promotedSourceContract(t, "create-additional-app/v1", "statuspage-project-config")
+	for _, test := range []struct {
+		name string
+		body string
+		want EndpointStatus
+	}{
+		{
+			name: "current app configuration",
+			body: "apps:\n  statuspage:\n    components: [web_api]\ndev:\n  apps:\n    statuspage:\n      run: ./bin/statuspage\n",
+			want: EndpointPassed,
+		},
+		{
+			name: "stale watcher only configuration",
+			body: "dev:\n  apps:\n    statuspage:\n      run: ./bin/statuspage\n",
+			want: EndpointFailed,
+		},
+		{
+			name: "wrong app components",
+			body: "apps:\n  statuspage:\n    components: [cli]\n",
+			want: EndpointFailed,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			writeVerifierFile(t, root, ".goforj.yml", test.body)
+			if result := verifySurfaceSource(root, contract); result.Status != test.want {
+				t.Fatalf("result = %#v, want %s", result, test.want)
+			}
+		})
+	}
+}
+
+// TestScheduleRegistrationDiscoveryAcceptsGeneratedWiring verifies schedule registration follows the concrete schedule constructor instead of a generated filename or handler spelling.
+func TestScheduleRegistrationDiscoveryAcceptsGeneratedWiring(t *testing.T) {
+	root := t.TempDir()
+	writeVerifierFile(t, root, "internal/invoices/reconcile_schedule.go", `package invoices
+import (
+ "context"
+ "time"
+)
+type ReconcileSchedule struct{}
+func NewReconcileSchedule() *ReconcileSchedule { return &ReconcileSchedule{} }
+func (*ReconcileSchedule) Interval() (time.Duration, error) { return time.Hour, nil }
+func (*ReconcileSchedule) Handle(context.Context) error { return nil }
+`)
+	writeVerifierFile(t, root, "app/wire/schedules.go", `package wire
+import "project/internal/invoices"
+var appScheduleSet = wire.NewSet(invoices.NewReconcileSchedule)
+`)
+	contract := promotedSourceContract(t, "add-schedule/v1", "schedule-registration")
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("golden registration result = %#v", result)
+	}
+}
+
+// TestScheduleRegistrationDiscoveryAcceptsAlternateAppSchedulesConstruction keeps direct collection construction compatible with generated Wire wiring.
+func TestScheduleRegistrationDiscoveryAcceptsAlternateAppSchedulesConstruction(t *testing.T) {
+	root := t.TempDir()
+	writeVerifierFile(t, root, "internal/invoices/reconcile_schedule.go", `package invoices
+import (
+ "context"
+ "time"
+)
+type ReconcileSchedule struct{}
+func NewReconcileSchedule() *ReconcileSchedule { return &ReconcileSchedule{} }
+func (*ReconcileSchedule) Interval() (time.Duration, error) { return time.Hour, nil }
+func (*ReconcileSchedule) Handle(context.Context) error { return nil }
+`)
+	writeVerifierFile(t, root, "app/recurring.go", `package app
+import (
+ "project/internal/invoices"
+ "project/internal/schedules"
+)
+func buildSchedules() any { return schedules.NewAppSchedules(invoices.NewReconcileSchedule()) }
+`)
+	contract := promotedSourceContract(t, "add-schedule/v1", "schedule-registration")
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("alternate registration result = %#v", result)
+	}
+}
+
+// TestScheduleRegistrationDiscoveryRejectsUnrelatedConstructor prevents an arbitrary constructor from satisfying the schedule registration boundary.
+func TestScheduleRegistrationDiscoveryRejectsUnrelatedConstructor(t *testing.T) {
+	root := t.TempDir()
+	writeVerifierFile(t, root, "internal/invoices/reconcile_schedule.go", `package invoices
+import (
+ "context"
+ "time"
+)
+type ReconcileSchedule struct{}
+func NewReconcileSchedule() *ReconcileSchedule { return &ReconcileSchedule{} }
+func (*ReconcileSchedule) Interval() (time.Duration, error) { return time.Hour, nil }
+func (*ReconcileSchedule) Handle(context.Context) error { return nil }
+func NewUnrelated() any { return nil }
+`)
+	writeVerifierFile(t, root, "app/wire/schedules.go", `package wire
+import "project/internal/invoices"
+var appScheduleSet = wire.NewSet(invoices.NewUnrelated)
+`)
+	contract := promotedSourceContract(t, "add-schedule/v1", "schedule-registration")
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+		t.Fatalf("mutant registration result = %#v, want failure", result)
+	}
+}
+
 // TestSurfaceVerifierScopesRelatedEvidenceToDeclarations prevents unused helpers from satisfying behavior owned by another function.
 func TestSurfaceVerifierScopesRelatedEvidenceToDeclarations(t *testing.T) {
 	root := t.TempDir()
@@ -335,6 +442,44 @@ func Transfer(repository Repository) { repository.WithTransaction(func() { repos
 	}
 	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
 		t.Fatalf("valid result = %#v", result)
+	}
+}
+
+// TestSurfaceVerifierRejectsTransactionContextDetachment preserves cancellation at the service transaction boundary.
+func TestSurfaceVerifierRejectsTransactionContextDetachment(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "service.go")
+	mutant := `package feature
+import "context"
+type Repository struct{}
+func (Repository) WithTransaction(context.Context, func()) {}
+func (Repository) AdjustBalance() {}
+type Service struct{ accounts Repository }
+func (service Service) Transfer(ctx context.Context) { service.accounts.WithTransaction(context.Background(), func() { service.accounts.AdjustBalance() }) }
+`
+	if err := os.WriteFile(path, []byte(mutant), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contract := sourceContract{
+		id:    "transaction",
+		paths: []string{"service.go"},
+		declarations: []declarationContract{{
+			name:           "Transfer",
+			receiver:       "Service",
+			selectorCalls:  []string{"WithTransaction", "AdjustBalance"},
+			forbiddenCalls: []string{"Background"},
+			nestedCalls:    []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}},
+		}},
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+		t.Fatalf("detached context result = %#v, want failure", result)
+	}
+	valid := strings.Replace(mutant, "context.Background()", "ctx", 1)
+	if err := os.WriteFile(path, []byte(valid), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("caller context result = %#v, want pass", result)
 	}
 }
 
