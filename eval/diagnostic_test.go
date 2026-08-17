@@ -35,8 +35,8 @@ func TestRunGuidanceDiagnosticRunsBothIsolatedTreatments(t *testing.T) {
 			t.Fatalf("attempt = %#v", attempt)
 		}
 	}
-	if result.Attempts[0].Result.BaselineTree != result.Attempts[1].Result.BaselineTree {
-		t.Fatalf("paired baselines differ: %#v", result.Attempts)
+	if result.Attempts[0].Result.PreparedTree != result.Attempts[1].Result.PreparedTree {
+		t.Fatalf("paired prepared trees differ: %#v", result.Attempts)
 	}
 	if preparer.resolveCalls != 2 || preparer.prepareCalls != 2 {
 		t.Fatalf("preparer calls = resolve:%d prepare:%d", preparer.resolveCalls, preparer.prepareCalls)
