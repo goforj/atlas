@@ -24,9 +24,12 @@ type fakeCommandRunner struct {
 }
 
 // Open records isolated phases while retaining supervisor files for assertions.
-func (runner *fakeCommandRunner) Open(context.Context, string) (CommandSession, error) {
+func (runner *fakeCommandRunner) Open(_ context.Context, project VerifierProject) (CommandSession, error) {
 	if runner.files == nil {
 		runner.files = make(map[string][]byte)
+	}
+	for _, test := range project.BaselineTests {
+		runner.files[test.Path] = append([]byte(nil), test.Body...)
 	}
 	runner.opens++
 	return runner, nil
@@ -56,7 +59,20 @@ func (runner *fakeCommandRunner) Run(_ context.Context, command []string) (strin
 	if len(command) > 2 && command[1] == "test" && command[2] == "-json" {
 		return "{\"Action\":\"run\",\"Test\":\"TestAtlasInvoiceHTTPBehavior\"}\n{\"Action\":\"pass\",\"Test\":\"TestAtlasInvoiceHTTPBehavior\"}\n", nil
 	}
-	return "ok", nil
+	output := "ok"
+	for path, body := range runner.files {
+		if strings.Contains(filepath.Base(path), "atlas_eval_completion_marker_") && strings.HasSuffix(path, "_test.go") {
+			start := strings.Index(string(body), "ATLAS_SUPERVISOR_COMPLETION_")
+			if start >= 0 {
+				end := start
+				for end < len(body) && (body[end] == '_' || body[end] >= '0' && body[end] <= '9' || body[end] >= 'A' && body[end] <= 'Z' || body[end] >= 'a' && body[end] <= 'z') {
+					end++
+				}
+				output += "\n" + string(body[start:end])
+			}
+		}
+	}
+	return output, nil
 }
 
 // Close releases no resources because the fake session owns no filesystem state.
@@ -81,13 +97,13 @@ func TestAddHTTPControllerVerifierAcceptsIndependentBoundaryShapes(t *testing.T)
 			if err != nil {
 				t.Fatalf("Verify(): %v", err)
 			}
-			if result.FrameworkOutcome.Status != EndpointIneligible {
+			if result.FrameworkOutcome.Status != EndpointPassed {
 				t.Fatalf("framework outcome = %#v; checks = %#v", result.FrameworkOutcome, result.Checks)
 			}
 			if len(runner.commands) != 4 || runner.opens != 4 {
 				t.Fatalf("verifier commands = %#v", runner.commands)
 			}
-			if len(runner.files) != 1 {
+			if len(runner.files) != 2 {
 				t.Fatalf("verifier files = %#v", runner.files)
 			}
 		})
@@ -130,7 +146,7 @@ func TestAddHTTPControllerVerifierBuildsProbeForBothPackageFamilies(t *testing.T
 			if err != nil {
 				t.Fatalf("Verify(): %v", err)
 			}
-			if result.FrameworkOutcome.Status != EndpointIneligible {
+			if result.FrameworkOutcome.Status != EndpointPassed {
 				t.Fatalf("framework outcome = %#v; checks = %#v", result.FrameworkOutcome, result.Checks)
 			}
 			body, exists := runner.files[filepath.FromSlash(test.wantPath)]
@@ -161,7 +177,7 @@ func TestAddHTTPControllerVerifierAcceptsIndependentPackagePlacement(t *testing.
 	if err != nil {
 		t.Fatalf("Verify(): %v", err)
 	}
-	if result.FrameworkOutcome.Status != EndpointIneligible {
+	if result.FrameworkOutcome.Status != EndpointPassed {
 		t.Fatalf("framework outcome = %#v; checks = %#v", result.FrameworkOutcome, result.Checks)
 	}
 }
@@ -187,7 +203,7 @@ var appHTTPControllerSet = wire.NewSet(http.NewInvoiceController)
 	if err != nil {
 		t.Fatalf("Verify(): %v", err)
 	}
-	if result.FrameworkOutcome.Status != EndpointIneligible {
+	if result.FrameworkOutcome.Status != EndpointPassed {
 		t.Fatalf("framework outcome = %#v; checks = %#v", result.FrameworkOutcome, result.Checks)
 	}
 }

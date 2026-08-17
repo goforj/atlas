@@ -15,8 +15,6 @@ import (
 	"text/template"
 )
 
-const invoiceBehaviorIneligibleDetails = "candidate production and the hidden oracle share one process, so successful test completion has no independent provenance"
-
 // invoiceControllerSource retains the semantic controller and its path without imposing the golden package placement.
 type invoiceControllerSource struct {
 	path string
@@ -121,8 +119,8 @@ func TestAtlasInvoiceHTTPBehavior(t *testing.T) {
 `
 
 // runInvoiceBehaviorProbe installs a hidden black-box oracle in a dedicated verifier clone after the agent has stopped.
-func runInvoiceBehaviorProbe(ctx context.Context, runner CommandRunner, root string) (result EndpointResult) {
-	probe, err := resolveInvoiceBehaviorProbe(root)
+func runInvoiceBehaviorProbe(ctx context.Context, runner CommandRunner, project VerifierProject) (result EndpointResult) {
+	probe, err := resolveInvoiceBehaviorProbe(project.Root)
 	if err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
 	}
@@ -130,7 +128,7 @@ func runInvoiceBehaviorProbe(ctx context.Context, runner CommandRunner, root str
 	if err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
 	}
-	session, err := runner.Open(ctx, root)
+	session, err := runner.Open(ctx, project)
 	if err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: fmt.Sprintf("open isolated verifier session: %v", err)}
 	}
@@ -147,16 +145,23 @@ func runInvoiceBehaviorProbe(ctx context.Context, runner CommandRunner, root str
 	}
 	const testName = "TestAtlasInvoiceHTTPBehavior"
 	command := []string{"go", "test", "./" + filepath.ToSlash(probe.relativeDirectory), "-run", "^" + testName + "$", "-count=1"}
-	_, err = session.Run(ctx, command)
-	return invoiceBehaviorExecutionResult(err)
-}
-
-// invoiceBehaviorExecutionResult retains failures as diagnostics without promoting same-process success to authoritative evidence.
-func invoiceBehaviorExecutionResult(err error) EndpointResult {
+	command, marker, err := installSupervisorCompletionMarker(session, supervisorFile{path: relativePath, body: string(body)}, command)
 	if err != nil {
 		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
 	}
-	return EndpointResult{ID: "invoice-behavior", Status: EndpointIneligible, Details: invoiceBehaviorIneligibleDetails}
+	output, err := session.Run(ctx, command)
+	return invoiceBehaviorExecutionResult(output, marker, err)
+}
+
+// invoiceBehaviorExecutionResult accepts diagnostic success only after the supervisor-authored test reaches its completion marker.
+func invoiceBehaviorExecutionResult(output, marker string, err error) EndpointResult {
+	if err != nil {
+		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: err.Error()}
+	}
+	if marker == "" || !strings.Contains(output, marker) {
+		return EndpointResult{ID: "invoice-behavior", Status: EndpointFailed, Details: "supervisor completion marker was not observed"}
+	}
+	return EndpointResult{ID: "invoice-behavior", Status: EndpointPassed}
 }
 
 // resolveInvoiceBehaviorProbe derives only names and placement while keeping expected behavior owned by the verifier contract.

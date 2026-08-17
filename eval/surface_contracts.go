@@ -190,7 +190,14 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "users-application-boundary", paths: []string{"internal/users/*.go"}, identifiers: []string{"User", "Controller"}, identifierChoices: [][]string{{"Service", "UseCase", "Query"}, {"Find", "Get", "Lookup"}, {"Show", "Get"}}, forbiddenCalls: []string{"TODO"}, stringLiterals: []string{"/users/:id"}, declarations: []declarationContract{{name: "Routes", receiver: "Controller", selectorCalls: []string{"NewRoute"}}, {nameChoices: []string{"Show", "Get"}, receiver: "Controller", selectorCalls: []string{"Param", "JSON"}, forbiddenCalls: []string{"Background"}}}},
 				{id: "users-registration", paths: []string{"app/routes.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewController"}, identifierChoices: [][]string{{"NewService", "NewUseCase", "NewQuery"}}},
 			},
-			commands: append(standardSurfaceCommands(), commandContract{id: "users-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/users/:id"}),
+			commands: append(standardSurfaceCommands(commandContract{
+				id:        "json-api-behavior",
+				arguments: []string{"go", "test", "./internal/users", "-run", "^TestAtlasJSONAPIFeatureBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{
+					path: "internal/users/atlas_eval_json_api_test.go",
+					body: jsonAPIFeatureBehaviorProbe,
+				}},
+			}), commandContract{id: "users-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/users/:id"}),
 		},
 		{
 			id:             "create-additional-app/v1",
@@ -208,7 +215,11 @@ func promotedSurfaceContracts() []surfaceContract {
 			sources: []sourceContract{
 				{id: "application-readiness-hook", paths: []string{"app/lifecycle.go"}, identifiers: []string{"LifecycleRegistry", "NewLifecycleRegistry", "Service"}, forbiddenCalls: []string{"TODO"}, text: []string{"runtime.BeforeStartup"}, declarations: []declarationContract{{name: "Register", receiver: "LifecycleRegistry", selectorCalls: []string{"On"}}, {name: "BeforeStartup", receiver: "LifecycleRegistry", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:              "application-readiness-behavior",
+				arguments:       []string{"go", "test", "./app", "-run", "^TestAtlasLifecycleReadinessBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{path: "app/atlas_eval_lifecycle_readiness_test.go", body: lifecycleReadinessBehaviorProbe}},
+			}),
 		},
 		{
 			id:                  "add-outbound-http-integration/v1",
@@ -218,7 +229,11 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "typed-http-client", paths: []string{"internal/taxrates/*.go"}, identifiers: []string{"Rate", "Client", "NewClient"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Find", receiver: "Client", identifiers: []string{"ctx"}, forbiddenCalls: []string{"Background"}}}},
 				{id: "http-client-provider", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"provideTaxRateClient", "NewClient"}, selectorCalls: []string{"Get"}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:              "tax-rate-http-behavior",
+				arguments:       []string{"go", "test", "./internal/taxrates", "-run", "^TestAtlasTaxRateHTTPBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{path: "internal/taxrates/atlas_eval_http_behavior_test.go", body: taxRateHTTPBehaviorProbe}},
+			}),
 		},
 		{
 			id:                  "add-validated-write-endpoint/v1",
@@ -280,7 +295,11 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "receipt-mail-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewReceiptMailer"}},
 			},
 			forbiddenText: []textExclusion{{id: "no-provider-sdk", paths: []string{"internal/invoices/receipt_mailer.go"}, text: "smtp"}},
-			commands:      standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:              "receipt-mail-behavior",
+				arguments:       []string{"go", "test", "./internal/invoices", "-run", "^TestAtlasReceiptMailBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{path: "internal/invoices/atlas_eval_receipt_mail_test.go", body: receiptMailBehaviorProbe}},
+			}),
 		},
 		{
 			id:             "protect-route-with-auth/v1",
@@ -288,7 +307,10 @@ func promotedSurfaceContracts() []surfaceContract {
 			sources: []sourceContract{
 				{id: "generated-auth-composition", paths: []string{"app/routes.go"}, identifiers: []string{"publicRoutes", "protectedRoutes", "invoicesController", "authService", "RequireAuth"}, selectorCalls: []string{"NewRouteGroup"}, assignments: []assignmentContract{{name: "publicRoutes", forbiddenIdentifiers: []string{"invoicesController"}}, {name: "protectedRoutes", identifiers: []string{"invoicesController"}, selectorCalls: []string{"Routes"}}}},
 			},
-			commands: append(standardSurfaceCommands(), commandContract{id: "protected-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/invoices/:id"}),
+			commands: append(standardSurfaceCommands(),
+				commandContract{id: "protected-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/invoices/:id"},
+				commandContract{id: "protected-middleware-visible", arguments: []string{"forj", "route:list"}, contains: "RequireAuth"},
+			),
 		},
 		{
 			id:             "add-cached-repository/v1",
@@ -314,7 +336,11 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "upload-boundary", paths: []string{"internal/uploads/service.go", "internal/uploads/controller.go"}, identifiers: []string{"StoreInput", "StoredUpload", "Service", "Controller", "Store", "Routes"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"/uploads"}, declarations: []declarationContract{{name: "Store", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"WithContext", "Put"}}, {name: "Store", receiver: "Controller", selectorCalls: []string{"Bind", "Store"}}, {name: "Routes", receiver: "Controller", selectorCalls: []string{"NewRoute"}}}},
 				{id: "uploads-storage-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}, selectorCalls: []string{"Uploads"}},
 			},
-			commands: append(standardSurfaceCommands(), commandContract{id: "uploads-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/uploads"}),
+			commands: append(standardSurfaceCommands(commandContract{
+				id:              "upload-workflow-behavior",
+				arguments:       []string{"go", "test", "./internal/uploads", "-run", "^TestAtlasUploadWorkflowBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{path: "internal/uploads/atlas_eval_upload_workflow_test.go", body: uploadWorkflowBehaviorProbe}},
+			}), commandContract{id: "uploads-route-visible", arguments: []string{"forj", "route:list"}, contains: "/api/v1/uploads"}),
 		},
 		{
 			id:                  "publish-domain-event/v1",
@@ -325,7 +351,11 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "domain-event-publication", paths: []string{"internal/users/events.go", "internal/users/service.go"}, identifiers: []string{"UserEvents", "UserEventPublisher", "PublishCreated"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "PublishCreated", receiver: "UserEventPublisher", identifiers: []string{"ctx"}, selectorCalls: []string{"Publish", "WithContext"}}}},
 				{id: "event-reaction", paths: []string{"internal/notifications/subscribers.go", "app/lifecycle.go"}, identifiers: []string{"Subscribers", "Register", "Startup"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Register", receiver: "Subscribers", selectorCalls: []string{"Subscribe"}}, {name: "Startup", receiver: "LifecycleRegistry", selectorCalls: []string{"Register"}}}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:              "domain-event-behavior",
+				arguments:       []string{"go", "test", "./internal/notifications", "-run", "^TestAtlasDomainEventBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{path: "internal/notifications/atlas_eval_domain_event_test.go", body: domainEventBehaviorProbe}},
+			}),
 		},
 		{
 			id:                  "dispatch-event-followup-job/v1",
@@ -336,7 +366,11 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "event-job-boundary", paths: []string{"internal/notifications/service.go"}, identifiers: []string{"HandleUserCreated", "ReportQueue"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "HandleUserCreated", receiver: "Service", selectorCalls: []string{"Queue"}}}},
 				{id: "report-job-registration", paths: []string{"app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewGenerateJob", "NewService"}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:              "event-followup-job-behavior",
+				arguments:       []string{"go", "test", "./internal/reports", "-run", "^TestAtlasEventFollowupJobBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{path: "internal/reports/atlas_eval_event_followup_job_test.go", body: eventFollowupJobBehaviorProbe}},
+			}),
 		},
 		{
 			id:             "schedule-existing-job/v1",
@@ -346,7 +380,11 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "daily-target-repository", paths: []string{"internal/users/*.go"}, identifiers: []string{"ListDailyReportTargets"}},
 				{id: "daily-schedule-registration", paths: []string{"app/wire/inject_schedules_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewDailySchedule", "NewDailyRunner"}},
 			},
-			commands: standardSurfaceCommands(),
+			commands: standardSurfaceCommands(commandContract{
+				id:              "daily-schedule-behavior",
+				arguments:       []string{"go", "test", "./internal/reports", "-run", "^TestAtlasDailyScheduleBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{path: "internal/reports/atlas_eval_daily_schedule_test.go", body: dailyScheduleBehaviorProbe}},
+			}),
 		},
 	}
 }

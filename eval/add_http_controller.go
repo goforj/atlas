@@ -17,7 +17,13 @@ const verifierCleanupTimeout = 10 * time.Second
 // CommandRunner opens verifier-owned black-box checks in an isolated clone of the sealed candidate tree.
 type CommandRunner interface {
 	// Open creates one disposable verifier session from sealed candidate evidence.
-	Open(context.Context, string) (CommandSession, error)
+	Open(context.Context, VerifierProject) (CommandSession, error)
+}
+
+// VerifierProject combines the sealed candidate with immutable pre-agent tests restored into its private clone.
+type VerifierProject struct {
+	Root          string
+	BaselineTests []TrustedTestFile
 }
 
 // CommandSession executes a bounded sequence against one disposable candidate clone.
@@ -68,10 +74,11 @@ func (verifier *AddHTTPControllerVerifier) Verify(ctx context.Context, input Ver
 	checks := make([]EndpointResult, 0, 10)
 	checks = append(checks, inspectInvoiceController(input.ProjectRoot)...)
 	checks = append(checks, ownershipChecks(input.Changes)...)
-	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "project-compile", []string{"go", "test", "./..."}, ""))
-	checks = append(checks, runInvoiceBehaviorProbe(ctx, verifier.runner, input.ProjectRoot))
-	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "app-build", []string{"forj", "build"}, ""))
-	checks = append(checks, verifier.runIsolatedCheck(ctx, input.ProjectRoot, "route-visible", []string{"forj", "route:list"}, "/api/v1/invoices/:id"))
+	project := VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}
+	checks = append(checks, verifier.runIsolatedCheck(ctx, project, "project-compile", []string{"go", "test", "./..."}, ""))
+	checks = append(checks, runInvoiceBehaviorProbe(ctx, verifier.runner, project))
+	checks = append(checks, verifier.runIsolatedCheck(ctx, project, "app-build", []string{"forj", "build"}, ""))
+	checks = append(checks, verifier.runIsolatedCheck(ctx, project, "route-visible", []string{"forj", "route:list"}, "/api/v1/invoices/:id"))
 
 	failed := 0
 	ineligible := 0
@@ -100,8 +107,8 @@ func (verifier *AddHTTPControllerVerifier) Verify(ctx context.Context, input Ver
 }
 
 // runIsolatedCheck gives every executable phase its own candidate clone and discards all writes before another phase starts.
-func (verifier *AddHTTPControllerVerifier) runIsolatedCheck(ctx context.Context, root, id string, command []string, contains string) (result EndpointResult) {
-	session, err := verifier.runner.Open(ctx, root)
+func (verifier *AddHTTPControllerVerifier) runIsolatedCheck(ctx context.Context, project VerifierProject, id string, command []string, contains string) (result EndpointResult) {
+	session, err := verifier.runner.Open(ctx, project)
 	if err != nil {
 		return EndpointResult{ID: id, Status: EndpointFailed, Details: fmt.Sprintf("open isolated verifier session: %v", err)}
 	}

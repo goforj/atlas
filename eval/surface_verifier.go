@@ -2,6 +2,8 @@ package eval
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -10,6 +12,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // surfaceContract describes one framework surface without turning evaluation manifests into executable policy.
@@ -114,7 +118,7 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 	}
 	checks := []EndpointResult{verifySurfaceOwnership(input.Changes, verifier.contract.allowedChanges)}
 	if len(verifier.contract.qualityTestPatterns) > 0 {
-		checks = append(checks, verifyCandidateTestQuality(input.Changes, verifier.contract.qualityTestPatterns))
+		checks = append(checks, verifyCandidateTestQuality(input.ProjectRoot, input.Changes, verifier.contract.qualityTestPatterns))
 	}
 	for _, contract := range verifier.contract.sources {
 		checks = append(checks, verifySurfaceSource(input.ProjectRoot, contract))
@@ -130,7 +134,7 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		}, nil
 	}
 	for _, contract := range verifier.contract.commands {
-		checks = append(checks, runIsolatedCommand(ctx, verifier.runner, input.ProjectRoot, contract))
+		checks = append(checks, runIsolatedCommand(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}, contract))
 	}
 	framework := summarizeSurfaceChecks(verifier.ID(), checks)
 	return VerificationResult{
@@ -151,7 +155,7 @@ func surfaceChecksFailed(checks []EndpointResult) bool {
 }
 
 // verifyCandidateTestQuality reports whether the candidate authored focused tests without trusting those tests as outcome evidence.
-func verifyCandidateTestQuality(changes []ProjectChange, patterns []string) EndpointResult {
+func verifyCandidateTestQuality(root string, changes []ProjectChange, patterns []string) EndpointResult {
 	for _, change := range changes {
 		candidatePath := filepath.ToSlash(change.Path)
 		if change.After.Kind == "" || !strings.HasSuffix(candidatePath, "_test.go") {
@@ -160,7 +164,17 @@ func verifyCandidateTestQuality(changes []ProjectChange, patterns []string) Endp
 		for _, pattern := range patterns {
 			matched, _ := filepath.Match(pattern, candidatePath)
 			if matched {
-				return EndpointResult{ID: "focused-tests-added", Kind: RequirementQuality, Status: EndpointPassed}
+				file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(root, filepath.FromSlash(candidatePath)), nil, 0)
+				if err != nil {
+					return EndpointResult{ID: "focused-tests-added", Kind: RequirementQuality, Status: EndpointFailed, Details: fmt.Sprintf("parse focused test %q: %v", candidatePath, err)}
+				}
+				for _, declaration := range file.Decls {
+					function, ok := declaration.(*ast.FuncDecl)
+					if ok && isGoTestFunction(file, function) {
+						return EndpointResult{ID: "focused-tests-added", Kind: RequirementQuality, Status: EndpointPassed}
+					}
+				}
+				return EndpointResult{ID: "focused-tests-added", Kind: RequirementQuality, Status: EndpointFailed, Details: fmt.Sprintf("focused test %q does not declare a Go test function", candidatePath)}
 			}
 		}
 	}
@@ -170,6 +184,48 @@ func verifyCandidateTestQuality(changes []ProjectChange, patterns []string) Endp
 		Status:  EndpointFailed,
 		Details: "candidate did not add or update a focused test in the evaluated surface",
 	}
+}
+
+// isGoTestFunction recognizes the testing package through its actual import name so helpers cannot impersonate focused tests.
+func isGoTestFunction(file *ast.File, function *ast.FuncDecl) bool {
+	if function.Recv != nil || !isGoTestName(function.Name.Name) || function.Type.Params == nil || len(function.Type.Params.List) != 1 || len(function.Type.Params.List[0].Names) > 1 {
+		return false
+	}
+	testingName := ""
+	for _, imported := range file.Imports {
+		if imported.Path.Value != `"testing"` {
+			continue
+		}
+		if imported.Name == nil {
+			testingName = "testing"
+		} else if imported.Name.Name != "." && imported.Name.Name != "_" {
+			testingName = imported.Name.Name
+		}
+		break
+	}
+	pointer, ok := function.Type.Params.List[0].Type.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	selector, ok := pointer.X.(*ast.SelectorExpr)
+	if !ok || selector.Sel.Name != "T" {
+		return false
+	}
+	packageName, ok := selector.X.(*ast.Ident)
+	return ok && testingName != "" && packageName.Name == testingName
+}
+
+// isGoTestName follows the Go tool's naming boundary so ordinary helpers such as Tester are not reported as runnable tests.
+func isGoTestName(name string) bool {
+	if !strings.HasPrefix(name, "Test") {
+		return false
+	}
+	suffix := name[len("Test"):]
+	if suffix == "" {
+		return true
+	}
+	next, _ := utf8.DecodeRuneInString(suffix)
+	return !unicode.IsLower(next)
 }
 
 // verifySurfaceTextAbsent protects an owning App or generated boundary from cross-surface registration.
@@ -565,8 +621,8 @@ func matchingSurfacePaths(root string, patterns []string) ([]string, error) {
 }
 
 // runIsolatedCommand executes one check in a private clone and always destroys its writable state.
-func runIsolatedCommand(ctx context.Context, runner CommandRunner, root string, contract commandContract) (result EndpointResult) {
-	session, err := runner.Open(ctx, root)
+func runIsolatedCommand(ctx context.Context, runner CommandRunner, project VerifierProject, contract commandContract) (result EndpointResult) {
+	session, err := runner.Open(ctx, project)
 	if err != nil {
 		return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("open isolated verifier session: %v", err)}
 	}
@@ -582,7 +638,50 @@ func runIsolatedCommand(ctx context.Context, runner CommandRunner, root string, 
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("install supervisor probe: %v", err)}
 		}
 	}
-	return runCheck(ctx, session, contract.id, contract.arguments, contract.contains)
+	arguments := append([]string(nil), contract.arguments...)
+	contains := contract.contains
+	if len(contract.supervisorFiles) > 0 {
+		arguments, contains, err = installSupervisorCompletionMarker(session, contract.supervisorFiles[0], arguments)
+		if err != nil {
+			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("install supervisor completion marker: %v", err)}
+		}
+	}
+	return runCheck(ctx, session, contract.id, arguments, contains)
+}
+
+// installSupervisorCompletionMarker rejects bare successful exits; adversarial anti-forgery remains the authoritative backend's responsibility.
+func installSupervisorCompletionMarker(session CommandSession, source supervisorFile, arguments []string) ([]string, string, error) {
+	file, err := parser.ParseFile(token.NewFileSet(), source.path, source.body, parser.PackageClauseOnly)
+	if err != nil {
+		return nil, "", fmt.Errorf("parse supervisor probe package: %w", err)
+	}
+	random := make([]byte, 16)
+	if _, err := rand.Read(random); err != nil {
+		return nil, "", fmt.Errorf("generate completion nonce: %w", err)
+	}
+	nonce := hex.EncodeToString(random)
+	marker := "ATLAS_SUPERVISOR_COMPLETION_" + nonce
+	functionName := "TestAtlasSupervisorCompletionMarker" + nonce
+	body := fmt.Sprintf("package %s\n\nimport (\n\t\"fmt\"\n\t\"testing\"\n)\n\n// %s proves the supervisor-owned test body executed.\nfunc %s(t *testing.T) {\n\tfmt.Println(%q)\n}\n", file.Name.Name, functionName, functionName, marker)
+	markerPath := filepath.Join(filepath.Dir(source.path), "atlas_eval_completion_marker_"+nonce+"_test.go")
+	if err := session.WriteFile(markerPath, []byte(body)); err != nil {
+		return nil, "", err
+	}
+	arguments = append([]string(nil), arguments...)
+	foundRun := false
+	for index := 0; index+1 < len(arguments); index++ {
+		if arguments[index] == "-run" {
+			original := strings.Trim(arguments[index+1], "^$")
+			arguments[index+1] = "^(" + original + "|" + functionName + ")$"
+			foundRun = true
+			break
+		}
+	}
+	if !foundRun {
+		arguments = append(arguments, "-run", "^"+functionName+"$")
+	}
+	arguments = append(arguments, "-v")
+	return arguments, marker, nil
 }
 
 // summarizeSurfaceChecks produces one endpoint without concealing individual failures.

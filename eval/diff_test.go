@@ -3,6 +3,7 @@ package eval
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -122,6 +123,27 @@ func TestSnapshotProjectForDiffRejectsOversizedTrees(t *testing.T) {
 	}
 	if _, _, err := snapshotProjectForDiff(project); err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("snapshotProjectForDiff() error = %v, want project-size rejection", err)
+	}
+}
+
+// TestSnapshotProjectForDiffReservesTrustedTestContent keeps established tests available even after ordinary diff retention is exhausted.
+func TestSnapshotProjectForDiffReservesTrustedTestContent(t *testing.T) {
+	project := t.TempDir()
+	large := strings.Repeat("x", maxDiffSourceFileSize)
+	for index := 0; index < maxDiffRetainedContentSize/maxDiffSourceFileSize; index++ {
+		writeDiffFixture(t, project, "ordinary-"+strconv.Itoa(index)+".txt", large)
+	}
+	writeDiffFixture(t, project, "z_feature_test.go", "package feature\n")
+	snapshot, _, err := snapshotProjectForDiff(project)
+	if err != nil {
+		t.Fatalf("snapshotProjectForDiff returned error: %v", err)
+	}
+	tests, err := trustedTestsFromSnapshot(snapshot)
+	if err != nil {
+		t.Fatalf("trustedTestsFromSnapshot returned error: %v", err)
+	}
+	if len(tests) != 1 || tests[0].Path != "z_feature_test.go" || string(tests[0].Body) != "package feature\n" {
+		t.Fatalf("trusted tests = %#v", tests)
 	}
 }
 
