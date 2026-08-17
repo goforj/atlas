@@ -13,7 +13,7 @@ func Compose(p project.Project) string {
 
 	var out strings.Builder
 	out.WriteString("# GoForj Atlas\n\n")
-	out.WriteString("Use Atlas and GoForj conventions when editing this project.\n\n")
+	out.WriteString("Use local Project evidence and GoForj's supported workflows before inventing framework conventions.\n\n")
 	out.WriteString("## Project Shape\n\n")
 	fmt.Fprintf(&out, "- project: `%s`\n", p.Name)
 	fmt.Fprintf(&out, "- GoForj version: `%s`\n", fallback(p.GoForjVersion, "unknown"))
@@ -22,11 +22,23 @@ func Compose(p project.Project) string {
 	out.WriteString("- named apps use `app/<name>/` and `cmd/<name>/main.go`\n")
 	out.WriteString("- shared implementation and domain code live in `internal/`\n\n")
 
-	out.WriteString("## Working Rules\n\n")
-	out.WriteString("- Prefer `forj make:*` for framework scaffolding when a matching command exists.\n")
-	out.WriteString("- Use `forj <app> make:*` when generated code belongs to a named app.\n")
-	out.WriteString("- Keep business logic package-scoped under `internal/`; do not move domain code into `app/`.\n")
-	out.WriteString("- Update app registration and Wire files through the selected app's composition points.\n")
+	out.WriteString("## Framework Workflow\n\n")
+	out.WriteString("- Inspect `.goforj.yml`, the owning App, nearby packages, and `forj` command help before changing framework structure.\n")
+	out.WriteString("- Before hand-writing a controller, command, job, schedule, event, subscriber, model, migration, or named queue, use the matching `forj make:*` generator when the artifact should participate in App registration.\n")
+	out.WriteString("- The default App uses `forj make:<artifact> <name>`. An additional App uses `forj <app> make:<artifact> <name>`, for example `forj admin make:controller reports`.\n")
+	out.WriteString("- After generation, inspect the generated file and every registration or Wire file changed by the command before adding behavior. Never edit `wire_gen.go`; regenerate Wire through GoForj.\n")
+	out.WriteString("- If an artifact intentionally should not be registered, inspect generator help and local conventions first, then use a manual implementation only when that ownership choice is clear.\n\n")
+
+	out.WriteString("## Ownership\n\n")
+	out.WriteString("- Keep `app/` focused on App composition and transport registration. Put shared implementation and domain behavior in focused packages under `internal/`.\n")
+	out.WriteString("- Keep controllers, commands, jobs, and schedules thin; invoke services for application behavior.\n")
+	out.WriteString("- Keep database access behind repositories or equivalent domain ports, and propagate cancellation through connection-backed work.\n")
+	out.WriteString("- Treat generated registration points as in-use framework code: preserve the generated integration unless the requested design deliberately replaces it.\n\n")
+
+	out.WriteString("## Evidence And Validation\n\n")
+	out.WriteString("- Prefer local configuration, generated source, CLI inspection commands, and focused tests as evidence for how this Project works.\n")
+	out.WriteString("- Use Atlas project inspection and version-aware documentation when available. Otherwise consult the documentation matching the Project's GoForj version at `https://goforj.dev`; ask before inventing a convention when local and documented evidence are insufficient.\n")
+	out.WriteString("- Run focused tests for changed packages, then the Project's relevant GoForj build or broader test command.\n")
 	out.WriteString("- Keep MCP and Atlas operations read-only unless an explicit write feature is added later.\n")
 	out.WriteString("- For GoForj framework validation renders, use `/tmp`, never the GoForj repo directory.\n\n")
 	out.WriteString("## Capturing Project Knowledge\n\n")

@@ -1,0 +1,151 @@
+package eval
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+// TestArtifactStoreRedactsBeforePersistenceAndAuthenticatesFiles verifies the supervisor evidence boundary end to end.
+func TestArtifactStoreRedactsBeforePersistenceAndAuthenticatesFiles(t *testing.T) {
+	root := t.TempDir()
+	key := []byte("0123456789abcdef0123456789abcdef")
+	secret := "provider-secret-canary"
+	store, err := NewArtifactStore(root, key, NewRedactor([]string{secret}))
+	if err != nil {
+		t.Fatalf("NewArtifactStore(): %v", err)
+	}
+	artifacts, err := store.Begin("attempt-01")
+	if err != nil {
+		t.Fatalf("Begin(): %v", err)
+	}
+	if err := artifacts.AppendEvent(Event{
+		Sequence: 1,
+		Kind:     EventMessage,
+		Time:     time.Unix(1_700_000_000, 0).UTC(),
+		Fields: map[string]string{
+			"message":        "Authorization: " + secret,
+			"provider_token": secret,
+		},
+	}); err != nil {
+		t.Fatalf("AppendEvent(): %v", err)
+	}
+	if err := artifacts.WriteText("transcript.redacted.txt", "\x1b[31mBearer "+secret+"\x1b[0m\u202esecret"); err != nil {
+		t.Fatalf("WriteText(): %v", err)
+	}
+	result := AttemptResult{AttemptID: "attempt-01", SecondaryFailures: []SecondaryFailure{{Phase: "provider", Message: "token=" + secret}}}
+	if err := artifacts.WriteJSON("run.json", result); err != nil {
+		t.Fatalf("WriteJSON(): %v", err)
+	}
+	manifest, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final")
+	if err != nil {
+		t.Fatalf("Finalize(): %v", err)
+	}
+	if manifest.Signature == "" || len(manifest.Files) != 3 {
+		t.Fatalf("artifact manifest = %#v", manifest)
+	}
+	directory := filepath.Join(root, "attempt-01")
+	if _, err := VerifyArtifactManifest(directory, key); err != nil {
+		t.Fatalf("VerifyArtifactManifest(): %v", err)
+	}
+	if err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.IsDir() {
+			return walkErr
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(body), secret) || strings.Contains(string(body), "\x1b") || strings.Contains(string(body), "\u202e") {
+			t.Fatalf("unsafe evidence persisted in %s: %q", path, body)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(directory)
+	if err != nil {
+		t.Fatalf("stat artifact directory: %v", err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("artifact directory permissions = %o, want 700", info.Mode().Perm())
+	}
+}
+
+// TestArtifactStoreRejectsAgentControlledPaths keeps artifact writes on a fixed supervisor-owned surface.
+func TestArtifactStoreRejectsAgentControlledPaths(t *testing.T) {
+	store, err := NewArtifactStore(t.TempDir(), []byte("0123456789abcdef0123456789abcdef"), NewRedactor(nil))
+	if err != nil {
+		t.Fatalf("NewArtifactStore(): %v", err)
+	}
+	if _, err := store.Begin("../escape"); err == nil {
+		t.Fatal("Begin() accepted a traversal attempt ID")
+	}
+	artifacts, err := store.Begin("attempt-02")
+	if err != nil {
+		t.Fatalf("Begin(): %v", err)
+	}
+	if err := artifacts.WriteText("../outside", "content"); err == nil {
+		t.Fatal("WriteText() accepted an arbitrary path")
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+		t.Fatalf("Finalize(): %v", err)
+	}
+}
+
+// TestAttemptArtifactsRejectsNonMonotonicEvents keeps retained timelines unambiguous.
+func TestAttemptArtifactsRejectsNonMonotonicEvents(t *testing.T) {
+	store, err := NewArtifactStore(t.TempDir(), []byte("0123456789abcdef0123456789abcdef"), NewRedactor(nil))
+	if err != nil {
+		t.Fatalf("NewArtifactStore(): %v", err)
+	}
+	artifacts, err := store.Begin("attempt-04")
+	if err != nil {
+		t.Fatalf("Begin(): %v", err)
+	}
+	if err := artifacts.AppendEvent(Event{Sequence: 2, Kind: EventMessage}); err != nil {
+		t.Fatalf("AppendEvent(): %v", err)
+	}
+	if err := artifacts.AppendEvent(Event{Sequence: 2, Kind: EventMessage}); err == nil || !strings.Contains(err.Error(), "must be greater") {
+		t.Fatalf("AppendEvent() error = %v, want sequence rejection", err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+		t.Fatalf("Finalize(): %v", err)
+	}
+}
+
+// TestVerifyArtifactManifestDetectsTampering proves retained evidence cannot change silently.
+func TestVerifyArtifactManifestDetectsTampering(t *testing.T) {
+	root := t.TempDir()
+	key := []byte("0123456789abcdef0123456789abcdef")
+	store, err := NewArtifactStore(root, key, NewRedactor(nil))
+	if err != nil {
+		t.Fatalf("NewArtifactStore(): %v", err)
+	}
+	artifacts, err := store.Begin("attempt-03")
+	if err != nil {
+		t.Fatalf("Begin(): %v", err)
+	}
+	if err := artifacts.WriteText("summary.txt", "original"); err != nil {
+		t.Fatalf("WriteText(): %v", err)
+	}
+	if _, err := artifacts.Finalize("sha256:plan", "sha256:baseline", "sha256:final"); err != nil {
+		t.Fatalf("Finalize(): %v", err)
+	}
+	directory := filepath.Join(root, "attempt-03")
+	if err := os.WriteFile(filepath.Join(directory, "summary.txt"), []byte("tampered"), 0o600); err != nil {
+		t.Fatalf("tamper with artifact: %v", err)
+	}
+	if _, err := VerifyArtifactManifest(directory, key); err == nil || !strings.Contains(err.Error(), "do not match") {
+		t.Fatalf("VerifyArtifactManifest() error = %v, want tamper detection", err)
+	}
+}
+
+// TestNewArtifactStoreRequiresAuthenticationKey prevents accidentally unsigned diagnostic evidence.
+func TestNewArtifactStoreRequiresAuthenticationKey(t *testing.T) {
+	if _, err := NewArtifactStore(t.TempDir(), []byte("short"), NewRedactor(nil)); err == nil {
+		t.Fatal("NewArtifactStore() accepted a short authentication key")
+	}
+}
