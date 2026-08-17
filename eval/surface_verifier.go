@@ -96,6 +96,7 @@ type commandContract struct {
 	supervisorFiles []supervisorFile
 	probe           func(context.Context, CommandRunner, VerifierProject) EndpointResult
 	standard        bool
+	standardBuilds  [][]string
 }
 
 // readableCommandSession exposes candidate-derived files from a verifier-owned clone without expanding the public command-session contract.
@@ -118,12 +119,12 @@ func verifyWireOutputParity() func(context.Context, CommandRunner, VerifierProje
 				result = EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("close isolated verifier session: %v", closeErr)}
 			}
 		}()
-		return verifyWireOutputParityInSession(ctx, session)
+		return verifyWireOutputParityInSession(ctx, session, defaultWireBuildCommands())
 	}
 }
 
 // verifyWireOutputParityInSession keeps regeneration and compilation in one private clone so the latter can reuse the former's build cache.
-func verifyWireOutputParityInSession(ctx context.Context, session CommandSession) EndpointResult {
+func verifyWireOutputParityInSession(ctx context.Context, session CommandSession, buildCommands [][]string) EndpointResult {
 	reader, ok := session.(readableCommandSession)
 	if !ok {
 		return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: "isolated verifier session cannot read regenerated Wire output"}
@@ -143,8 +144,10 @@ func verifyWireOutputParityInSession(ctx context.Context, session CommandSession
 		}
 		before[path] = sha256.Sum256(body)
 	}
-	if _, err := session.Run(ctx, []string{"forj", "build"}); err != nil {
-		return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("regenerate Wire through supported build path: %v", err)}
+	for _, command := range buildCommands {
+		if _, err := session.Run(ctx, command); err != nil {
+			return EndpointResult{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("regenerate Wire through supported build path %q: %v", strings.Join(command, " "), err)}
+		}
 	}
 	afterPaths, listErr := reader.FilesNamed("wire_gen.go")
 	if listErr != nil {
@@ -217,7 +220,7 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 	}
 	for _, contract := range verifier.contract.commands {
 		if contract.standard {
-			checks = append(checks, runStandardProjectChecks(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests})...)
+			checks = append(checks, runStandardProjectChecks(ctx, verifier.runner, VerifierProject{Root: input.ProjectRoot, BaselineTests: input.BaselineTests}, contract.standardBuilds)...)
 			continue
 		}
 		if contract.probe != nil {
@@ -235,7 +238,7 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 }
 
 // runStandardProjectChecks proves generated parity and compilation in one isolated phase without sharing state with hidden probes.
-func runStandardProjectChecks(ctx context.Context, runner CommandRunner, project VerifierProject) (checks []EndpointResult) {
+func runStandardProjectChecks(ctx context.Context, runner CommandRunner, project VerifierProject, buildCommands [][]string) (checks []EndpointResult) {
 	session, err := runner.Open(ctx, project)
 	if err != nil {
 		return []EndpointResult{{ID: "wire-output-parity", Status: EndpointFailed, Details: fmt.Sprintf("open isolated verifier session: %v", err)}}
@@ -247,7 +250,7 @@ func runStandardProjectChecks(ctx context.Context, runner CommandRunner, project
 			checks = append(checks, EndpointResult{ID: "project-compile", Status: EndpointFailed, Details: fmt.Sprintf("close isolated verifier session: %v", closeErr)})
 		}
 	}()
-	parity := verifyWireOutputParityInSession(ctx, session)
+	parity := verifyWireOutputParityInSession(ctx, session, buildCommands)
 	checks = append(checks, parity)
 	if parity.Status != EndpointPassed {
 		return checks

@@ -208,7 +208,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "statuspage-entrypoint", paths: []string{"cmd/statuspage/main.go"}, declarations: []declarationContract{{name: "main", selectorCalls: []string{"LaunchApplication"}}}},
 				{id: "statuspage-app-boundary", paths: []string{"app/statuspage/routes.go", "app/statuspage/wire/*.go"}, identifiers: []string{"ProvideRoutes", "InitializeApplication"}},
 			},
-			commands: append(standardSurfaceCommands(), commandContract{id: "statuspage-build", arguments: []string{"forj", "statuspage", "build"}}),
+			commands: standardSurfaceCommandsWithBuilds([][]string{{"forj", "build"}, {"forj", "statuspage", "build"}}),
 		},
 		{
 			id:                  "add-app-lifecycle-hook/v1",
@@ -459,8 +459,18 @@ func TestAtlasRequireTokenBehavior(t *testing.T) {
 
 // standardSurfaceCommands proves the complete Project after source-level checks pass.
 func standardSurfaceCommands(additional ...commandContract) []commandContract {
+	return standardSurfaceCommandsWithBuilds(defaultWireBuildCommands(), additional...)
+}
+
+// standardSurfaceCommandsWithBuilds regenerates every App owned by a surface before sharing that private phase with compilation.
+func standardSurfaceCommandsWithBuilds(builds [][]string, additional ...commandContract) []commandContract {
 	commands := []commandContract{
-		{standard: true},
+		{standard: true, standardBuilds: builds},
 	}
 	return append(commands, additional...)
+}
+
+// defaultWireBuildCommands returns the supported regeneration path for the default App.
+func defaultWireBuildCommands() [][]string {
+	return [][]string{{"forj", "build"}}
 }
