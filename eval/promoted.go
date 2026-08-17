@@ -27,10 +27,10 @@ func PromotedWorkflows() []WorkflowExpectation {
 		{
 			ID: "goforj-model-relationships/v1",
 			Generators: []GeneratorRequirement{
-				{ID: "generate-post-model", Arguments: []string{"make:model", "posts", "--package", "content"}},
-				{ID: "generate-user-model", Arguments: []string{"make:model", "users", "--package", "content"}},
+				{ID: "generate-post-model", Arguments: []string{"make:model", "posts"}},
+				{ID: "generate-user-model", Arguments: []string{"make:model", "users"}},
 			},
-			Requirements: []WorkflowRequirement{qualityInspection("inspect-related-schema", "Inspect the related tables and explicit relationship contract before generating models.", ".db-relationships.yaml", "migrations/**", "internal/content/**")},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-related-schema", "Inspect the related tables and explicit relationship contract before generating models.", ".db-relationships.yaml", "migrations/**", "internal/content/**", "internal/models/**")},
 		},
 		promotedGeneratorWorkflow("goforj-create-additional-app/v1", "generate-statuspage-app", "make:app", "statuspage", "--components", "web-api", "--dev-run", "run"),
 		{

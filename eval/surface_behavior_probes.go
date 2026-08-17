@@ -30,6 +30,9 @@ func TestAtlasReceiptJobBehavior(t *testing.T) {
 	if err := job.Queue(context.Background(), ReceiptJobPayload{InvoiceID: "inv-42"}); err != nil {
 		t.Fatalf("job.Queue(): %v", err)
 	}
+	if err := job.Queue(context.Background(), ReceiptJobPayload{InvoiceID: "missing"}); err == nil {
+		t.Fatal("job.Queue() ignored the payload invoice identity")
+	}
 }
 `
 
