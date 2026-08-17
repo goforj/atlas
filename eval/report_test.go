@@ -46,6 +46,15 @@ func TestAttemptReportProjectionsSeparateHumanAndMachineEvidence(t *testing.T) {
 	}
 }
 
+// TestAttemptSummaryIncludesProviderSessionIdentity makes the provider session available when comparing retained attempts.
+func TestAttemptSummaryIncludesProviderSessionIdentity(t *testing.T) {
+	result := AttemptResult{ProviderSessionDigest: "sha256:session"}
+	summary := attemptSummary(fakeAttemptRequest(), result)
+	if !strings.Contains(summary, "Provider session: sha256:session") {
+		t.Fatalf("summary does not contain provider session identity: %q", summary)
+	}
+}
+
 // TestAttemptSummaryListsFailedChecksAndUsesActualBackend verifies reports retain actionable failures without assuming one backend name.
 func TestAttemptSummaryListsFailedChecksAndUsesActualBackend(t *testing.T) {
 	request := fakeAttemptRequest()

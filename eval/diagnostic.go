@@ -67,6 +67,9 @@ func (runner Runner) RunGuidanceDiagnostic(ctx context.Context, request Guidance
 		if !samePairedAgentIdentity(left, right) {
 			return result, fmt.Errorf("paired treatments received different agent or provider identities")
 		}
+		if left.ProviderSessionDigest == "" || right.ProviderSessionDigest == "" || left.ProviderSessionDigest == right.ProviderSessionDigest {
+			return result, fmt.Errorf("paired treatments must have distinct non-empty provider session identities")
+		}
 	}
 	return result, nil
 }

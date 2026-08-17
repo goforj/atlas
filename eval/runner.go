@@ -273,6 +273,7 @@ func (runner Runner) Run(ctx context.Context, request AttemptRequest) (result At
 	if sessionIdentity.AuthorityDigest != "" {
 		result.ProviderAuthorityDigest = sessionIdentity.AuthorityDigest
 	}
+	result.ProviderSessionDigest = sessionIdentity.SessionDigest
 	result.Milestones = append(result.Milestones, MilestoneProviderSessionStarted)
 	sessionClosed := false
 	defer func() {
