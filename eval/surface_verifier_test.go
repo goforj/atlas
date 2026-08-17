@@ -3,6 +3,8 @@ package eval
 import (
 	"context"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"slices"
@@ -781,5 +783,21 @@ func TestRunIsolatedCommandInstallsSupervisorFiles(t *testing.T) {
 	}
 	if got := string(runner.files["feature/atlas_eval_test.go"]); got != "package feature\n" {
 		t.Fatalf("supervisor file = %q", got)
+	}
+}
+
+// TestTransactionBehaviorProbeUsesGoForjSQLiteDriver keeps the generated oracle within the dependencies of a production-only GoForj Project.
+func TestTransactionBehaviorProbeUsesGoForjSQLiteDriver(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "transfer_transaction_probe_test.go", transferTransactionBehaviorProbe, parser.ImportsOnly)
+	if err != nil {
+		t.Fatalf("parse transaction probe: %v", err)
+	}
+	imports := make([]string, 0, len(file.Imports))
+	for _, spec := range file.Imports {
+		imports = append(imports, strings.Trim(spec.Path.Value, `"`))
+	}
+	want := []string{"context", "testing", "github.com/glebarez/sqlite", "gorm.io/gorm"}
+	if !slices.Equal(imports, want) {
+		t.Fatalf("transaction probe imports = %q, want %q", imports, want)
 	}
 }
