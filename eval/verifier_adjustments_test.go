@@ -35,8 +35,10 @@ func TestCorrectedBehaviorProbesParse(t *testing.T) {
 func TestScheduleBehaviorTargetFollowsApplicationNaming(t *testing.T) {
 	root := t.TempDir()
 	writeVerifierFile(t, root, "internal/reports/reconciler.go", `package reports
-type Reconciler struct{}
-func NewDailySchedule() *Reconciler { return &Reconciler{} }
+type DailySchedule struct{}
+func NewDailySchedule() *DailySchedule { return &DailySchedule{} }
+func (*DailySchedule) Interval() string { return "daily" }
+func (*DailySchedule) Handle() error { return nil }
 `)
 	constructor, directory, packageName, err := scheduleBehaviorTarget(root)
 	if err != nil {
@@ -46,7 +48,10 @@ func NewDailySchedule() *Reconciler { return &Reconciler{} }
 		t.Fatalf("target = %q, %q, %q", constructor, directory, packageName)
 	}
 	writeVerifierFile(t, root, "internal/reports/other.go", `package reports
-func NewOtherSchedule() *Reconciler { return &Reconciler{} }
+type OtherSchedule struct{}
+func NewOtherSchedule() *OtherSchedule { return &OtherSchedule{} }
+func (*OtherSchedule) Interval() string { return "hourly" }
+func (*OtherSchedule) Handle() error { return nil }
 `)
 	if _, _, _, err := scheduleBehaviorTarget(root); err == nil {
 		t.Fatal("ambiguous schedule constructors passed")

@@ -367,38 +367,21 @@ func runReconcileScheduleBehaviorProbe(ctx context.Context, runner CommandRunner
 	})
 }
 
-// scheduleBehaviorTarget finds the single constructor for a type that exposes the
-// schedule protocol, avoiding a generator-specific file or constructor spelling.
+// scheduleBehaviorTarget finds the single constructor for a type that implements the schedule protocol.
 func scheduleBehaviorTarget(root string) (string, string, string, error) {
 	paths, err := matchingSurfacePaths(root, []string{"internal/*/*.go", "app/*_schedule.go"})
 	if err != nil {
 		return "", "", "", err
 	}
-	type target struct{ constructor, directory, packageName string }
-	var targets []target
-	for _, path := range paths {
-		if strings.HasSuffix(path, "_test.go") {
-			continue
-		}
-		file, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		if parseErr != nil {
-			continue
-		}
-		for _, declaration := range file.Decls {
-			function, ok := declaration.(*ast.FuncDecl)
-			if !ok || function.Recv != nil || !strings.HasPrefix(function.Name.Name, "New") || !strings.Contains(function.Name.Name, "Schedule") {
-				continue
-			}
-			directory, relativeErr := filepath.Rel(root, filepath.Dir(path))
-			if relativeErr == nil {
-				targets = append(targets, target{function.Name.Name, filepath.ToSlash(directory), file.Name.Name})
-			}
-		}
+	candidates := scheduleCandidates(paths)
+	if len(candidates) != 1 {
+		return "", "", "", fmt.Errorf("expected one application schedule implementation, found %d", len(candidates))
 	}
-	if len(targets) != 1 {
-		return "", "", "", fmt.Errorf("expected one application schedule constructor, found %d", len(targets))
+	directory, err := filepath.Rel(root, candidates[0].directory)
+	if err != nil {
+		return "", "", "", fmt.Errorf("resolve schedule package: %w", err)
 	}
-	return targets[0].constructor, targets[0].directory, targets[0].packageName, nil
+	return candidates[0].constructor, filepath.ToSlash(directory), candidates[0].packageName, nil
 }
 
 // surfaceChecksFailed avoids executing candidate code after sealed static evidence already proves failure.
@@ -761,6 +744,7 @@ type scheduleCandidate struct {
 	name        string
 	constructor string
 	directory   string
+	packageName string
 }
 
 // scheduleTypeKey keeps platform-specific path syntax separate from the Go type name.
@@ -773,6 +757,7 @@ type scheduleTypeKey struct {
 func scheduleCandidates(paths []string) []scheduleCandidate {
 	types := map[scheduleTypeKey]map[string]bool{}
 	constructors := map[scheduleTypeKey]bool{}
+	packageNames := map[scheduleTypeKey]string{}
 	for _, path := range paths {
 		if strings.HasSuffix(path, "_test.go") || filepath.Ext(path) != ".go" {
 			continue
@@ -796,6 +781,7 @@ func scheduleCandidates(paths []string) []scheduleCandidate {
 					types[key] = map[string]bool{}
 				}
 				types[key][function.Name.Name] = true
+				packageNames[key] = file.Name.Name
 			}
 			if function.Recv == nil && strings.HasPrefix(function.Name.Name, "New") {
 				if typeName := functionResultType(function); typeName != "" && function.Name.Name == "New"+typeName {
@@ -812,7 +798,7 @@ func scheduleCandidates(paths []string) []scheduleCandidate {
 		if !constructors[key] {
 			continue
 		}
-		candidates = append(candidates, scheduleCandidate{name: key.name, constructor: "New" + key.name, directory: key.directory})
+		candidates = append(candidates, scheduleCandidate{name: key.name, constructor: "New" + key.name, directory: key.directory, packageName: packageNames[key]})
 	}
 	sort.Slice(candidates, func(left, right int) bool {
 		if candidates[left].directory != candidates[right].directory {
