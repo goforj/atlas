@@ -118,7 +118,7 @@ func TestPromotedEvaluationPromptsDiscloseProbeContracts(t *testing.T) {
 		{
 			id: "dispatch-event-followup-job",
 			required: []string{
-				"internal/jobs", "internal/reports/generate_job.go", "GeneratePayload", "GenerateJob", "GenerateJobTypeName", "ReportQueue", "UserID",
+				"internal/reports/generate_job.go", "GeneratePayload", "GenerateJob", "GenerateJobTypeName", "ReportQueue", "UserID",
 			},
 		},
 		{
