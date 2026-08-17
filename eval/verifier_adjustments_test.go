@@ -219,7 +219,7 @@ func (job *ReceiptJob) reloadInvoice(context.Context, ReceiptJobPayload) error {
 // TestModelRelationshipContractAcceptsConventionalPackageAndSpacing avoids coupling generated relationships to a custom package or YAML spacing.
 func TestModelRelationshipContractAcceptsConventionalPackageAndSpacing(t *testing.T) {
 	root := t.TempDir()
-	writeVerifierFile(t, root, ".db-relationships.yaml", "users:\n  - 1-many id -> posts:user_id\n")
+	writeVerifierFile(t, root, ".db-relationships.yaml", "users:\n  - 1-many   id  ->  posts:user_id\n")
 	writeVerifierFile(t, root, "internal/models/models.go", `package models
 
 type Post struct{}
@@ -249,6 +249,17 @@ func TestModelRelationshipContractRejectsWrongLocalKey(t *testing.T) {
 	result := verifySurfaceSource(root, contract)
 	if result.Status != EndpointFailed || !strings.Contains(result.Details, "1-many id -> posts:user_id") {
 		t.Fatalf("wrong local key result = %#v", result)
+	}
+}
+
+// TestModelRelationshipContractRejectsSplitLocalKey prevents formatting tolerance from joining malformed identifiers.
+func TestModelRelationshipContractRejectsSplitLocalKey(t *testing.T) {
+	root := t.TempDir()
+	writeVerifierFile(t, root, ".db-relationships.yaml", "users:\n  - 1-many i d -> posts:user_id\n")
+	contract := promotedSourceContract(t, "model-relationships/v1", "relationship-contract")
+	result := verifySurfaceSource(root, contract)
+	if result.Status != EndpointFailed || !strings.Contains(result.Details, "1-many id -> posts:user_id") {
+		t.Fatalf("split local key result = %#v", result)
 	}
 }
 

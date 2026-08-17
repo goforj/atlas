@@ -50,7 +50,7 @@ type sourceContract struct {
 	declarations      []declarationContract
 	assignments       []assignmentContract
 	text              []string
-	compactText       []string
+	normalizedText    []string
 	commentOnly       bool
 }
 
@@ -536,9 +536,9 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required configuration %q is absent", required)}
 		}
 	}
-	compact := compactSurfaceText(text.String())
-	for _, required := range contract.compactText {
-		if !strings.Contains(compact, compactSurfaceText(required)) {
+	normalized := normalizeSurfaceText(text.String())
+	for _, required := range contract.normalizedText {
+		if !strings.Contains(normalized, normalizeSurfaceText(required)) {
 			return EndpointResult{ID: contract.id, Status: EndpointFailed, Details: fmt.Sprintf("required configuration %q is absent", required)}
 		}
 	}
@@ -548,14 +548,14 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 	return EndpointResult{ID: contract.id, Status: EndpointPassed}
 }
 
-// compactSurfaceText removes presentation-only spacing so configuration contracts can verify one complete semantic expression.
-func compactSurfaceText(source string) string {
-	return strings.Map(func(value rune) rune {
-		if unicode.IsSpace(value) {
-			return -1
-		}
-		return value
-	}, source)
+// normalizeSurfaceText tolerates presentation spacing around configuration separators without merging distinct tokens.
+func normalizeSurfaceText(source string) string {
+	normalized := strings.Join(strings.Fields(source), " ")
+	for _, separator := range []string{"->", ":"} {
+		normalized = strings.ReplaceAll(normalized, " "+separator, separator)
+		normalized = strings.ReplaceAll(normalized, separator+" ", separator)
+	}
+	return normalized
 }
 
 // sqlCommentsOnly accepts SQL comment syntax without treating a generator's particular comment wording as an outcome requirement.
