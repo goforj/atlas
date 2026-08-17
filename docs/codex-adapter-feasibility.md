@@ -62,7 +62,8 @@ contract.
 
 The adapter should:
 
-1. Resolve and fingerprint the Codex executable before entering the trial.
+1. Resolve and fingerprint the Codex executable before entering the trial, then
+   resolve and fingerprint it again immediately before app-server startup.
 2. Start one app-server process in a supervisor-owned process group.
 3. Complete `initialize` and `initialized` before any thread request.
 4. Start a new ephemeral thread with an explicit model, Project root, approval
@@ -79,6 +80,11 @@ continues reading request responses; when telemetry exceeds that bound, it
 counts discarded notifications and the adapter fails the affected turn with an
 explicit telemetry-overflow error rather than waiting for a possibly dropped
 terminal notification.
+
+The second launcher check detects path or digest drift between preparation and
+process startup. It is pre-exec launcher integrity only, not immutable execution
+closure: a launcher remains mutable after that check when the candidate shares
+its UID.
 
 On Linux, app-server interruption and its own process group are not sufficient
 for step 8. A live turn created a separate command process group, and a

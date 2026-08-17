@@ -218,7 +218,9 @@ func (adapter *CodexAgent) Prepare(_ context.Context, environment RunEnvironment
 	}, nil
 }
 
-// Start launches app-server and rejects effective identity or instruction sources that differ from the prepared treatment.
+// Start re-resolves the launcher immediately before app-server startup and rejects identity or instruction sources that differ from the prepared treatment.
+//
+// This is a pre-exec launcher-integrity check. It does not establish immutable execution closure when the launcher can be modified by the same UID after this check.
 func (adapter *CodexAgent) Start(ctx context.Context, agent PreparedAgent) (EvaluationSession, error) {
 	if adapter == nil {
 		return nil, fmt.Errorf("Codex adapter is required")
@@ -231,6 +233,13 @@ func (adapter *CodexAgent) Start(ctx context.Context, agent PreparedAgent) (Eval
 	}
 	if agent.Name != adapter.Name() || agent.Executable != state.executable || agent.ExecutableDigest != state.executableDigest || agent.AuthorityDigest != state.authorityDigest || agent.Model != adapter.options.Model || agent.Environment.ProjectRoot != state.environment.ProjectRoot || agent.Environment.HomeRoot != state.environment.HomeRoot {
 		return nil, fmt.Errorf("Codex prepared identity differs from adapter state")
+	}
+	executable, digest, err := resolveExecutable(adapter.options.Executable)
+	if err != nil {
+		return nil, err
+	}
+	if executable != state.executable || digest != state.executableDigest {
+		return nil, fmt.Errorf("Codex launcher changed after preparation")
 	}
 	processEnvironment := privateProcessEnvironment(mergeProcessEnvironment(adapter.options.Environment, state.environment.Environment), state.environment.HomeRoot)
 	client, err := codexappserver.Start(ctx, codexappserver.StartOptions{

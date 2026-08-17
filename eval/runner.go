@@ -551,7 +551,9 @@ func verifySealedAttempt(ctx context.Context, sealed SealedProject, baselineDiff
 			verification.Contract = &EndpointResult{ID: verification.Contract.ID, Status: EndpointIneligible, Details: "diagnostic backend cannot establish an authoritative contract outcome"}
 		}
 		result.Verification = &verification
-		result.EvaluationStatus = EvaluationDiagnostic
+		if result.EvaluationStatus != EvaluationEvaluatorError {
+			result.EvaluationStatus = EvaluationDiagnostic
+		}
 	} else if result.EvaluationStatus != EvaluationEvaluatorError {
 		if result.AgentOutcome == AgentAbstained {
 			result.EvaluationStatus = EvaluationValidAbstention
@@ -576,19 +578,22 @@ func finalizeAttemptArtifacts(artifacts *AttemptArtifacts, request AttemptReques
 	for _, failure := range result.SecondaryFailures {
 		finalizationErr = errors.Join(finalizationErr, failure.Cause)
 	}
-	if len(failures) > 0 {
+	artifactWriteFailed := len(failures) > 0 || hasArtifactFailure(result.SecondaryFailures)
+	if artifactWriteFailed {
 		result.EvaluationStatus = EvaluationEvaluatorError
 	}
 	if err := artifacts.WriteJSON("run.json", result); err != nil {
 		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_run", Message: err.Error(), Cause: err})
 		finalizationErr = errors.Join(finalizationErr, err)
 		result.EvaluationStatus = EvaluationEvaluatorError
+		artifactWriteFailed = true
 	}
 	if result.Verification != nil {
 		if err := artifacts.WriteJSON("verification.json", result.Verification); err != nil {
 			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_verification", Message: err.Error(), Cause: err})
 			finalizationErr = errors.Join(finalizationErr, err)
 			result.EvaluationStatus = EvaluationEvaluatorError
+			artifactWriteFailed = true
 		}
 	}
 	if attemptNeedsTriage(*result) {
@@ -596,7 +601,16 @@ func finalizeAttemptArtifacts(artifacts *AttemptArtifacts, request AttemptReques
 			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_triage", Message: err.Error(), Cause: err})
 			finalizationErr = errors.Join(finalizationErr, err)
 			result.EvaluationStatus = EvaluationEvaluatorError
+			artifactWriteFailed = true
 		}
+	}
+	if artifactWriteFailed {
+		if err := artifacts.closeForRepair(); err != nil {
+			result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_close", Message: err.Error(), Cause: err})
+			finalizationErr = errors.Join(finalizationErr, err)
+		}
+		repairFinalizationArtifacts(artifacts, request, result)
+		return finalizationErr
 	}
 	if _, err := artifacts.Finalize(planDigest, baselineTree, finalTree); err != nil {
 		result.SecondaryFailures = append(result.SecondaryFailures, SecondaryFailure{Phase: "artifact_manifest", Message: err.Error(), Cause: err})
@@ -605,6 +619,16 @@ func finalizeAttemptArtifacts(artifacts *AttemptArtifacts, request AttemptReques
 		return errors.Join(finalizationErr, err)
 	}
 	return finalizationErr
+}
+
+// hasArtifactFailure identifies retained-evidence failures that make manifest authentication unsafe.
+func hasArtifactFailure(failures []SecondaryFailure) bool {
+	for _, failure := range failures {
+		if strings.HasPrefix(failure.Phase, "artifact_") {
+			return true
+		}
+	}
+	return false
 }
 
 // adapterCommandCount uses the adapter's complete observed count when bounded retention omitted result events.

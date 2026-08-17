@@ -577,13 +577,15 @@ type SoftwareIdentity struct {
 	Dirty   bool   `json:"dirty,omitempty"`
 }
 
-// RuntimeIdentity records the supervisor, framework, and Go runtime needed to reconstruct a diagnostic environment.
+// RuntimeIdentity records the supervisor, framework, and selected Go launcher provenance needed to reconstruct a diagnostic environment.
 type RuntimeIdentity struct {
-	Supervisor SoftwareIdentity `json:"supervisor"`
-	Framework  SoftwareIdentity `json:"framework"`
-	GoVersion  string           `json:"go_version"`
-	GOOS       string           `json:"goos"`
-	GOARCH     string           `json:"goarch"`
+	Supervisor         SoftwareIdentity `json:"supervisor"`
+	Framework          SoftwareIdentity `json:"framework"`
+	GoVersion          string           `json:"go_version"`
+	GoExecutableDigest string           `json:"go_executable_digest,omitempty"`
+	GoRootDigest       string           `json:"go_root_digest,omitempty"`
+	GOOS               string           `json:"goos"`
+	GOARCH             string           `json:"goarch"`
 }
 
 // GuidanceFileIdentity records one native instruction projection without retaining its content in run metadata.

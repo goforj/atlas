@@ -1,1 +1,1 @@
-Configure a named local `avatars` storage disk rooted at `storage/app/avatars`. Add an application-owned storage boundary that receives the storage manager through dependency injection and selects the generated named accessor. Leave the Project working.
+Configure a named local `avatars` storage disk rooted at `storage/app/avatars`. Add an application-owned storage boundary that receives the storage manager through dependency injection, selects the generated named accessor, and stores avatar bytes through that disk. Leave the Project working.
