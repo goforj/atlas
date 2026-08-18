@@ -39,6 +39,7 @@ func TestInstallerWritesAgentFilesAndConfig(t *testing.T) {
 		assertContains(t, filepath.Join(root, path), "<!-- goforj-atlas:start -->")
 	}
 	assertContains(t, filepath.Join(root, ".codex", "config.toml"), "atlas:mcp")
+	assertContains(t, filepath.Join(root, ".codex", "config.toml"), "required = true")
 	assertContains(t, filepath.Join(root, ".mcp.json"), "goforj-atlas")
 	assertContains(t, filepath.Join(root, ".vscode", "mcp.json"), "goforj-atlas")
 	assertContains(t, filepath.Join(root, ".gemini", "settings.json"), "goforj-atlas")

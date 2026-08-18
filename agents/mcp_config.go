@@ -83,7 +83,7 @@ func writeJSONSettings(path string, settings map[string]any) error {
 // replaceTOMLServer replaces Atlas's table while preserving unrelated TOML text and comments.
 func replaceTOMLServer(existing string, server MCPServerConfig) string {
 	base := removeTOMLServer(existing, server.Name)
-	block := "[mcp_servers." + server.Name + "]\ncommand = " + quoteTOML(server.Command) + "\nargs = [" + quoteTOML(server.Args()[0]) + "]\ncwd = " + quoteTOML(server.CWD) + "\n"
+	block := "[mcp_servers." + server.Name + "]\ncommand = " + quoteTOML(server.Command) + "\nargs = [" + quoteTOML(server.Args()[0]) + "]\ncwd = " + quoteTOML(server.CWD) + "\nrequired = true\n"
 	base = strings.TrimRight(base, "\n")
 	if base == "" {
 		return block
