@@ -67,7 +67,7 @@ knowledge into agent-usable workflows.
 
 ## External Shape Resolved
 
-- [x] GoForj resource registry consumption is implemented through `/workspace/code/goforj/internal/forj/resources`. Atlas inventory now consumes that registry from `forj atlas:mcp` instead of the earlier hardcoded resource link helper.
+- [x] GoForj resource registry consumption is implemented through `internal/forj/resources` in the GoForj repository. Atlas inventory now consumes that registry from `forj atlas:mcp` instead of the earlier hardcoded resource link helper.
 
 ## Cross-Repo Implementation Dump
 
@@ -109,7 +109,7 @@ GoForj, and GoForj Docs.
 - [x] Document Atlas workflow skills in `docs/developer-tools/atlas.md`.
 - [x] Add agent-facing examples for `workflow-plan`, `docs-section-pack`, `generated-file-policy`, and `validation-plan`.
 - [x] Document docs source selection with `GOFORJ_ATLAS_DOCS_REPO` and `GOFORJ_ATLAS_DOCS_REF`.
-- [x] Re-run `npm run build` in `/workspace/code/goforj-docs/docs` if the docs page changes again.
+- [x] Re-run `npm run build` in the `docs` directory of the `goforj-docs` repository if the docs page changes again.
 
 ### Completion Gate
 
