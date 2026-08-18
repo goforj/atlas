@@ -94,6 +94,10 @@ func TestCodexMCPConfigPreservesUnrelatedTables(t *testing.T) {
 	if err := (Codex{}).WriteMCPConfig(context.Background(), root, server); err != nil {
 		t.Fatalf("write MCP config: %v", err)
 	}
+	written := string(mustReadAgentFile(t, path))
+	if !strings.Contains(written, "required = true") {
+		t.Fatalf("Codex MCP config does not require successful startup:\n%s", written)
+	}
 	if err := (Codex{}).RemoveMCPConfig(context.Background(), root, server.Name); err != nil {
 		t.Fatalf("remove MCP config: %v", err)
 	}
