@@ -19,7 +19,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "add-job/v1",
 			allowedChanges: []string{"internal/invoices/*_job.go", "internal/invoices/*_job_test.go", "app/wire/inject_jobs_app.go"},
 			sources: []sourceContract{
-				{id: "typed-job", paths: []string{"internal/invoices/*_job.go"}, identifiers: []string{"ReceiptJob", "ReceiptJobPayload", "Service"}, forbiddenCalls: []string{"TODO"}, stringLiterals: []string{"invoices:receipt"}, declarations: []declarationContract{{name: "ReceiptJobPayload", identifiers: []string{"InvoiceID"}}, {name: "Queue", receiver: "ReceiptJob", identifiers: []string{"ctx"}, selectorCalls: []string{"Dispatch"}, forbiddenCalls: []string{"Background"}}, {name: "HandleTask", receiver: "ReceiptJob", identifiers: []string{"ctx"}, selectorCalls: []string{"Bind"}, forbiddenCalls: []string{"Background"}}}},
+				{id: "typed-job", paths: []string{"internal/invoices/*_job.go"}, identifiers: []string{"ReceiptJob", "ReceiptJobPayload", "Service"}, selectorCalls: []string{"Bind"}, forbiddenCalls: []string{"TODO"}, stringLiterals: []string{"invoices:receipt"}, declarations: []declarationContract{{name: "ReceiptJobPayload", identifiers: []string{"InvoiceID"}}, {name: "Queue", receiver: "ReceiptJob", identifiers: []string{"ctx"}, selectorCalls: []string{"Dispatch"}, forbiddenCalls: []string{"Background"}}, {name: "HandleTask", receiver: "ReceiptJob", identifiers: []string{"ctx"}, forbiddenCalls: []string{"Background"}}}},
 				{id: "job-registration", paths: []string{"app/wire/inject_jobs_app.go"}, identifiers: []string{"NewReceiptJob", "ReceiptJobTypeName", "HandleTask"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
@@ -243,7 +243,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "add-outbound-http-integration/v1",
-			allowedChanges:      []string{".env.example", "go.mod", "go.sum", "internal/taxrates/*.go", "app/wire/inject_services_app.go", "app/wire/*_test.go"},
+			allowedChanges:      []string{".env.example", ".env.testing", "go.mod", "go.sum", "internal/taxrates/*.go", "app/wire/inject_services_app.go", "app/wire/*_test.go"},
 			qualityTestPatterns: []string{"internal/taxrates/*_test.go", "app/wire/*_test.go"},
 			sources: []sourceContract{
 				{id: "typed-http-client", paths: []string{"internal/taxrates/*.go"}, identifiers: []string{"Rate", "Client", "NewClient"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Find", receiver: "Client", identifiers: []string{"ctx"}, forbiddenCalls: []string{"Background"}}}},
@@ -293,7 +293,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "add-database-transaction/v1",
 			allowedChanges: []string{"go.mod", "go.sum", "internal/accounts/*.go", "app/wire/app.go", "app/wire/inject_repositories_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
-				{id: "transaction-bound-repository", paths: []string{"internal/accounts/repository.go"}, identifiers: []string{"Repository", "WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "WithTransaction", receiver: "Repository", identifiers: []string{"ctx"}, selectorCalls: []string{"Transaction"}}, {name: "AdjustBalance", receiver: "Repository", identifiers: []string{"ctx"}, selectorCalls: []string{"UpdateColumn"}}}},
+				{id: "transaction-bound-repository", paths: []string{"internal/accounts/repository.go"}, identifiers: []string{"Repository", "WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "WithTransaction", anyReceiver: true, identifiers: []string{"ctx"}, selectorCalls: []string{"Transaction"}}, {name: "AdjustBalance", anyReceiver: true, identifiers: []string{"ctx"}, selectorCalls: []string{"UpdateColumn"}}}},
 				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Transfer", receiver: "Service", selectorCalls: []string{"WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"Background"}, nestedCalls: []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}}}}},
 				{id: "account-repository-registration", paths: []string{"app/wire/app.go", "app/wire/inject_repositories_app.go"}, identifierChoices: [][]string{{"NewRepository", "ProvideRepository"}}},
 				{id: "account-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}},

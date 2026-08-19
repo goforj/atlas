@@ -59,6 +59,56 @@ func (*OtherSchedule) Handle() error { return nil }
 	}
 }
 
+// TestNamedResourceProbeResolutionDoesNotMutateReviewedContract keeps paired treatments isolated when providers choose different packages.
+func TestNamedResourceProbeResolutionDoesNotMutateReviewedContract(t *testing.T) {
+	contract := promotedContract(t, "add-named-cache/v1").commands[1]
+	first := t.TempDir()
+	writeVerifierFile(t, first, "app/cache.go", `package app
+import "example.test/internal/caches"
+func NewProfileCache(manager *caches.Manager) any { return manager.Profiles() }
+`)
+	writeVerifierFile(t, first, "app/wire/inject_services_app.go", `package wire
+import (
+	"example.test/app"
+	"github.com/goforj/wire"
+)
+var appSet = wire.NewSet(app.NewProfileCache)
+`)
+	resolvedFirst, details := resolveNamedResourceProbe(first, contract)
+	if details != "" {
+		t.Fatalf("resolve first probe: %s", details)
+	}
+	if got := resolvedFirst.supervisorFiles[0].path; got != "app/atlas_eval_named_cache_test.go" {
+		t.Fatalf("first probe path = %q", got)
+	}
+
+	second := t.TempDir()
+	writeVerifierFile(t, second, "internal/profiles/cache.go", `package profiles
+import "example.test/internal/caches"
+func NewProfileCache(manager *caches.Manager) any { return manager.Profiles() }
+`)
+	writeVerifierFile(t, second, "app/wire/inject_services_app.go", `package wire
+import (
+	"example.test/internal/profiles"
+	"github.com/goforj/wire"
+)
+var appSet = wire.NewSet(profiles.NewProfileCache)
+`)
+	resolvedSecond, details := resolveNamedResourceProbe(second, contract)
+	if details != "" {
+		t.Fatalf("resolve second probe: %s", details)
+	}
+	if got := resolvedSecond.supervisorFiles[0].path; got != "internal/profiles/atlas_eval_named_cache_test.go" {
+		t.Fatalf("second probe path = %q", got)
+	}
+	if !strings.HasPrefix(resolvedSecond.supervisorFiles[0].body, "package profiles\n") {
+		t.Fatalf("second probe package was contaminated by first resolution:\n%s", resolvedSecond.supervisorFiles[0].body)
+	}
+	if contract.arguments[2] != "./internal/invoices" || contract.supervisorFiles[0].path != "internal/invoices/atlas_eval_named_cache_test.go" {
+		t.Fatalf("reviewed contract mutated: arguments=%q files=%#v", contract.arguments, contract.supervisorFiles)
+	}
+}
+
 // TestScheduleContractAcceptsAppOwnedSchedule keeps the established app-level
 // generator output eligible without widening ownership to unrelated app files.
 func TestScheduleContractAcceptsAppOwnedSchedule(t *testing.T) {
@@ -200,6 +250,9 @@ func TestCorrectedVerifierContractsPreserveBehaviorOverImplementationSpelling(t 
 	}
 	if result := verifySurfaceOwnership([]ProjectChange{{Path: ".env.example", After: ProjectPathState{Kind: "file"}}}, outbound.allowedChanges); result.Status != EndpointPassed {
 		t.Fatalf("outbound environment example ownership = %#v", result)
+	}
+	if result := verifySurfaceOwnership([]ProjectChange{{Path: ".env.testing", After: ProjectPathState{Kind: "file"}}}, outbound.allowedChanges); result.Status != EndpointPassed {
+		t.Fatalf("outbound test environment ownership = %#v", result)
 	}
 
 	jsonAPI := contracts["build-json-api-feature/v1"]
@@ -564,6 +617,9 @@ func (job *ReceiptJob) Queue(ctx context.Context, payload ReceiptJobPayload) err
 	return job.queues.Queue("invoices:receipt").Dispatch(ctx, payload)
 }
 func (job *ReceiptJob) HandleTask(ctx context.Context, task *Task) error {
+	return job.handleTask(ctx, task)
+}
+func (job *ReceiptJob) handleTask(ctx context.Context, task *Task) error {
 	var payload ReceiptJobPayload
 	if err := task.Bind(&payload); err != nil { return err }
 	return job.reloadInvoice(ctx, payload)

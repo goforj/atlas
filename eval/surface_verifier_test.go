@@ -486,6 +486,47 @@ func (service Service) Transfer(ctx context.Context) { service.accounts.WithTran
 	}
 }
 
+// TestSurfaceVerifierAcceptsEquivalentConcreteRepositoryReceivers keeps interface naming separate from private implementation ownership.
+func TestSurfaceVerifierAcceptsEquivalentConcreteRepositoryReceivers(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "accounts", "repository.go")
+	valid := `package accounts
+import "context"
+type Repository interface {
+	WithTransaction(context.Context, func(Repository) error) error
+	AdjustBalance(context.Context, string, int64) error
+}
+type repository struct{ db database }
+type database struct{}
+func (database) WithContext(context.Context) database { return database{} }
+func (database) Transaction(func(database) error) error { return nil }
+func (database) UpdateColumn(string, int64) error { return nil }
+func (value *repository) WithTransaction(ctx context.Context, callback func(Repository) error) error {
+	return value.db.WithContext(ctx).Transaction(func(transaction database) error { return callback(&repository{db: transaction}) })
+}
+func (value *repository) AdjustBalance(ctx context.Context, id string, amount int64) error {
+	return value.db.WithContext(ctx).UpdateColumn(id, amount)
+}
+`
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(valid), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contract := promotedSourceContract(t, "add-database-transaction/v1", "transaction-bound-repository")
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("private repository receiver = %#v", result)
+	}
+	mutant := strings.Replace(valid, ".Transaction(func(transaction database) error", ".NotATransaction(func(transaction database) error", 1)
+	if err := os.WriteFile(path, []byte(mutant), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+		t.Fatalf("transaction mutant = %#v, want failure", result)
+	}
+}
+
 // TestSurfaceVerifierScopesMethodsToTheirOwningReceiver prevents an unrelated type from satisfying a required application boundary.
 func TestSurfaceVerifierScopesMethodsToTheirOwningReceiver(t *testing.T) {
 	root := t.TempDir()
@@ -775,6 +816,11 @@ func TestApplicationBehaviorProbesExerciseDisclosedWorkflows(t *testing.T) {
 	}
 	if strings.Contains(domainEventBehaviorProbe, ".Publish(") || !strings.Contains(domainEventBehaviorProbe, "NewSubscribers(handler).Register") || !strings.Contains(domainEventBehaviorProbe, "service.Create(") {
 		t.Fatalf("event probe must exercise creation through registered handling:\n%s", domainEventBehaviorProbe)
+	}
+	for _, method := range []string{"Handle(", "HandleUserCreated("} {
+		if !strings.Contains(domainEventBehaviorProbe, method) {
+			t.Fatalf("event probe does not support handler method %q:\n%s", method, domainEventBehaviorProbe)
+		}
 	}
 	if strings.Contains(receiptMailBehaviorProbe, "receiptContent(") || !strings.Contains(receiptMailBehaviorProbe, "delivery.To[0].Email != recipient") || !strings.Contains(receiptMailBehaviorProbe, `strings.Contains(delivery.Subject, "invoice-42")`) || !strings.Contains(receiptMailBehaviorProbe, `strings.Contains(delivery.Text, "125.00")`) {
 		t.Fatalf("mail probe must inspect one real delivery without a private formatter contract:\n%s", receiptMailBehaviorProbe)

@@ -103,6 +103,7 @@ type declarationContract struct {
 	nameChoices          []string
 	anyName              bool
 	receiver             string
+	anyReceiver          bool
 	identifiers          []string
 	forbiddenIdentifiers []string
 	selectorCalls        []string
@@ -607,19 +608,7 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 		if declaration.name != "" {
 			names = append([]string{declaration.name}, names...)
 		}
-		key := ""
-		var scope *sourceFacts
-		for _, name := range names {
-			candidate := name
-			if declaration.receiver != "" {
-				candidate = declaration.receiver + "." + name
-			}
-			if declarations[candidate] != nil {
-				key = candidate
-				scope = declarations[candidate]
-				break
-			}
-		}
+		key, scope := matchingDeclaration(declarations, names, declaration)
 		if scope == nil && declaration.anyName {
 			for candidate, candidateScope := range declarations {
 				if declaration.receiver != "" && !strings.HasPrefix(candidate, declaration.receiver+".") {
@@ -712,6 +701,32 @@ func verifySurfaceSource(root string, contract sourceContract) EndpointResult {
 		}
 	}
 	return EndpointResult{ID: contract.id, Status: EndpointPassed}
+}
+
+// matchingDeclaration permits explicitly equivalent receiver ownership while preserving declaration-scoped evidence.
+func matchingDeclaration(declarations map[string]*sourceFacts, names []string, contract declarationContract) (string, *sourceFacts) {
+	for _, name := range names {
+		candidate := name
+		if contract.receiver != "" {
+			candidate = contract.receiver + "." + name
+		}
+		if declarations[candidate] != nil {
+			return candidate, declarations[candidate]
+		}
+	}
+	if !contract.anyReceiver {
+		return "", nil
+	}
+	for candidate, facts := range declarations {
+		separator := strings.LastIndex(candidate, ".")
+		if separator < 0 || !slices.Contains(names, candidate[separator+1:]) {
+			continue
+		}
+		if declarationFactsMismatch(facts, contract) == "" {
+			return candidate, facts
+		}
+	}
+	return "", nil
 }
 
 // verifyScheduleRegistration requires an application registration to reference the constructor for a concrete schedule shape.
@@ -1015,6 +1030,10 @@ func resolveNamedResourceProbe(root string, contract commandContract) (commandCo
 	if contract.namedResourceProbe == nil {
 		return contract, ""
 	}
+	// Treatment pairs reuse reviewed contracts; copy mutable slices so one candidate's
+	// package placement cannot redirect the next candidate's supervisor probe.
+	contract.arguments = append([]string(nil), contract.arguments...)
+	contract.supervisorFiles = append([]supervisorFile(nil), contract.supervisorFiles...)
 	paths, err := matchingSurfacePaths(root, []string{"internal/*/*.go", "app/*.go"})
 	if err != nil {
 		return commandContract{}, err.Error()
