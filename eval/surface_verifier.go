@@ -107,6 +107,7 @@ type declarationContract struct {
 	identifiers          []string
 	forbiddenIdentifiers []string
 	selectorCalls        []string
+	selectorCallChoices  [][]string
 	forbiddenCalls       []string
 	stringLiterals       []string
 	forbiddenLiterals    []string
@@ -1141,6 +1142,18 @@ func declarationFactsMismatch(scope *sourceFacts, declaration declarationContrac
 	}
 	if details := verifySourceFacts(*scope, declaration.identifiers, nil, declaration.selectorCalls, declaration.forbiddenCalls, declaration.stringLiterals, declaration.forbiddenLiterals); details != "" {
 		return details
+	}
+	for _, choices := range declaration.selectorCallChoices {
+		matched := false
+		for _, selector := range choices {
+			if scope.selectorCalls[selector] {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return fmt.Sprintf("one of the required calls %q is absent", choices)
+		}
 	}
 	for _, identifier := range declaration.forbiddenIdentifiers {
 		if scope.identifiers[identifier] {
