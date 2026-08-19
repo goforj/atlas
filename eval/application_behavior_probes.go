@@ -1,5 +1,16 @@
 package eval
 
+import (
+	"context"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
 const runtimeObservabilityBehaviorProbe = `package inspects
 
 import (
@@ -444,7 +455,7 @@ func TestAtlasDomainEventBehavior(t *testing.T) {
 		t.Fatalf("Register(): %v", err)
 	}
 	t.Cleanup(func() { _ = subscription.Close() })
-	service := users.NewService(users.NewMemoryUserRepository(), users.NewUserEventPublisher(bus))
+	service := users.NewService(users.NewMemoryUserRepository(), {{USER_EVENT_PUBLISHER}}(bus))
 	user, err := service.Create(ctx, users.CreateUserInput{Name: "Grace Hopper", Email: "grace@example.test"})
 	if err != nil {
 		t.Fatalf("Create(): %v", err)
@@ -454,6 +465,62 @@ func TestAtlasDomainEventBehavior(t *testing.T) {
 	}
 }
 `
+
+// runDomainEventBehaviorProbe binds the oracle to either supported application package for the publisher implementation.
+func runDomainEventBehaviorProbe(ctx context.Context, runner CommandRunner, project VerifierProject) EndpointResult {
+	publisher, err := domainEventPublisherExpression(project.Root)
+	if err != nil {
+		return EndpointResult{ID: "domain-event-behavior", Status: EndpointFailed, Details: err.Error()}
+	}
+	body := strings.Replace(domainEventBehaviorProbe, "{{USER_EVENT_PUBLISHER}}", publisher, 1)
+	return runIsolatedCommand(ctx, runner, project, commandContract{
+		id:              "domain-event-behavior",
+		arguments:       []string{"go", "test", "./internal/notifications", "-run", "^TestAtlasDomainEventBehavior$", "-count=1"},
+		supervisorFiles: []supervisorFile{{path: "internal/notifications/atlas_eval_domain_event_test.go", body: body}},
+	})
+}
+
+// domainEventPublisherExpression discovers the public constructor without prescribing whether the user or event package owns its adapter.
+func domainEventPublisherExpression(root string) (string, error) {
+	candidates := []struct {
+		directory  string
+		expression string
+	}{
+		{directory: filepath.Join(root, "internal", "users"), expression: "users.NewUserEventPublisher"},
+		{directory: filepath.Join(root, "internal", "events"), expression: "appevents.NewUserEventPublisher"},
+	}
+	var expressions []string
+	for _, candidate := range candidates {
+		packages, err := parser.ParseDir(token.NewFileSet(), candidate.directory, func(info os.FileInfo) bool {
+			return !strings.HasSuffix(info.Name(), "_test.go")
+		}, 0)
+		if err != nil {
+			continue
+		}
+		for _, parsedPackage := range packages {
+			if packageDeclaresFunction(parsedPackage, "NewUserEventPublisher") {
+				expressions = append(expressions, candidate.expression)
+			}
+		}
+	}
+	if len(expressions) != 1 {
+		return "", fmt.Errorf("expected one NewUserEventPublisher implementation in internal/users or internal/events, found %d", len(expressions))
+	}
+	return expressions[0], nil
+}
+
+// packageDeclaresFunction reports whether one package exposes the requested constructor.
+func packageDeclaresFunction(parsedPackage *ast.Package, name string) bool {
+	for _, file := range sortedPackageFiles(parsedPackage) {
+		for _, declaration := range file.Decls {
+			function, ok := declaration.(*ast.FuncDecl)
+			if ok && function.Recv == nil && function.Name.Name == name {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 const eventFollowupJobBehaviorProbe = `package reports
 

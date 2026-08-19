@@ -366,14 +366,11 @@ func promotedSurfaceContracts() []surfaceContract {
 			qualityTestPatterns: []string{"internal/users/*_test.go", "internal/notifications/*_test.go"},
 			sources: []sourceContract{
 				{id: "typed-user-event", paths: []string{"internal/events/*.go"}, identifiers: []string{"UserID", "Topic"}, identifierChoices: [][]string{{"UserCreated", "UserCreatedEvent"}}, stringLiterals: []string{"users.created"}, declarations: []declarationContract{{nameChoices: []string{"UserCreated", "UserCreatedEvent"}, identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}}},
-				{id: "domain-event-publication", paths: []string{"internal/users/*.go"}, identifiers: []string{"UserEvents", "UserEventPublisher"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{anyName: true, receiver: "UserEventPublisher", identifiers: []string{"ctx", "UserID"}, selectorCalls: []string{"Publish", "WithContext"}}, {name: "Create", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"Save"}}}},
+				{id: "domain-event-publication", paths: []string{"internal/users/*.go"}, identifiers: []string{"UserEvents"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Create", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"Save"}}}},
 				{id: "event-reaction", paths: []string{"internal/notifications/*.go", "app/lifecycle.go"}, identifiers: []string{"Subscribers", "UserCreatedHandler", "Register", "Startup", "Shutdown"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Register", receiver: "Subscribers", identifiers: []string{"UserID"}, selectorCalls: []string{"Subscribe"}}, {name: "Startup", receiver: "LifecycleRegistry", selectorCalls: []string{"Register"}}, {name: "Shutdown", receiver: "LifecycleRegistry", selectorCalls: []string{"Close"}}}},
+				{id: "user-event-publisher", paths: []string{"internal/users/*.go", "internal/events/*.go"}, identifiers: []string{"UserEventPublisher", "NewUserEventPublisher"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{anyName: true, receiver: "UserEventPublisher", identifiers: []string{"ctx", "UserID"}, selectorCalls: []string{"Publish", "WithContext"}}}},
 			},
-			commands: standardSurfaceCommands(commandContract{
-				id:              "domain-event-behavior",
-				arguments:       []string{"go", "test", "./internal/notifications", "-run", "^TestAtlasDomainEventBehavior$", "-count=1"},
-				supervisorFiles: []supervisorFile{{path: "internal/notifications/atlas_eval_domain_event_test.go", body: domainEventBehaviorProbe}},
-			}),
+			commands: standardSurfaceCommands(commandContract{id: "domain-event-behavior", probe: runDomainEventBehaviorProbe}),
 		},
 		{
 			id:                  "dispatch-event-followup-job/v1",

@@ -563,7 +563,7 @@ func derivedSurfaceChange(path string) bool {
 	if path == "go.sum" || filepath.Base(path) == "wire_gen.go" {
 		return true
 	}
-	if path == "_data" || strings.Contains(path, "/_data/") || strings.HasSuffix(path, "/_data") {
+	if path == "_data" || strings.HasPrefix(path, "_data/") || strings.Contains(path, "/_data/") || strings.HasSuffix(path, "/_data") {
 		return true
 	}
 	return path == "bin" || path == "build" || path == "storage" ||
