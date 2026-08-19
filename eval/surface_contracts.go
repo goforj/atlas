@@ -55,7 +55,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		{
 			id:                  "add-event-subscriber/v1",
 			allowedChanges:      []string{"internal/invoices/*_event.go", "internal/invoices/*_subscriber.go", "app/wire/inject_subscribers_app.go"},
-			qualityTestPatterns: []string{"internal/invoices/*_event_test.go", "internal/invoices/*_subscriber_test.go"},
+			qualityTestPatterns: []string{"internal/invoices/*_event_test.go", "internal/invoices/*_subscriber_test.go", "app/wire/*_test.go"},
 			sources: []sourceContract{
 				{id: "typed-event", paths: []string{"internal/invoices/*_event.go"}, identifiers: []string{"PaidEvent", "InvoiceID", "Topic"}, stringLiterals: []string{"invoices.paid"}},
 				{id: "subscriber-boundary", paths: []string{"internal/invoices/*_subscriber.go"}, identifiers: []string{"PaidSubscriber", "Service"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Handle", receiver: "PaidSubscriber", identifiers: []string{"ctx", "InvoiceID"}, selectorCalls: []string{"Find"}, forbiddenCalls: []string{"Background"}}}},
@@ -72,9 +72,9 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:             "create-model/v1",
-			allowedChanges: []string{"internal/models/*.go", "app/wire/inject_repositories_app.go"},
+			allowedChanges: []string{"internal/models/*.go", "internal/users/*.go", "app/wire/inject_repositories_app.go"},
 			sources: []sourceContract{
-				{id: "model-shape", paths: []string{"internal/models/*.go"}, identifiers: []string{"User", "Email", "DisplayName", "CreatedAt", "UserRepo", "ByID", "WithContext"}, stringLiterals: []string{"users"}},
+				{id: "model-shape", paths: []string{"internal/models/*.go", "internal/users/*.go"}, identifiers: []string{"User", "Email", "DisplayName", "CreatedAt", "UserRepo", "ByID", "WithContext"}, stringLiterals: []string{"users"}},
 				{id: "repository-registration", paths: []string{"app/wire/inject_repositories_app.go"}, identifiers: []string{"NewUserRepo"}},
 			},
 			commands: standardSurfaceCommands(),
@@ -293,7 +293,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:             "add-database-transaction/v1",
 			allowedChanges: []string{"go.mod", "go.sum", "internal/accounts/*.go", "app/wire/app.go", "app/wire/inject_repositories_app.go", "app/wire/inject_services_app.go"},
 			sources: []sourceContract{
-				{id: "transaction-bound-repository", paths: []string{"internal/accounts/repository.go"}, identifiers: []string{"Repository", "WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "WithTransaction", anyReceiver: true, identifiers: []string{"ctx"}, selectorCalls: []string{"Transaction"}}, {name: "AdjustBalance", anyReceiver: true, identifiers: []string{"ctx"}, selectorCalls: []string{"UpdateColumn"}}}},
+				{id: "transaction-bound-repository", paths: []string{"internal/accounts/repository.go"}, identifiers: []string{"Repository", "WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "WithTransaction", anyReceiver: true, identifiers: []string{"ctx"}, selectorCallChoices: [][]string{{"Transaction", "Begin"}}}, {name: "AdjustBalance", anyReceiver: true, identifiers: []string{"ctx"}, selectorCalls: []string{"UpdateColumn"}}}},
 				{id: "atomic-transfer-service", paths: []string{"internal/accounts/service.go"}, identifiers: []string{"Service", "Transfer"}, forbiddenCalls: []string{"TODO"}, declarations: []declarationContract{{name: "Transfer", receiver: "Service", selectorCalls: []string{"WithTransaction", "AdjustBalance"}, forbiddenCalls: []string{"Background"}, nestedCalls: []nestedCallContract{{outer: "WithTransaction", inner: "AdjustBalance"}}}}},
 				{id: "account-repository-registration", paths: []string{"app/wire/app.go", "app/wire/inject_repositories_app.go"}, identifierChoices: [][]string{{"NewRepository", "ProvideRepository"}}},
 				{id: "account-service-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}},
@@ -335,7 +335,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                     "add-cached-repository/v1",
-			allowedChanges:         generatedEnvironmentChanges("internal/caches/*_gen.go", "internal/users/*.go", "app/wire/inject_services_app.go"),
+			allowedChanges:         generatedEnvironmentChanges("internal/caches/*_gen.go", "internal/users/*.go", "app/wire/inject_repositories_app.go", "app/wire/inject_services_app.go", "app/wire/wire.go"),
 			baselineTestExclusions: []string{"internal/users/service_test.go"},
 			sources: []sourceContract{
 				{id: "cache-aside-repository", paths: []string{"internal/users/*.go"}, identifiers: []string{"User"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Find", receiver: "Service", identifiers: []string{"ctx"}, selectorCalls: []string{"Find"}}}},
@@ -362,7 +362,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "publish-domain-event/v1",
-			allowedChanges:      []string{"internal/events/*.go", "internal/users/*.go", "internal/notifications/*.go", "app/routes.go", "app/lifecycle.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go", "app/wire/inject_subscribers_app.go"},
+			allowedChanges:      []string{"internal/events/*.go", "internal/users/*.go", "internal/notifications/*.go", "app/routes.go", "app/lifecycle.go", "app/wire/app.go", "app/wire/inject_http_controllers_app.go", "app/wire/inject_services_app.go", "app/wire/inject_subscribers_app.go"},
 			qualityTestPatterns: []string{"internal/users/*_test.go", "internal/notifications/*_test.go"},
 			sources: []sourceContract{
 				{id: "typed-user-event", paths: []string{"internal/events/*.go"}, identifiers: []string{"UserID", "Topic"}, identifierChoices: [][]string{{"UserCreated", "UserCreatedEvent"}}, stringLiterals: []string{"users.created"}, declarations: []declarationContract{{nameChoices: []string{"UserCreated", "UserCreatedEvent"}, identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}}},
