@@ -164,6 +164,27 @@ func (bus) Subscribe() {}
 	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[2]); result.Status != EndpointFailed {
 		t.Fatalf("unclosed subscription mutant = %#v, want failure", result)
 	}
+	write("internal/events/memory_bus.go", `package events
+import "context"
+func closeBus() { _ = context.Background() }
+`)
+	write("internal/users/events.go", `package users
+type UserEventPublisher struct{ bus interface{ WithContext(any) interface{ Publish(any) error } } }
+func NewUserEventPublisher(bus interface{ WithContext(any) interface{ Publish(any) error } }) *UserEventPublisher { return &UserEventPublisher{bus: bus} }
+func (publisher UserEventPublisher) PublishCreated(ctx any, UserID string) error { return publisher.bus.WithContext(ctx).Publish(UserID) }
+`)
+	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[3]); result.Status != EndpointPassed {
+		t.Fatalf("unrelated event package background context = %#v", result)
+	}
+	write("internal/users/events.go", `package users
+import "context"
+type UserEventPublisher struct{ bus interface{ WithContext(any) interface{ Publish(any) error } } }
+func NewUserEventPublisher(bus interface{ WithContext(any) interface{ Publish(any) error } }) *UserEventPublisher { return &UserEventPublisher{bus: bus} }
+func (publisher UserEventPublisher) PublishCreated(ctx any, UserID string) error { return publisher.bus.WithContext(context.Background()).Publish(UserID) }
+`)
+	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[3]); result.Status != EndpointFailed {
+		t.Fatalf("publisher context replacement = %#v, want failure", result)
+	}
 }
 
 // TestCorrectedVerifierContractsPreserveBehaviorOverImplementationSpelling locks the reviewed verifier boundaries to their public contracts.
