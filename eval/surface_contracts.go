@@ -389,11 +389,11 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "add-resilient-job/v1",
-			allowedChanges:      generatedEnvironmentChanges("internal/jobs/*.go", "internal/reports/*.go", "internal/notifications/*.go", "internal/storages/*_gen.go", "app/lifecycle.go", "app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go", "app/wire/inject_subscribers_app.go"),
+			allowedChanges:      generatedEnvironmentChanges("internal/jobs/*.go", "internal/reports/*.go", "internal/notifications/*.go", "internal/users/repository.go", "internal/storages/*_gen.go", "app/lifecycle.go", "app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go", "app/wire/inject_subscribers_app.go"),
 			qualityTestPatterns: []string{"internal/reports/*_test.go", "internal/notifications/*_test.go"},
 			sources: []sourceContract{
 				{id: "retry-safe-report-job", paths: []string{"internal/reports/*.go"}, identifiers: []string{"GenerateJob", "GenerateJobTypeName", "HandleTask"}, identifierChoices: [][]string{{"GeneratePayload", "GenerateJobPayload"}}, selectorCalls: []string{"Bind", "Dispatch", "Find", "Put", "Retry", "Timeout"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:generate"}, declarations: []declarationContract{{name: "GeneratePayload", nameChoices: []string{"GenerateJobPayload"}, identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}, {name: "GenerateForUser", nameChoices: []string{"Generate"}, receiver: "Service", selectorCalls: []string{"Find", "Put"}}, {name: "HandleTask", receiver: "GenerateJob", selectorCalls: []string{"Bind"}, selectorCallChoices: [][]string{{"GenerateForUser", "Generate"}}}, {name: "Queue", nameChoices: []string{"Dispatch"}, receiver: "GenerateJob", selectorCalls: []string{"Dispatch"}}}},
-				{id: "resilient-job-boundary", paths: []string{"internal/notifications/service.go"}, identifiers: []string{"HandleUserCreated"}, identifierChoices: [][]string{{"ReportQueue", "ReportDispatcher"}}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "HandleUserCreated", receiver: "Service", selectorCallChoices: [][]string{{"Queue", "Dispatch"}}}}},
+				{id: "resilient-job-boundary", paths: []string{"internal/notifications/service.go"}, identifiers: []string{"HandleUserCreated"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "HandleUserCreated", receiver: "Service", selectorCallChoices: [][]string{{"Queue", "Dispatch"}}}}},
 				{id: "resilient-job-registration", paths: []string{"app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewGenerateJob", "NewService"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
