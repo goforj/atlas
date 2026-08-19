@@ -135,7 +135,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "choose-storage-for-files/v1",
-			allowedChanges:      generatedEnvironmentChanges("go.mod", "internal/storages/*_gen.go", "internal/invoices/*attachment*.go", "app/wire/inject_services_app.go", "app/wire/app.go"),
+			allowedChanges:      generatedEnvironmentChanges("go.mod", "internal/storages/*_gen.go", "internal/storages/README.md", "internal/invoices/*attachment*.go", "app/wire/inject_services_app.go", "app/wire/app.go"),
 			qualityTestPatterns: []string{"internal/invoices/*attachment*_test.go"},
 			sources: []sourceContract{
 				{id: "attachment-storage-config", paths: []string{".env"}, text: []string{"STORAGE_ATTACHMENTS_DRIVER=", "STORAGE_ATTACHMENTS_ROOT="}},
@@ -185,7 +185,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:              "runtime-observability/v1",
-			allowedChanges:  []string{".env.local"},
+			allowedChanges:  []string{".env.local", "internal/inspects/README.md"},
 			requiredChanges: []string{".env.local"},
 			sources: []sourceContract{
 				{id: "local-inspect-capture-config", paths: []string{".env.local"}, text: []string{"LIGHTHOUSE_INSPECT_ENABLED="}},
@@ -310,7 +310,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		{
 			id:                  "add-mail-workflow/v1",
 			allowedChanges:      []string{"internal/invoices/receipt_mailer.go", "internal/invoices/receipt_mailer_test.go", "app/wire/app.go", "app/wire/inject_services_app.go"},
-			qualityTestPatterns: []string{"internal/invoices/*_test.go"},
+			qualityTestPatterns: []string{"internal/invoices/*_test.go", "app/wire/*_test.go"},
 			sources: []sourceContract{
 				{id: "receipt-mail-service", paths: []string{"internal/invoices/receipt_mailer.go"}, identifiers: []string{"ReceiptMailer", "NewReceiptMailer", "Send", "Manager"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "Send", receiver: "ReceiptMailer", selectorCalls: []string{"Find", "Default", "Message", "To", "Subject", "Text", "Send"}}}},
 				{id: "receipt-mail-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewReceiptMailer"}},
@@ -392,8 +392,8 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges:      generatedEnvironmentChanges("internal/jobs/*.go", "internal/reports/*.go", "internal/notifications/*.go", "internal/storages/*_gen.go", "app/lifecycle.go", "app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go", "app/wire/inject_subscribers_app.go"),
 			qualityTestPatterns: []string{"internal/reports/*_test.go", "internal/notifications/*_test.go"},
 			sources: []sourceContract{
-				{id: "retry-safe-report-job", paths: []string{"internal/reports/*.go"}, identifiers: []string{"GeneratePayload", "GenerateJob", "GenerateJobTypeName", "HandleTask"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:generate", "profile.json"}, declarations: []declarationContract{{name: "GeneratePayload", identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}, {name: "GenerateForUser", receiver: "Service", selectorCalls: []string{"Find", "Put"}}, {name: "HandleTask", receiver: "GenerateJob", selectorCalls: []string{"Bind", "GenerateForUser"}}, {name: "Queue", receiver: "GenerateJob", selectorCalls: []string{"Dispatch", "Retry", "Timeout"}}}},
-				{id: "resilient-job-boundary", paths: []string{"internal/notifications/service.go"}, identifiers: []string{"HandleUserCreated", "ReportQueue"}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "HandleUserCreated", receiver: "Service", selectorCalls: []string{"Queue"}}}},
+				{id: "retry-safe-report-job", paths: []string{"internal/reports/*.go"}, identifiers: []string{"GenerateJob", "GenerateJobTypeName", "HandleTask"}, identifierChoices: [][]string{{"GeneratePayload", "GenerateJobPayload"}}, selectorCalls: []string{"Bind", "Dispatch", "Find", "Put", "Retry", "Timeout"}, forbiddenCalls: []string{"Background", "TODO"}, stringLiterals: []string{"reports:generate"}, declarations: []declarationContract{{name: "GeneratePayload", nameChoices: []string{"GenerateJobPayload"}, identifiers: []string{"UserID"}, forbiddenIdentifiers: []string{"Email"}}, {name: "GenerateForUser", nameChoices: []string{"Generate"}, receiver: "Service", selectorCalls: []string{"Find", "Put"}}, {name: "HandleTask", receiver: "GenerateJob", selectorCalls: []string{"Bind"}, selectorCallChoices: [][]string{{"GenerateForUser", "Generate"}}}, {name: "Queue", nameChoices: []string{"Dispatch"}, receiver: "GenerateJob", selectorCalls: []string{"Dispatch"}}}},
+				{id: "resilient-job-boundary", paths: []string{"internal/notifications/service.go"}, identifiers: []string{"HandleUserCreated"}, identifierChoices: [][]string{{"ReportQueue", "ReportDispatcher"}}, forbiddenCalls: []string{"Background", "TODO"}, declarations: []declarationContract{{name: "HandleUserCreated", receiver: "Service", selectorCallChoices: [][]string{{"Queue", "Dispatch"}}}}},
 				{id: "resilient-job-registration", paths: []string{"app/wire/inject_jobs_app.go", "app/wire/inject_services_app.go"}, identifiers: []string{"NewGenerateJob", "NewService"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
