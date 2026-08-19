@@ -186,9 +186,9 @@ func (UserCreatedEvent) Topic() string { return topic }
 		t.Fatalf("event payload mutant = %#v, want failure", result)
 	}
 	write("internal/notifications/subscribers.go", `package notifications
-type UserCreatedHandler interface{}
-type Subscribers struct{}
-func (Subscribers) Register(ctx any, bus interface{ Subscribe() }) { var UserID string; bus.Subscribe(); _, _ = ctx, UserID }
+type UserCreatedHandler interface{ Handle(any, string) }
+type Subscribers struct{ handler UserCreatedHandler }
+func (subscribers Subscribers) Register(ctx any, bus interface{ Subscribe() }) { var UserID string; bus.Subscribe(); subscribers.handler.Handle(ctx, UserID) }
 `)
 	write("app/lifecycle.go", `package app
 type LifecycleRegistry struct{ subscription interface{ Close() } }

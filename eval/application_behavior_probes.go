@@ -425,28 +425,7 @@ import (
 	"example.com/scenarioapp/internal/users"
 )
 
-// atlasUserCreatedHandler records delivery without relying on candidate-authored tests.
-type atlasUserCreatedHandler struct {
-	userID string
-}
-
-// record stores the typed event payload without prescribing an application method name.
-func (handler *atlasUserCreatedHandler) record(userID string) error {
-	handler.userID = userID
-	return nil
-}
-
-// Handle records subscribers that use the concise handler boundary.
-func (handler *atlasUserCreatedHandler) Handle(_ context.Context, userID string) error {
-	return handler.record(userID)
-}
-
-// HandleUserCreated records subscribers that name the domain reaction explicitly.
-func (handler *atlasUserCreatedHandler) HandleUserCreated(_ context.Context, userID string) error {
-	return handler.record(userID)
-}
-
-// TestAtlasDomainEventBehavior proves user creation publishes an ID-only event to a registered subscriber.
+// TestAtlasDomainEventBehavior proves user creation publishes the saved user's ID through the typed event boundary.
 func TestAtlasDomainEventBehavior(t *testing.T) {
 	ctx := context.Background()
 	t.Setenv("EVENTS_DRIVER", "inproc")
@@ -459,10 +438,13 @@ func TestAtlasDomainEventBehavior(t *testing.T) {
 		t.Fatalf("bus.Start(): %v", err)
 	}
 	t.Cleanup(func() { _ = bus.Close(context.Background()) })
-	handler := &atlasUserCreatedHandler{}
-	subscription, err := NewSubscribers(handler).Register(ctx, bus)
+	receivedUserID := ""
+	subscription, err := bus.WithContext(ctx).Subscribe(func(_ context.Context, event {{USER_EVENT_TYPE}}) error {
+		receivedUserID = event.UserID
+		return nil
+	})
 	if err != nil {
-		t.Fatalf("Register(): %v", err)
+		t.Fatalf("Subscribe(): %v", err)
 	}
 	t.Cleanup(func() { _ = subscription.Close() })
 	service := users.NewService(users.NewMemoryUserRepository(), {{USER_EVENT_PUBLISHER}}(bus))
@@ -470,24 +452,52 @@ func TestAtlasDomainEventBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create(): %v", err)
 	}
-	if user.ID == "" || handler.userID != user.ID {
-		t.Fatalf("delivered user ID = %q, want %q", handler.userID, user.ID)
+	if user.ID == "" || receivedUserID != user.ID {
+		t.Fatalf("published user ID = %q, want %q", receivedUserID, user.ID)
 	}
 }
 `
 
-// runDomainEventBehaviorProbe binds the oracle to either supported application package for the publisher implementation.
+// runDomainEventBehaviorProbe discovers the candidate's disclosed type choices before installing the independent publication observer.
 func runDomainEventBehaviorProbe(ctx context.Context, runner CommandRunner, project VerifierProject) EndpointResult {
 	publisher, err := domainEventPublisherExpression(project.Root)
 	if err != nil {
 		return EndpointResult{ID: "domain-event-behavior", Status: EndpointFailed, Details: err.Error()}
 	}
+	eventType, err := domainEventTypeExpression(project.Root)
+	if err != nil {
+		return EndpointResult{ID: "domain-event-behavior", Status: EndpointFailed, Details: err.Error()}
+	}
 	body := strings.Replace(domainEventBehaviorProbe, "{{USER_EVENT_PUBLISHER}}", publisher, 1)
+	body = strings.Replace(body, "{{USER_EVENT_TYPE}}", eventType, 1)
 	return runIsolatedCommand(ctx, runner, project, commandContract{
 		id:              "domain-event-behavior",
 		arguments:       []string{"go", "test", "./internal/notifications", "-run", "^TestAtlasDomainEventBehavior$", "-count=1"},
 		supervisorFiles: []supervisorFile{{path: "internal/notifications/atlas_eval_domain_event_test.go", body: body}},
 	})
+}
+
+// domainEventTypeExpression discovers the accepted typed fact without prescribing its concise or explicit name.
+func domainEventTypeExpression(root string) (string, error) {
+	directory := filepath.Join(root, "internal", "events")
+	packages, err := parser.ParseDir(token.NewFileSet(), directory, func(info os.FileInfo) bool {
+		return !strings.HasSuffix(info.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		return "", fmt.Errorf("parse internal/events: %w", err)
+	}
+	var expressions []string
+	for _, parsedPackage := range packages {
+		for _, name := range []string{"UserCreated", "UserCreatedEvent"} {
+			if packageDeclaresType(parsedPackage, name) {
+				expressions = append(expressions, "appevents."+name)
+			}
+		}
+	}
+	if len(expressions) != 1 {
+		return "", fmt.Errorf("expected one UserCreated or UserCreatedEvent type in internal/events, found %d", len(expressions))
+	}
+	return expressions[0], nil
 }
 
 // domainEventPublisherExpression discovers the public constructor without prescribing whether the user or event package owns its adapter.
@@ -526,6 +536,25 @@ func packageDeclaresFunction(parsedPackage *ast.Package, name string) bool {
 			function, ok := declaration.(*ast.FuncDecl)
 			if ok && function.Recv == nil && function.Name.Name == name {
 				return true
+			}
+		}
+	}
+	return false
+}
+
+// packageDeclaresType reports whether one package exposes the requested event type.
+func packageDeclaresType(parsedPackage *ast.Package, name string) bool {
+	for _, file := range sortedPackageFiles(parsedPackage) {
+		for _, declaration := range file.Decls {
+			general, ok := declaration.(*ast.GenDecl)
+			if !ok || general.Tok != token.TYPE {
+				continue
+			}
+			for _, specification := range general.Specs {
+				typeSpec, ok := specification.(*ast.TypeSpec)
+				if ok && typeSpec.Name.Name == name {
+					return true
+				}
 			}
 		}
 	}

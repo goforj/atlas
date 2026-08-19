@@ -578,6 +578,44 @@ func (repository Repository) Find() { _, _ = Get[string](repository.cache, "key"
 	}
 }
 
+// TestSurfaceVerifierAcceptsOneDeclarationScopedCallChoice keeps equivalent handler names local to the required registration method.
+func TestSurfaceVerifierAcceptsOneDeclarationScopedCallChoice(t *testing.T) {
+	for _, method := range []string{"Handle", "HandleUserCreated"} {
+		t.Run(method, func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(root, "subscribers.go")
+			source := `package notifications
+type Handler struct{}
+func (Handler) ` + method + `(string) {}
+type Subscribers struct{ handler Handler }
+func (subscribers *Subscribers) Register(userID string) { subscribers.handler.` + method + `(userID) }
+`
+			if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			contract := sourceContract{
+				id:    "subscriber-call-choice",
+				paths: []string{"subscribers.go"},
+				declarations: []declarationContract{{
+					name:                "Register",
+					receiver:            "Subscribers",
+					selectorCallChoices: [][]string{{"Handle", "HandleUserCreated"}},
+				}},
+			}
+			if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+				t.Fatalf("%s result = %#v, want pass", method, result)
+			}
+			mutant := strings.Replace(source, "."+method+"(userID)", ".Record(userID)", 1)
+			if err := os.WriteFile(path, []byte(mutant), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
+				t.Fatalf("unrelated call result = %#v, want failure", result)
+			}
+		})
+	}
+}
+
 // TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality keeps authored coverage visible without making candidate code its own oracle.
 func TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality(t *testing.T) {
 	root := t.TempDir()
@@ -814,13 +852,8 @@ func TestApplicationBehaviorProbesExerciseDisclosedWorkflows(t *testing.T) {
 	if strings.Contains(lifecycleReadinessBehaviorProbe, `"readiness"`) || !strings.Contains(lifecycleReadinessBehaviorProbe, "lifecycle.Start(ctx)") || !strings.Contains(lifecycleReadinessBehaviorProbe, "errors.Is(err, failure)") {
 		t.Fatalf("lifecycle probe must execute the registered hook without a reserved fixture ID:\n%s", lifecycleReadinessBehaviorProbe)
 	}
-	if strings.Contains(domainEventBehaviorProbe, ".Publish(") || !strings.Contains(domainEventBehaviorProbe, "NewSubscribers(handler).Register") || !strings.Contains(domainEventBehaviorProbe, "service.Create(") {
-		t.Fatalf("event probe must exercise creation through registered handling:\n%s", domainEventBehaviorProbe)
-	}
-	for _, method := range []string{"Handle(", "HandleUserCreated("} {
-		if !strings.Contains(domainEventBehaviorProbe, method) {
-			t.Fatalf("event probe does not support handler method %q:\n%s", method, domainEventBehaviorProbe)
-		}
+	if strings.Contains(domainEventBehaviorProbe, ".Publish(") || strings.Contains(domainEventBehaviorProbe, "NewSubscribers(") || !strings.Contains(domainEventBehaviorProbe, "bus.WithContext(ctx).Subscribe") || !strings.Contains(domainEventBehaviorProbe, "service.Create(") {
+		t.Fatalf("event probe must observe typed publication without prescribing the candidate's handler constructor:\n%s", domainEventBehaviorProbe)
 	}
 	if strings.Contains(receiptMailBehaviorProbe, "receiptContent(") || !strings.Contains(receiptMailBehaviorProbe, "delivery.To[0].Email != recipient") || !strings.Contains(receiptMailBehaviorProbe, `strings.Contains(delivery.Subject, "invoice-42")`) || !strings.Contains(receiptMailBehaviorProbe, `strings.Contains(delivery.Text, "125.00")`) {
 		t.Fatalf("mail probe must inspect one real delivery without a private formatter contract:\n%s", receiptMailBehaviorProbe)
@@ -882,6 +915,55 @@ func TestDomainEventPublisherExpressionAcceptsEitherApplicationPackage(t *testin
 				t.Fatalf("domainEventPublisherExpression() = %q, %v, want %q", expression, err, test.expression)
 			}
 		})
+	}
+}
+
+// TestDomainEventTypeExpressionAcceptsDisclosedNames keeps the behavior probe aligned with both prompt-approved event names.
+func TestDomainEventTypeExpressionAcceptsDisclosedNames(t *testing.T) {
+	for _, name := range []string{"UserCreated", "UserCreatedEvent"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			directory := filepath.Join(root, "internal", "events")
+			if err := os.MkdirAll(directory, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			body := "package events\ntype " + name + " struct { UserID string }\n"
+			if err := os.WriteFile(filepath.Join(directory, "event.go"), []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			expression, err := domainEventTypeExpression(root)
+			if err != nil || expression != "appevents."+name {
+				t.Fatalf("domainEventTypeExpression() = %q, %v, want %q", expression, err, "appevents."+name)
+			}
+		})
+	}
+}
+
+// TestDomainEventTypeExpressionRejectsMissingOrAmbiguousTypes prevents the probe from guessing an undisclosed candidate shape.
+func TestDomainEventTypeExpressionRejectsMissingOrAmbiguousTypes(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		body string
+	}{
+		{name: "missing", body: "package events\n"},
+		{name: "ambiguous", body: "package events\ntype UserCreated struct{}\ntype UserCreatedEvent struct{}\n"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			directory := filepath.Join(root, "internal", "events")
+			if err := os.MkdirAll(directory, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(directory, "event.go"), []byte(test.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if expression, err := domainEventTypeExpression(root); err == nil {
+				t.Fatalf("domainEventTypeExpression() = %q, want error", expression)
+			}
+		})
+	}
+	if expression, err := domainEventTypeExpression(t.TempDir()); err == nil {
+		t.Fatalf("domainEventTypeExpression() without internal/events = %q, want error", expression)
 	}
 }
 
