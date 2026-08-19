@@ -366,6 +366,9 @@ func TestCorrectedVerifierContractsPreserveBehaviorOverImplementationSpelling(t 
 	if transaction := contracts["add-database-transaction/v1"]; !slices.Contains(transaction.allowedChanges, "app/wire/app.go") || slices.Contains(transaction.sources[0].forbiddenCalls, "Background") {
 		t.Fatalf("transaction contract rejects supported app wiring or nil-context normalization: %#v", transaction)
 	}
+	if resilient := contracts["add-resilient-job/v1"]; !slices.Contains(resilient.allowedChanges, "internal/users/repository.go") {
+		t.Fatalf("resilient job contract rejects cancellation checks in the existing repository: %#v", resilient.allowedChanges)
+	}
 	for _, calibration := range []struct {
 		contract string
 		paths    []string
@@ -926,8 +929,8 @@ func (job GenerateJob) Dispatch(ctx context.Context, _ string) error {
 
 import "context"
 
-type ReportDispatcher interface { Dispatch(context.Context, string) error }
-type Service struct{ reports ReportDispatcher }
+type ReportGenerator interface { Dispatch(context.Context, string) error }
+type Service struct{ reports ReportGenerator }
 func (service Service) HandleUserCreated(ctx context.Context, userID string) error {
 	return service.reports.Dispatch(ctx, userID)
 }
