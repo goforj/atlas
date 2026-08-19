@@ -566,6 +566,8 @@ const eventFollowupJobBehaviorProbe = `package reports
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"example.com/scenarioapp/internal/queues"
@@ -620,6 +622,8 @@ const resilientJobBehaviorProbe = `package reports
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"example.com/scenarioapp/internal/queues"
@@ -627,6 +631,45 @@ import (
 	"github.com/goforj/storage"
 	"github.com/goforj/storage/driver/memorystorage"
 )
+
+// atlasReportQueuer captures the original reviewed job boundary.
+type atlasReportQueuer interface {
+	Queue(context.Context, string) error
+}
+
+// atlasReportDispatcher captures the current make:job dispatch boundary.
+type atlasReportDispatcher interface {
+	Dispatch(context.Context, string) error
+}
+
+// atlasDispatchReport keeps the probe focused on behavior across supported generator generations.
+func atlasDispatchReport(ctx context.Context, job *GenerateJob, userID string) error {
+	if queuer, ok := any(job).(atlasReportQueuer); ok {
+		return queuer.Queue(ctx, userID)
+	}
+	if dispatcher, ok := any(job).(atlasReportDispatcher); ok {
+		return dispatcher.Dispatch(ctx, userID)
+	}
+	return fmt.Errorf("GenerateJob exposes neither Queue nor Dispatch")
+}
+
+// atlasStoredReport finds the one deterministic user report without prescribing its application-owned path spelling.
+func atlasStoredReport(disk storage.Storage) (string, []byte, error) {
+	var paths []string
+	if err := disk.Walk("", func(entry storage.Entry) error {
+		if !entry.IsDir {
+			paths = append(paths, entry.Path)
+		}
+		return nil
+	}); err != nil {
+		return "", nil, err
+	}
+	if len(paths) != 1 {
+		return "", nil, fmt.Errorf("stored report paths = %v, want one deterministic object", paths)
+	}
+	body, err := disk.Get(paths[0])
+	return paths[0], body, err
+}
 
 // TestAtlasResilientJobBehavior proves repeated delivery reloads current state and overwrites one deterministic report.
 func TestAtlasResilientJobBehavior(t *testing.T) {
@@ -651,22 +694,32 @@ func TestAtlasResilientJobBehavior(t *testing.T) {
 	if err := runtimeQueue.StartWorkers(ctx); err != nil {
 		t.Fatalf("StartWorkers(): %v", err)
 	}
-	if err := job.Queue(ctx, "42"); err != nil {
-		t.Fatalf("Queue(first): %v", err)
+	if err := atlasDispatchReport(ctx, job, "42"); err != nil {
+		t.Fatalf("dispatch first report: %v", err)
 	}
 	if _, err := repository.Save(ctx, users.User{ID: "42", Name: "Ada", Email: "current@example.test"}); err != nil {
 		t.Fatalf("Save(current): %v", err)
 	}
-	if err := job.Queue(ctx, "42"); err != nil {
-		t.Fatalf("Queue(retry): %v", err)
+	if err := atlasDispatchReport(ctx, job, "42"); err != nil {
+		t.Fatalf("dispatch retried report: %v", err)
 	}
-	body, err := disk.Get("users/42/profile.json")
+	path, body, err := atlasStoredReport(disk)
 	if err != nil {
 		t.Fatalf("read report: %v", err)
 	}
-	var report UserReport
+	if !strings.Contains(path, "42") {
+		t.Fatalf("report path %q does not retain the stable user identity", path)
+	}
+	var report struct {
+		UserID string ` + "`json:\"user_id\"`" + `
+		ID     string ` + "`json:\"id\"`" + `
+		Email  string ` + "`json:\"email\"`" + `
+	}
 	if err := json.Unmarshal(body, &report); err != nil {
 		t.Fatalf("decode report: %v", err)
+	}
+	if report.UserID == "" {
+		report.UserID = report.ID
 	}
 	if report.UserID != "42" || report.Email != "current@example.test" {
 		t.Fatalf("report = %#v", report)

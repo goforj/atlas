@@ -354,6 +354,15 @@ func TestCorrectedVerifierContractsPreserveBehaviorOverImplementationSpelling(t 
 	if model := contracts["create-model/v1"]; !slices.Contains(model.allowedChanges, "internal/users/*.go") || !slices.Contains(model.sources[0].paths, "internal/users/*.go") {
 		t.Fatalf("model contract rejects a cohesive table package: %#v", model)
 	}
+	if mail := contracts["add-mail-workflow/v1"]; !slices.Contains(mail.qualityTestPatterns, "app/wire/*_test.go") {
+		t.Fatalf("mail contract rejects a focused App composition test: %#v", mail.qualityTestPatterns)
+	}
+	if storage := contracts["choose-storage-for-files/v1"]; !slices.Contains(storage.allowedChanges, "internal/storages/README.md") {
+		t.Fatalf("storage contract rejects generated resource documentation: %#v", storage.allowedChanges)
+	}
+	if observability := contracts["runtime-observability/v1"]; !slices.Contains(observability.allowedChanges, "internal/inspects/README.md") {
+		t.Fatalf("observability contract rejects the operator documentation named by its prompt: %#v", observability.allowedChanges)
+	}
 	if transaction := contracts["add-database-transaction/v1"]; !slices.Contains(transaction.allowedChanges, "app/wire/app.go") || slices.Contains(transaction.sources[0].forbiddenCalls, "Background") {
 		t.Fatalf("transaction contract rejects supported app wiring or nil-context normalization: %#v", transaction)
 	}
@@ -875,6 +884,60 @@ func (job GenerateJob) Queue(ctx context.Context, _ string) error {
 	writeVerifierFile(t, root, path, mutant)
 	if result := verifySurfaceSource(root, contract); result.Status != EndpointFailed {
 		t.Fatalf("missing retry result = %#v, want failure", result)
+	}
+}
+
+// TestResilientJobContractAcceptsCurrentGeneratedNaming keeps the verifier aligned with make:job while preserving the retry-safe boundary.
+func TestResilientJobContractAcceptsCurrentGeneratedNaming(t *testing.T) {
+	root := t.TempDir()
+	writeVerifierFile(t, root, "internal/reports/generate_job.go", `package reports
+
+import "context"
+
+const GenerateJobTypeName = "reports:generate"
+type GenerateJobPayload struct{ UserID string }
+type Task struct{}
+type Builder struct{}
+type QueueManager struct{}
+type Repository struct{}
+type Service struct{ repository Repository }
+type GenerateJob struct{ queue QueueManager; service Service }
+func (*Task) Bind(any) error { return nil }
+func (Builder) Retry(int) Builder { return Builder{} }
+func (Builder) Timeout(int) Builder { return Builder{} }
+func (QueueManager) Dispatch(context.Context, Builder) error { return nil }
+func (Repository) Find(context.Context, string) error { return nil }
+func (Service) Put(context.Context, string) error { return nil }
+func (service Service) Generate(ctx context.Context, id string) error {
+	if err := service.repository.Find(ctx, id); err != nil { return err }
+	return service.Put(ctx, "report.json")
+}
+func (job GenerateJob) HandleTask(ctx context.Context, task *Task) error {
+	var payload GenerateJobPayload
+	if err := task.Bind(&payload); err != nil { return err }
+	return job.service.Generate(ctx, payload.UserID)
+}
+func newGenerateQueueJob() Builder { return Builder{}.Retry(3).Timeout(30) }
+func (job GenerateJob) Dispatch(ctx context.Context, _ string) error {
+	return job.queue.Dispatch(ctx, newGenerateQueueJob())
+}
+`)
+	writeVerifierFile(t, root, "internal/notifications/service.go", `package notifications
+
+import "context"
+
+type ReportDispatcher interface { Dispatch(context.Context, string) error }
+type Service struct{ reports ReportDispatcher }
+func (service Service) HandleUserCreated(ctx context.Context, userID string) error {
+	return service.reports.Dispatch(ctx, userID)
+}
+`)
+
+	for _, sourceID := range []string{"retry-safe-report-job", "resilient-job-boundary"} {
+		result := verifySurfaceSource(root, promotedSourceContract(t, "add-resilient-job/v1", sourceID))
+		if result.Status != EndpointPassed {
+			t.Fatalf("current generated shape %s = %#v", sourceID, result)
+		}
 	}
 }
 
