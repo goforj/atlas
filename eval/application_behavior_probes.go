@@ -566,8 +566,6 @@ const eventFollowupJobBehaviorProbe = `package reports
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"strings"
 	"testing"
 
 	"example.com/scenarioapp/internal/queues"

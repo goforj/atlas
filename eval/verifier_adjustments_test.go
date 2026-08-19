@@ -944,6 +944,15 @@ func (service Service) HandleUserCreated(ctx context.Context, userID string) err
 	}
 }
 
+// TestEventFollowupProbeAvoidsRemovedFallbackImports keeps the injected golden test compilable after its fixed-path behavior replaced fallback discovery.
+func TestEventFollowupProbeAvoidsRemovedFallbackImports(t *testing.T) {
+	for _, unusedImport := range []string{`"fmt"`, `"strings"`} {
+		if strings.Contains(eventFollowupJobBehaviorProbe, unusedImport) {
+			t.Fatalf("event follow-up probe retains unused import %s", unusedImport)
+		}
+	}
+}
+
 // TestAvatarContractAcceptsHeaderAccessAndControllerRegistration keeps the static gate neutral to equivalent request and Wire composition APIs.
 func TestAvatarContractAcceptsHeaderAccessAndControllerRegistration(t *testing.T) {
 	root := t.TempDir()
