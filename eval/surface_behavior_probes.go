@@ -295,7 +295,7 @@ func TestAtlasInvoiceValidationBehavior(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			controller := NewController(NewService(&MemoryRepository{}))
+			controller := NewController(NewService(NewRepository()))
 			request := httptest.NewRequest(http.MethodPost, "/invoices", strings.NewReader(test.body))
 			request.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
