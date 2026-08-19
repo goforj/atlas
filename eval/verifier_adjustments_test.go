@@ -311,7 +311,7 @@ func TestCorrectedVerifierContractsPreserveBehaviorOverImplementationSpelling(t 
 		}
 	}
 
-	for _, requirement := range []string{"NewService(&MemoryRepository{})", "json.Unmarshal(response.Body.Bytes(), &created)", "created.TotalCents != 12500"} {
+	for _, requirement := range []string{"NewService(NewRepository())", "json.Unmarshal(response.Body.Bytes(), &created)", "created.TotalCents != 12500"} {
 		if !strings.Contains(invoiceValidationBehaviorProbe, requirement) {
 			t.Fatalf("invoice validation probe does not preserve the full normalized result %q:\n%s", requirement, invoiceValidationBehaviorProbe)
 		}
