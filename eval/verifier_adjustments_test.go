@@ -190,6 +190,10 @@ type UserCreatedHandler interface{ Handle(any, string) }
 type Subscribers struct{ handler UserCreatedHandler }
 func (subscribers Subscribers) Register(ctx any, bus interface{ Subscribe() }) { var UserID string; bus.Subscribe(); subscribers.handler.Handle(ctx, UserID) }
 `)
+	write("internal/events/memory_bus.go", `package events
+import "context"
+func closeBus() { _ = context.Background() }
+`)
 	write("app/lifecycle.go", `package app
 type LifecycleRegistry struct{ subscription interface{ Close() } }
 func (registry LifecycleRegistry) Startup(ctx any) { Subscribers{}.Register(ctx, bus{}) }
@@ -202,6 +206,20 @@ func (bus) Subscribe() {}
 	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[2]); result.Status != EndpointPassed {
 		t.Fatalf("lifecycle-owned subscription shape = %#v", result)
 	}
+	write("internal/events/subscribers.go", `package events
+import "context"
+type UserCreatedHandler interface{ Handle(any, string) }
+type Subscribers struct{ handler UserCreatedHandler }
+func (subscribers Subscribers) Register(ctx any, bus interface{ Subscribe() }) { var UserID string; bus.Subscribe(); subscribers.handler.Handle(context.Background(), UserID) }
+`)
+	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[2]); result.Status != EndpointFailed {
+		t.Fatalf("subscriber background-context mutant = %#v, want failure", result)
+	}
+	write("internal/events/subscribers.go", `package events
+type UserCreatedHandler interface{ Handle(any, string) }
+type Subscribers struct{ handler UserCreatedHandler }
+func (subscribers Subscribers) Register(ctx any, bus interface{ Subscribe() }) { var UserID string; bus.Subscribe(); subscribers.handler.Handle(ctx, UserID) }
+`)
 	write("app/lifecycle.go", `package app
 type LifecycleRegistry struct{ subscription interface{ Close() } }
 func (registry LifecycleRegistry) Startup(ctx any) { Subscribers{}.Register(ctx, bus{}) }
@@ -214,10 +232,6 @@ func (bus) Subscribe() {}
 	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[2]); result.Status != EndpointFailed {
 		t.Fatalf("unclosed subscription mutant = %#v, want failure", result)
 	}
-	write("internal/events/memory_bus.go", `package events
-import "context"
-func closeBus() { _ = context.Background() }
-`)
 	write("internal/users/events.go", `package users
 type UserEventPublisher struct{ bus interface{ WithContext(any) interface{ Publish(any) error } } }
 func NewUserEventPublisher(bus interface{ WithContext(any) interface{ Publish(any) error } }) *UserEventPublisher { return &UserEventPublisher{bus: bus} }
