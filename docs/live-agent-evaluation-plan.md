@@ -3,10 +3,9 @@
 ## Authority
 
 The normative architecture is the GoForj design at
-`docs/designs/atlas-live-agent-evaluation-design.md`, committed on the
-`docs/atlas-live-agent-evaluation` branch. This plan tracks implementation
-order and repository ownership. If this plan and the design disagree, the
-design wins until both are updated in review.
+`docs/designs/atlas-live-agent-evaluation-design.md`. This plan tracks
+implementation order and repository ownership. If this plan and the design
+disagree, the design wins until both are updated in review.
 
 The ignored root `IMPLEMENTATION.md` is local scratch material. It is not an
 implementation dependency or reviewable source of truth for this work.
@@ -48,12 +47,10 @@ The diagnostic core portfolio is implemented across Atlas and GoForj:
   correctly reporting workflow conformance and authoritative framework outcome
   as ineligible without trusted isolation and command evidence.
 
-The pull requests currently use an exact Atlas pseudo-version so standalone
-`GOWORK=off` builds and CI exercise the reviewed cross-repository boundary.
-The remaining release gate is still Atlas-first: publish Atlas, replace the
-pseudo-version with the release tag, then publish GoForj and rerun the portfolio
-from released binaries so retained runtime identities no longer report local
-`(devel)` builds.
+The first implementation was published Atlas-first as Atlas `v0.4.0` and
+GoForj `v0.25.0`. Later development may use an exact Atlas pseudo-version or a
+temporary local replacement, but release evidence must select published
+modules with `GOWORK=off` and record exact runtime identities.
 
 ## Local Readiness Evidence
 
@@ -249,6 +246,42 @@ Start here when resuming this work after the original implementation context is 
 3. Run `forj atlas:eval coverage` from the matching GoForj revision. The capability catalog is the source of truth for covered behavior and planned gaps; the number of evaluation directories is not a coverage metric.
 4. Confirm the selected Atlas and GoForj revisions with `GOWORK=off`. A local workspace or `replace` directive is useful while developing both repositories, but it is not acceptable release evidence.
 
+### Evaluation Program Contract
+
+The program exists to answer one question: can a fresh agent turn a natural application request into a correct, maintainable GoForj Project? Grade the resulting Project first. Agent prose, a claimed command invocation, or use of Atlas is supporting attribution evidence and never substitutes for a working outcome.
+
+Interpret each run across these dimensions:
+
+| Dimension | Question |
+| --- | --- |
+| Application outcome | Does the resulting Project provide the requested behavior? |
+| Framework fit | Does it preserve GoForj's generators, registration points, package boundaries, and runtime conventions? |
+| Tool contribution | Which available guidance or tool surface materially helped or hindered the result? |
+| Reliability | Does the result hold across fresh sessions and repeated paired trials? |
+| Efficiency and recovery | Did the agent reach the result without avoidable churn, and could it recover from useful framework diagnostics? |
+| Maintainability | Is the result idiomatic, cohesive, and suitable for an application owner to extend? |
+
+Keep framework outcome and tool attribution separate. A correct implementation made without the expected generator still contributes to the outcome score while failing the applicable workflow contract. An agent that invokes the expected command but leaves broken behavior fails the outcome. This separation lets maintainers improve generator discoverability without misrepresenting the value delivered to an application owner.
+
+Measure cumulative surfaces through adjacent treatment comparisons:
+
+1. `none` versus `agents` measures baseline Project instructions.
+2. `agents` versus `agents-skills` measures recommended native skills.
+3. `agents-skills` versus `atlas` measures Atlas MCP on top of the documented workflow.
+4. `none` versus `atlas` measures the complete experience, not the contribution of an individual surface.
+
+When a broad surface still has uncertain value, add a targeted ablation only after an adjacent comparison identifies it as the likely cause. Do not create an evaluation for every command or documentation page. Prefer realistic application-shaped tasks and use the capability catalog to keep important gaps visible.
+
+Use three levels of regression evidence:
+
+- pull requests run deterministic schema, runner, verifier, golden, mutant, and generated-Project checks without a provider session;
+- scheduled or explicitly requested smoke runs use fresh provider sessions against the smallest release-critical portfolio; and
+- release benchmarks run the promoted portfolio with repeated paired trials and publish per-capability results, measurement identities, and failure classes.
+
+Classify failures before changing guidance. Use the smallest responsible surface: Project instructions, skill content, MCP discovery, generator behavior, command ergonomics, generated conventions, diagnostics, documentation, framework API, or verifier defect. Rerun the adjacent treatment that can attribute the change. Never rerun a failed attempt merely to replace it with a green result.
+
+Only make claims supported by retained evidence. A useful report includes per-evaluation outcomes, capability coverage, treatment denominators, failure taxonomy, exact tool and source identities, and explicit trust limitations. Aggregate pass rate is a summary, not the benchmark itself.
+
 The repositories divide responsibility intentionally:
 
 | Repository | Change here when | Primary surfaces |
@@ -283,29 +316,19 @@ For ordinary development, run deterministic unit, integration, golden, and mutan
 
 ## Publication Handoff
 
-Publication is deliberately Atlas-first because GoForj imports the new Atlas
-evaluation packages. Reconfirm remote tags immediately before release; from
-the currently observed `v0.3.1` Atlas and `v0.24.1` GoForj baselines, both
-additive feature sets require the next minor versions:
+The first evaluation releases were published Atlas-first as Atlas `v0.4.0` and GoForj `v0.25.0`. Do not assume those remain the current versions. Reconfirm remote tags, selected modules, and the benchmark's recorded identities whenever resuming release work.
 
-1. Review and merge the Atlas implementation, then publish Atlas `v0.4.0`.
-2. Verify `github.com/goforj/atlas@v0.4.0` through the Go module proxy with
-   `GOWORK=off`.
-3. Update GoForj's Atlas pin to `v0.4.0`, tidy without a workspace, and verify
-   that no local replacement remains.
-4. Repeat the GoForj root, nested-module, tagged integration, race, and smoke
-   render checks with `GOWORK=off`.
-5. Review and merge the GoForj implementation, then publish GoForj `v0.25.0`.
-6. Resolve both released modules through the proxy and build the released
-   GoForj command without a workspace.
-7. Run one new paired `none` versus `agents` diagnostic through that released
-   binary. Verify authenticated manifests, equal preparation identities,
-   treatment-specific baselines, absent guidance files in measured diffs,
-   expected diagnostic evidence ineligibility, and released runtime versions
-   instead of `(devel)`.
+For subsequent releases:
 
-Do not tag GoForj while its module still selects Atlas `v0.3.1`, and do not
-use the local workspace run as the final release-qualified evidence.
+1. Merge and publish the Atlas evaluation changes first.
+2. Verify the Atlas module through the Go module proxy with `GOWORK=off`.
+3. Update GoForj's Atlas pin, tidy without a workspace, and verify that no local replacement remains.
+4. Repeat the GoForj root, nested-module, tagged integration, race, and smoke render checks with `GOWORK=off`.
+5. Publish GoForj only after those checks exercise the released Atlas module.
+6. Resolve both released modules through the proxy and build the released GoForj command without a workspace.
+7. Run the next planned paired diagnostic through that released binary. Verify authenticated manifests, equal preparation identities, treatment-specific baselines, absent guidance files in measured diffs, expected evidence eligibility, and released runtime versions instead of `(devel)`.
+
+The first checked-in scorecard measured `none` versus `agents`. After corrected contracts are remeasured, the next treatment sequence is `agents` versus `agents-skills`, followed by `agents-skills` versus `atlas`. Start with the smoke tier and multiple paired trials before paying for the complete portfolio.
 
 ## Validation Discipline
 
@@ -370,8 +393,9 @@ The diagnostic portfolio is complete when:
   provenance-guided diagnosis and a fresh stochastic rerun, not deterministic
   verifier replay of the original candidate tree.
 
-All six conditions are complete for local diagnostics. The final condition
-becomes a release-qualified claim only after Atlas publication, the GoForj pin
-update, `GOWORK=off` validation, and a new run using released identities. The
-next implementation phase is the authoritative sandbox and its negative
-isolation suite, not more unconfined result promotion.
+All six conditions are complete for local diagnostics, and the first Atlas and
+GoForj evaluation releases have been published. The checked-in benchmark still
+contains corrected contracts and newer evaluations that require remeasurement,
+so it remains provisional. The next measurement sequence is recorded in the
+maintainer handoff above. The next implementation phase is the authoritative
+sandbox and its negative isolation suite, not more unconfined result promotion.
