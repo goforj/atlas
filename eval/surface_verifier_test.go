@@ -250,6 +250,9 @@ func TestSurfaceVerifierAllowsToolDerivedOutputs(t *testing.T) {
 		{Path: "app/wire/wire_gen.go"},
 		{Path: "internal/database/_data", After: ProjectPathState{Kind: "directory"}},
 		{Path: "internal/database/_data/sqlite/app.db"},
+		{Path: "_data", After: ProjectPathState{Kind: "directory"}},
+		{Path: "_data/sqlite", After: ProjectPathState{Kind: "directory"}},
+		{Path: "_data/sqlite/app.db"},
 	}, nil)
 	if result.Status != EndpointPassed {
 		t.Fatalf("result = %#v", result)
@@ -800,6 +803,39 @@ func TestApplicationBehaviorProbesExerciseDisclosedWorkflows(t *testing.T) {
 		if !strings.Contains(eventDefinition.Prompt, requirement) {
 			t.Fatalf("domain event prompt omits public workflow contract %q: %s", requirement, eventDefinition.Prompt)
 		}
+	}
+}
+
+// TestDomainEventPublisherExpressionAcceptsEitherApplicationPackage keeps equivalent adapters inside the disclosed task boundary.
+func TestDomainEventPublisherExpressionAcceptsEitherApplicationPackage(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		directory  string
+		expression string
+	}{
+		{name: "users", directory: "users", expression: "users.NewUserEventPublisher"},
+		{name: "events", directory: "events", expression: "appevents.NewUserEventPublisher"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			for _, directory := range []string{"users", "events"} {
+				path := filepath.Join(root, "internal", directory)
+				if err := os.MkdirAll(path, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				body := "package " + directory + "\n"
+				if directory == test.directory {
+					body += "func NewUserEventPublisher(any) any { return nil }\n"
+				}
+				if err := os.WriteFile(filepath.Join(path, "publisher.go"), []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			expression, err := domainEventPublisherExpression(root)
+			if err != nil || expression != test.expression {
+				t.Fatalf("domainEventPublisherExpression() = %q, %v, want %q", expression, err, test.expression)
+			}
+		})
 	}
 }
 

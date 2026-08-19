@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 )
@@ -240,6 +241,8 @@ func verifyCacheDecoratorRegistration(root, constructor string) error {
 		return fmt.Errorf("parse cache repository registration: %w", err)
 	}
 	registeredProviders := map[string]bool{}
+	registeredRepositoryProviders := map[string]bool{}
+	userAliases := importedPackageAliases(file, "/internal/users")
 	directConstructor := false
 	ast.Inspect(file, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
@@ -251,6 +254,9 @@ func verifyCacheDecoratorRegistration(root, constructor string) error {
 			case *ast.SelectorExpr:
 				if expression.Sel.Name == constructor {
 					directConstructor = true
+				}
+				if qualifier, ok := expression.X.(*ast.Ident); ok && userAliases[qualifier.Name] {
+					registeredRepositoryProviders[expression.Sel.Name] = true
 				}
 			case *ast.Ident:
 				registeredProviders[expression.Name] = true
@@ -279,10 +285,69 @@ func verifyCacheDecoratorRegistration(root, constructor string) error {
 			return nil
 		}
 	}
+	usersDirectory := filepath.Join(root, "internal", "users")
+	usersPackages, err := parser.ParseDir(token.NewFileSet(), usersDirectory, func(info os.FileInfo) bool {
+		return !strings.HasSuffix(info.Name(), "_test.go")
+	}, 0)
+	if err == nil {
+		for _, parsedPackage := range usersPackages {
+			for provider := range registeredRepositoryProviders {
+				if packageFunctionCalls(parsedPackage, provider, constructor) {
+					return nil
+				}
+			}
+		}
+	}
 	if !directConstructor {
 		return fmt.Errorf("cache repository constructor %q is not registered in app/wire/inject_services_app.go", constructor)
 	}
 	return nil
+}
+
+// importedPackageAliases returns the local names that refer to one application package.
+func importedPackageAliases(file *ast.File, suffix string) map[string]bool {
+	aliases := map[string]bool{}
+	for _, specification := range file.Imports {
+		path, err := strconv.Unquote(specification.Path.Value)
+		if err != nil || !strings.HasSuffix(path, suffix) {
+			continue
+		}
+		name := filepath.Base(path)
+		if specification.Name != nil && specification.Name.Name != "_" && specification.Name.Name != "." {
+			name = specification.Name.Name
+		}
+		aliases[name] = true
+	}
+	return aliases
+}
+
+// packageFunctionCalls follows a registered package constructor through one explicit composition wrapper.
+func packageFunctionCalls(parsedPackage *ast.Package, functionName, constructor string) bool {
+	for _, file := range sortedPackageFiles(parsedPackage) {
+		for _, declaration := range file.Decls {
+			function, ok := declaration.(*ast.FuncDecl)
+			if !ok || function.Recv != nil || function.Name.Name != functionName || function.Body == nil {
+				continue
+			}
+			called := false
+			ast.Inspect(function.Body, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				identifier, identified := call.Fun.(*ast.Ident)
+				if identified && identifier.Name == constructor {
+					called = true
+					return false
+				}
+				return !called
+			})
+			if called {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // cacheDecoratorStruct discovers the conventional repository and cache fields used by a cache-aside decorator.

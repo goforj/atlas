@@ -112,6 +112,37 @@ func TestVerifyCacheDecoratorRegistrationAcceptsRegisteredWrapper(t *testing.T) 
 	}
 }
 
+// TestVerifyCacheDecoratorRegistrationAcceptsPackageWrapper preserves a registered composition constructor around the testable decorator.
+func TestVerifyCacheDecoratorRegistrationAcceptsPackageWrapper(t *testing.T) {
+	root := t.TempDir()
+	wireDirectory := filepath.Join(root, "app", "wire")
+	usersDirectory := filepath.Join(root, "internal", "users")
+	if err := os.MkdirAll(wireDirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(usersDirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wireSource := "package wire\nimport (\n\t\"github.com/google/wire\"\n\t\"example.com/project/internal/users\"\n)\nvar provider = wire.NewSet(users.NewRepository)\n"
+	if err := os.WriteFile(filepath.Join(wireDirectory, "inject_services_app.go"), []byte(wireSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	usersSource := "package users\nfunc NewRepository() any { return NewCachedRepository(nil, nil) }\nfunc NewCachedRepository(any, any) any { return nil }\n"
+	if err := os.WriteFile(filepath.Join(usersDirectory, "repository.go"), []byte(usersSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyCacheDecoratorRegistration(root, "NewCachedRepository"); err != nil {
+		t.Fatalf("registered package wrapper: %v", err)
+	}
+	usersSource = "package users\nfunc NewRepository() any { return nil }\nfunc NewCachedRepository(any, any) any { return nil }\n"
+	if err := os.WriteFile(filepath.Join(usersDirectory, "repository.go"), []byte(usersSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyCacheDecoratorRegistration(root, "NewCachedRepository"); err == nil {
+		t.Fatal("package wrapper disconnected from decorator passed")
+	}
+}
+
 // TestResolveCacheBehaviorProbeFallsBackToTwoDependencyConstructor supports decorators that do not expose fields.
 func TestResolveCacheBehaviorProbeFallsBackToTwoDependencyConstructor(t *testing.T) {
 	root := t.TempDir()
