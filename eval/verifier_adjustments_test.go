@@ -185,7 +185,7 @@ func (UserCreatedEvent) Topic() string { return topic }
 	if result := verifySurfaceSource(root, contracts["publish-domain-event/v1"].sources[0]); result.Status != EndpointFailed {
 		t.Fatalf("event payload mutant = %#v, want failure", result)
 	}
-	write("internal/notifications/subscribers.go", `package notifications
+	write("internal/events/subscribers.go", `package events
 type UserCreatedHandler interface{ Handle(any, string) }
 type Subscribers struct{ handler UserCreatedHandler }
 func (subscribers Subscribers) Register(ctx any, bus interface{ Subscribe() }) { var UserID string; bus.Subscribe(); subscribers.handler.Handle(ctx, UserID) }
