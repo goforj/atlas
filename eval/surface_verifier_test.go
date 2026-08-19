@@ -518,6 +518,18 @@ func (value *repository) AdjustBalance(ctx context.Context, id string, amount in
 	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
 		t.Fatalf("private repository receiver = %#v", result)
 	}
+	explicit := strings.Replace(valid,
+		"func (database) Transaction(func(database) error) error { return nil }",
+		"func (database) Begin() database { return database{} }\nfunc (database) Commit() error { return nil }\nfunc (database) Rollback() error { return nil }", 1)
+	explicit = strings.Replace(explicit,
+		"return value.db.WithContext(ctx).Transaction(func(transaction database) error { return callback(&repository{db: transaction}) })",
+		"transaction := value.db.WithContext(ctx).Begin(); if err := callback(&repository{db: transaction}); err != nil { _ = transaction.Rollback(); return err }; return transaction.Commit()", 1)
+	if err := os.WriteFile(path, []byte(explicit), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if result := verifySurfaceSource(root, contract); result.Status != EndpointPassed {
+		t.Fatalf("explicit transaction lifecycle = %#v", result)
+	}
 	mutant := strings.Replace(valid, ".Transaction(func(transaction database) error", ".NotATransaction(func(transaction database) error", 1)
 	if err := os.WriteFile(path, []byte(mutant), 0o600); err != nil {
 		t.Fatal(err)

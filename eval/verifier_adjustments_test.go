@@ -345,11 +345,33 @@ func TestCorrectedVerifierContractsPreserveBehaviorOverImplementationSpelling(t 
 	if subscriber := contracts["add-event-subscriber/v1"]; slices.Contains(subscriber.sources[2].selectorCalls, "Named") {
 		t.Fatalf("subscriber registration still rejects Default(): %#v", subscriber.sources[2])
 	}
+	if subscriber := contracts["add-event-subscriber/v1"]; !slices.Contains(subscriber.qualityTestPatterns, "app/wire/*_test.go") {
+		t.Fatalf("subscriber contract rejects focused lifecycle integration tests: %#v", subscriber.qualityTestPatterns)
+	}
 	if route := contracts["add-named-app-route/v1"]; !slices.Contains(route.allowedChanges, "internal/audit/*.go") || !slices.Contains(route.allowedChanges, "internal/audits/*.go") {
 		t.Fatalf("route ownership does not accept singular and plural feature packages: %#v", route.allowedChanges)
 	}
+	if model := contracts["create-model/v1"]; !slices.Contains(model.allowedChanges, "internal/users/*.go") || !slices.Contains(model.sources[0].paths, "internal/users/*.go") {
+		t.Fatalf("model contract rejects a cohesive table package: %#v", model)
+	}
 	if transaction := contracts["add-database-transaction/v1"]; !slices.Contains(transaction.allowedChanges, "app/wire/app.go") || slices.Contains(transaction.sources[0].forbiddenCalls, "Background") {
 		t.Fatalf("transaction contract rejects supported app wiring or nil-context normalization: %#v", transaction)
+	}
+	for _, calibration := range []struct {
+		contract string
+		paths    []string
+	}{
+		{contract: "add-cached-repository/v1", paths: []string{"app/wire/inject_repositories_app.go", "app/wire/inject_services_app.go", "app/wire/wire.go"}},
+		{contract: "create-model/v1", paths: []string{"internal/users/user.go", "app/wire/inject_repositories_app.go"}},
+		{contract: "publish-domain-event/v1", paths: []string{"app/lifecycle.go", "app/wire/app.go", "app/wire/inject_subscribers_app.go"}},
+	} {
+		contract := contracts[calibration.contract]
+		for _, path := range calibration.paths {
+			result := verifySurfaceOwnership([]ProjectChange{{Path: path, After: ProjectPathState{Kind: "file"}}}, contract.allowedChanges)
+			if result.Status != EndpointPassed {
+				t.Fatalf("%s rejects related composition path %s: %#v", calibration.contract, path, result)
+			}
+		}
 	}
 	if additional := contracts["create-additional-app/v1"]; slices.Contains(additional.sources[0].text, "./bin/statuspage") {
 		t.Fatalf("additional-app contract still requires the legacy binary watch: %#v", additional.sources[0])
@@ -714,6 +736,40 @@ func NewPostRepo() {}
 		if result := verifySurfaceSource(root, source); result.Status != EndpointPassed {
 			t.Fatalf("source %q result = %#v", source.id, result)
 		}
+	}
+}
+
+// TestCreateModelContractAcceptsCohesiveTablePackage keeps package placement flexible without weakening the database-derived model shape.
+func TestCreateModelContractAcceptsCohesiveTablePackage(t *testing.T) {
+	root := t.TempDir()
+	writeVerifierFile(t, root, "internal/users/user.go", `package users
+
+type User struct {
+	ID int
+	Email string
+	DisplayName string
+	CreatedAt string
+}
+
+type UserRepo struct{}
+
+func (UserRepo) TableName() string { return "users" }
+func (UserRepo) ByID() *User { return nil }
+func (UserRepo) WithContext() UserRepo { return UserRepo{} }
+`)
+
+	result := verifySurfaceSource(root, promotedSourceContract(t, "create-model/v1", "model-shape"))
+	if result.Status != EndpointPassed {
+		t.Fatalf("cohesive model package result = %#v", result)
+	}
+
+	contract := promotedContract(t, "create-model/v1")
+	changes := []ProjectChange{
+		{Path: "internal/users", After: ProjectPathState{Kind: "directory"}},
+		{Path: "internal/users/user.go", After: ProjectPathState{Kind: "file"}},
+	}
+	if ownership := verifySurfaceOwnership(changes, contract.allowedChanges); ownership.Status != EndpointPassed {
+		t.Fatalf("cohesive model package ownership = %#v", ownership)
 	}
 }
 
