@@ -430,10 +430,20 @@ type atlasUserCreatedHandler struct {
 	userID string
 }
 
-// HandleUserCreated records the typed event payload delivered by the subscriber.
-func (handler *atlasUserCreatedHandler) HandleUserCreated(_ context.Context, userID string) error {
+// record stores the typed event payload without prescribing an application method name.
+func (handler *atlasUserCreatedHandler) record(userID string) error {
 	handler.userID = userID
 	return nil
+}
+
+// Handle records subscribers that use the concise handler boundary.
+func (handler *atlasUserCreatedHandler) Handle(_ context.Context, userID string) error {
+	return handler.record(userID)
+}
+
+// HandleUserCreated records subscribers that name the domain reaction explicitly.
+func (handler *atlasUserCreatedHandler) HandleUserCreated(_ context.Context, userID string) error {
+	return handler.record(userID)
 }
 
 // TestAtlasDomainEventBehavior proves user creation publishes an ID-only event to a registered subscriber.
