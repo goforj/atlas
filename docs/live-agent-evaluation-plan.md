@@ -47,10 +47,11 @@ The diagnostic core portfolio is implemented across Atlas and GoForj:
   correctly reporting workflow conformance and authoritative framework outcome
   as ineligible without trusted isolation and command evidence.
 
-The first implementation was published Atlas-first as Atlas `v0.4.0` and
-GoForj `v0.25.0`. Later development may use an exact Atlas pseudo-version or a
-temporary local replacement, but release evidence must select published
-modules with `GOWORK=off` and record exact runtime identities.
+The current diagnostic implementation is published through Atlas `v0.4.12`
+and the corresponding GoForj `main` pin. Later development may use an exact
+Atlas pseudo-version or a temporary local replacement, but measurement and
+release evidence must select published modules with `GOWORK=off` and record
+exact runtime identities.
 
 ## Local Readiness Evidence
 
@@ -63,7 +64,7 @@ gate:
 | GoForj preparation | Scenario decoder, plan, preparation, clone, tree, and documentation-parity tests cover strict v2 YAML, unchanged v1 behavior, dependency ordering, target omission, symlink rejection, independent writable copies, and lexical tree identities. Tagged calibration covers the core golden Projects, targeted mutants, and safe abstention. |
 | Atlas evaluation core | Runner, artifact, manifest, diff, authenticated report, diagnostic, workflow, and isolation tests cover capability preflight, baseline timing, cancellation, timeout, cleanup, repairable finalization, sealing before verification, redaction, and HMAC-backed post-run tamper evidence for artifacts, plus separate outcome and conformance endpoints. Verifier phases keep separate writable Go state while using the supervisor's prepared module archives as a local proxy before falling back to the declared upstream. This HMAC evidence is not adversarial authentication when an unconfined candidate and the supervisor share a UID, because that candidate can read the signing key or replace retained files. |
 | Guidance ownership | Guidance reconciliation tests cover every native target, managed-block ownership, stable target selection, and legacy inference. Tagged `TestBaselineGuidanceSurvivesProjectLifecycle` proves baseline guidance survives render, build, and a representative generator workflow. |
-| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 32 versioned contracts and classify them as scaffold, feature, repair, abstention, or runtime-observability measurements. Twenty-four paired live treatments exercised the original 12-scenario portfolio; corrected guided reruns covered named cache, queue, and storage, and a live migration treatment covered the original thirteenth evaluation. Newer application-shaped cases add golden and targeted-mutant calibration without presenting calibration as live treatment evidence. Behavior-sensitive feature contracts now add verifier-owned runtime probes or observable command output for transactions, caching, storage, image revalidation, payload validation, route policy, commands, controllers, lifecycle readiness, outbound HTTP, mail, uploads, JSON APIs, auth registration, events, retry-safe jobs, schedules, and runtime observability. Scaffold contracts intentionally remain source, registration, compilation, or route-visibility measurements. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
+| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 32 versioned contracts and classify them as scaffold, feature, repair, abstention, or runtime-observability measurements. Every promoted evaluation has run through all four guidance profiles in fresh provider sessions. High-value and corrected contracts received targeted repeats rather than rerunning the whole portfolio until green. Behavior-sensitive feature contracts use verifier-owned runtime probes or observable command output for transactions, caching, storage, image revalidation, payload validation, route policy, commands, controllers, lifecycle readiness, outbound HTTP, mail, uploads, JSON APIs, auth registration, events, retry-safe jobs, schedules, and runtime observability. Scaffold contracts intentionally remain source, registration, compilation, or route-visibility measurements. GoForj's `docs/maintainer/atlas-evaluation-benchmark.md` owns the exact per-evaluation result, attempt count, provenance, and limitations. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
 
 Live calibration found real harness defects rather than being rerun until
 green. A valid transport-package controller exposed constructor-name
@@ -86,7 +87,7 @@ Repository-wide local validation also includes:
 - the complete Atlas test and vet suites plus race coverage for evaluation,
   adapter, isolation, verifier, process-group, and app-server packages;
 - the complete GoForj root test and vet suites from a clean rebased worktree
-  with `GOWORK=off` and the exact remote Atlas pseudo-version;
+  with `GOWORK=off` and the released Atlas module;
 - independent test and vet passes for GoForj's `integration` and
   `tools/renderwarm` modules;
 - race coverage for the GoForj scenario, Atlas integration, and preparer
@@ -298,7 +299,14 @@ The current treatment ladder is cumulative:
 | `agents-skills` | yes | yes | — |
 | `atlas` | yes | yes | yes |
 
-The checked-in 60-session benchmark measured only `none` versus `agents`. It does not establish the value of skills or MCP. The next cost-bearing measurements should compare adjacent profiles with the smoke tier first: `agents` versus `agents-skills`, then `agents-skills` versus `atlas`. Use `none` versus `atlas` only when the complete experience is the question being measured. These runs extend the diagnostic evidence; they do not replace the next architectural phase, which is the authoritative backend described below.
+The current benchmark includes every profile for every promoted evaluation. It
+is a broad diagnostic snapshot, not a reliability percentage: most matrix
+cells contain one fresh attempt, while selected high-value and corrected cells
+contain repeats that demonstrate real model variance. Measure future guidance
+changes with adjacent profiles and repeated paired trials. Use `none` versus
+`atlas` only when the complete experience is the question. These runs extend
+diagnostic evidence; they do not replace the next architectural phase, which
+is the authoritative backend described below.
 
 When promoting another evaluation, require all of the following:
 
@@ -307,7 +315,8 @@ When promoting another evaluation, require all of the following:
 - a workflow contract for framework actions that matter to the task;
 - a verifier that checks behavior and boundaries without requiring one arbitrary file, receiver, or type spelling;
 - a supervisor-owned behavior probe when compilation and structure cannot prove the user-visible outcome;
-- at least one compiling semantic mutant that the verifier rejects for the intended reason; and
+- at least one compiling semantic mutant that the verifier rejects for the intended reason;
+- at least one fresh live provider attempt after calibration, because a golden Project proves the oracle but not agent discoverability; and
 - capability-catalog mappings that explain which gap the evaluation closes.
 
 Do not create one evaluation per documentation page. Prefer application-shaped tasks that cross related framework surfaces, as `add-resilient-job` does for typed jobs, retries, idempotency, cancellation, timeouts, repository reloads, deterministic storage, and registration. Leave a capability planned when its only available verifier would be a shallow token check. Frontend loading behavior, for example, remains planned until a browser-capable verifier can observe flicker, retained content, and timing.
@@ -316,7 +325,10 @@ For ordinary development, run deterministic unit, integration, golden, and mutan
 
 ## Publication Handoff
 
-The first evaluation releases were published Atlas-first as Atlas `v0.4.0` and GoForj `v0.25.0`. Do not assume those remain the current versions. Reconfirm remote tags, selected modules, and the benchmark's recorded identities whenever resuming release work.
+The current verifier release is Atlas `v0.4.12`, selected by GoForj `main` at
+the time of the published four-profile benchmark. Do not assume those remain
+the current versions. Reconfirm remote tags, selected modules, and the
+benchmark's recorded identities whenever resuming release work.
 
 For subsequent releases:
 
@@ -328,7 +340,11 @@ For subsequent releases:
 6. Resolve both released modules through the proxy and build the released GoForj command without a workspace.
 7. Run the next planned paired diagnostic through that released binary. Verify authenticated manifests, equal preparation identities, treatment-specific baselines, absent guidance files in measured diffs, expected evidence eligibility, and released runtime versions instead of `(devel)`.
 
-The first checked-in scorecard measured `none` versus `agents`. After corrected contracts are remeasured, the next treatment sequence is `agents` versus `agents-skills`, followed by `agents-skills` versus `atlas`. Start with the smoke tier and multiple paired trials before paying for the complete portfolio.
+The four-profile matrix is complete. Future scorecards should not replace it
+with whichever single attempt ran most recently. Start with the smoke tier and
+multiple paired trials, classify failures before changing guidance, then
+publish a new revision-stamped cohort when the comparison answers a specific
+question.
 
 ## Validation Discipline
 
@@ -393,9 +409,10 @@ The diagnostic portfolio is complete when:
   provenance-guided diagnosis and a fresh stochastic rerun, not deterministic
   verifier replay of the original candidate tree.
 
-All six conditions are complete for local diagnostics, and the first Atlas and
-GoForj evaluation releases have been published. The checked-in benchmark still
-contains corrected contracts and newer evaluations that require remeasurement,
-so it remains provisional. The next measurement sequence is recorded in the
-maintainer handoff above. The next implementation phase is the authoritative
-sandbox and its negative isolation suite, not more unconfined result promotion.
+All six conditions are complete for local diagnostics, every promoted
+evaluation has live evidence across the four guidance profiles, and corrected
+high-value contracts have targeted reruns. The benchmark remains diagnostic
+because the local backend cannot provide adversarial isolation or trusted
+command evidence, not because the portfolio is missing provider sessions. The
+next implementation phase is the authoritative sandbox and its negative
+isolation suite, not more unconfined result promotion.
