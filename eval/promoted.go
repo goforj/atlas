@@ -25,6 +25,16 @@ func PromotedWorkflows() []WorkflowExpectation {
 		},
 		promotedGeneratorWorkflow("goforj-create-model/v1", "generate-user-model", "make:model", "users"),
 		{
+			ID: "goforj-create-data-resource/v1",
+			Generators: []GeneratorRequirement{
+				{ID: "generate-photo-migration", Arguments: []string{"make:migration", "create_photos", "--no-open"}},
+				{ID: "generate-photo-model", Arguments: []string{"make:model", "photos", "--package", "photos", "--no-open"}},
+			},
+			Requirements: []WorkflowRequirement{
+				qualityInspection("inspect-data-workflow", "Inspect the database connection and schema between migration application and model generation.", ".goforj.yml", ".env*", "migrations/**", "app/wire/inject_repositories_app.go"),
+			},
+		},
+		{
 			ID: "goforj-model-relationships/v1",
 			Generators: []GeneratorRequirement{
 				{ID: "generate-post-model", Arguments: []string{"make:model", "posts"}},

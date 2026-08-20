@@ -84,9 +84,12 @@ func (s Server) generatedFilePolicy(_ context.Context, request mcpgo.CallToolReq
 		return toolError(err)
 	}
 	return jsonResult(workflows.FilePolicy(workflows.FilePolicyRequest{
-		Path:    path,
-		Project: s.projectWithDefaults(),
-		Rules:   s.ownershipRules(),
+		Path:        path,
+		Task:        request.GetString("task", ""),
+		Resource:    request.GetString("resource", ""),
+		WorkflowIDs: workflows.ClassifyAll(request.GetString("task", "")),
+		Project:     s.projectWithDefaults(),
+		Rules:       s.ownershipRules(),
 	}))
 }
 
