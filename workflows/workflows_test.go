@@ -310,6 +310,75 @@ func TestScenarioGuideUsesDocsProvider(t *testing.T) {
 	}
 }
 
+func TestPhotoDropPlanComposesOrderedWorkflows(t *testing.T) {
+	result, ok := Plan(fixtureContext(), PlanRequest{Task: "Build PhotoDrop with a photos database table and repository, upload API and gallery UI, thumbnail queue job, photo-created event subscriber, expired-share schedule, and operator cleanup command."})
+	if !ok {
+		t.Fatal("expected PhotoDrop plan")
+	}
+	for _, workflowID := range []string{"goforj-add-data-resource", "goforj-add-http-route", "goforj-add-job", "goforj-add-event-workflow", "goforj-add-schedule", "goforj-add-app-command", "goforj-frontend-change"} {
+		if !contains(result.WorkflowIDs, workflowID) {
+			t.Fatalf("workflow ids = %#v, want %q", result.WorkflowIDs, workflowID)
+		}
+	}
+	migration := commandIndex(result.Commands, "make:migration")
+	migrate := commandIndex(result.Commands, "forj migrate")
+	model := commandIndex(result.Commands, "make:model")
+	if migration < 0 || migrate <= migration || model <= migrate {
+		t.Fatalf("data command order = %#v", result.Commands)
+	}
+}
+
+func TestCompositionalPlanningDoesNotDependOnPhotoDropVocabulary(t *testing.T) {
+	result, ok := Plan(fixtureContext(), PlanRequest{Task: "Build a library catalog with a database schema and repository, HTTP API controller, background indexing job, book-added event subscriber, recurring maintenance schedule, operator CLI command, and frontend page."})
+	if !ok {
+		t.Fatal("expected library plan")
+	}
+	for _, workflowID := range []string{"goforj-add-data-resource", "goforj-add-http-route", "goforj-add-job", "goforj-add-event-workflow", "goforj-add-schedule", "goforj-add-app-command", "goforj-frontend-change"} {
+		if !contains(result.WorkflowIDs, workflowID) {
+			t.Fatalf("workflow ids = %#v, want %q", result.WorkflowIDs, workflowID)
+		}
+	}
+}
+
+func TestFilePolicyRequiresGeneratorForPersistenceCreation(t *testing.T) {
+	policy := FilePolicy(FilePolicyRequest{
+		Path:        "internal/photos/repository.go",
+		Task:        "create the photos model and repository",
+		WorkflowIDs: []string{"goforj-add-data-resource"},
+	})
+	if policy.Classification != "generator-first-data" || policy.PreferredAction != "generate then extend" {
+		t.Fatalf("policy = %#v", policy)
+	}
+	if !strings.Contains(policy.ChangeThrough, "forj make:model photos --package photos") {
+		t.Fatalf("change through = %q", policy.ChangeThrough)
+	}
+
+	extension := FilePolicy(FilePolicyRequest{Path: "internal/photos/repository.go", Task: "add FindPublished to the existing repository"})
+	if extension.Classification != "user-owned-domain" || extension.PreferredAction != "direct edit" {
+		t.Fatalf("extension policy = %#v", extension)
+	}
+}
+
+func TestValidationPlanWarnsAboutPersistenceGeneratorBypass(t *testing.T) {
+	result := ValidationPlan(fixtureContext(), PlanRequest{Task: "create a photos table, model, and repository"})
+	if !containsPart(result.Warnings, "forj make:model") {
+		t.Fatalf("warnings = %#v", result.Warnings)
+	}
+	if !validationContainsPart(result.Steps, "gofmt -l") {
+		t.Fatalf("steps = %#v", result.Steps)
+	}
+}
+
+// commandIndex locates one expected action without coupling ordering tests to complete command strings.
+func commandIndex(commands []string, part string) int {
+	for index, command := range commands {
+		if strings.Contains(command, part) {
+			return index
+		}
+	}
+	return -1
+}
+
 func containsVersionWarning(warnings []VersionWarning, code string) bool {
 	for _, warning := range warnings {
 		if warning.Code == code {

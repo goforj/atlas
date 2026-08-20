@@ -1,0 +1,12 @@
+schema_version: 1
+id: create-data-resource
+summary: Create a photo table, schema-derived model, registered repository, and application-owned query extension.
+suite: core
+task_kind: scaffold
+project_scenario: create-photo-data-resource
+workflow: goforj-create-data-resource/v1
+verifier: create-data-resource/v1
+limits:
+  wall_time: 10m
+  commands: 50
+  shell_network: off

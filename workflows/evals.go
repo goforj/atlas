@@ -49,6 +49,9 @@ func RunEvalFixtures(ctx Context, captureTranscript bool) Scorecard {
 		}
 		result.addCheck("plan returned", ok, "Atlas should return a workflow plan for the selected app")
 		result.addCheck("workflow id", plan.WorkflowID == fixture.WantWorkflowID, "got "+plan.WorkflowID+", want "+fixture.WantWorkflowID)
+		for _, workflowID := range fixture.WantWorkflowIDs {
+			result.addCheck("workflow includes "+workflowID, stringSliceContains(plan.WorkflowIDs, workflowID), "workflow ids should include "+workflowID)
+		}
 		result.addCheck("app selection", plan.App == fixture.expectedApp(), "got "+plan.App+", want "+fixture.expectedApp())
 		for _, part := range fixture.commandParts() {
 			result.addCheck("command contains "+part, stringSliceContainsPart(plan.Commands, part), "commands should include "+part)
@@ -72,7 +75,7 @@ func RunEvalFixtures(ctx Context, captureTranscript bool) Scorecard {
 			result.addCheck("warning contains "+part, stringSliceContainsPart(plan.Warnings, part), "warnings should include "+part)
 		}
 		for _, file := range plan.Files {
-			policy := FilePolicy(FilePolicyRequest{Path: file})
+			policy := FilePolicy(FilePolicyRequest{Path: file, Task: fixture.Task, WorkflowIDs: plan.WorkflowIDs})
 			result.addCheck("ownership allows "+file, policy.Editable, file+" classified as "+policy.Classification+" through "+policy.ChangeThrough)
 		}
 		if captureTranscript {

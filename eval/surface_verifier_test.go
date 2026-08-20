@@ -654,7 +654,8 @@ func TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality(t *testing.T) {
 	if result.FrameworkOutcome.Status != EndpointPassed {
 		t.Fatalf("framework outcome = %#v, want quality signal to remain non-gating", result.FrameworkOutcome)
 	}
-	if len(result.Checks) < 2 || result.Checks[1].ID != "test-function-added" || result.Checks[1].Kind != RequirementQuality || result.Checks[1].Status != EndpointFailed {
+	qualityCheck := surfaceCheckByID(result.Checks, "test-function-added")
+	if qualityCheck == nil || qualityCheck.Kind != RequirementQuality || qualityCheck.Status != EndpointFailed {
 		t.Fatalf("quality check = %#v", result.Checks)
 	}
 	testPath := filepath.Join(root, "internal", "feature", "service_test.go")
@@ -672,9 +673,43 @@ func TestSurfaceVerifierReportsCandidateTestsAsNonGatingQuality(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify(with test): %v", err)
 	}
-	if result.Checks[1].Status != EndpointPassed {
-		t.Fatalf("quality check = %#v, want focused test reported", result.Checks[1])
+	qualityCheck = surfaceCheckByID(result.Checks, "test-function-added")
+	if qualityCheck == nil || qualityCheck.Status != EndpointPassed {
+		t.Fatalf("quality check = %#v, want focused test reported", result.Checks)
 	}
+}
+
+func TestVerifyChangedGoFormattingReportsCandidateSourceQuality(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "internal", "photos", "photo.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("package photos\ntype Photo struct{ ID int }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	changes := []ProjectChange{{Path: "internal/photos/photo.go", After: ProjectPathState{Kind: "file"}}}
+	result := verifyChangedGoFormatting(root, changes)
+	if result.Status != EndpointFailed || result.Kind != RequirementQuality {
+		t.Fatalf("unformatted result = %#v", result)
+	}
+	if err := os.WriteFile(path, []byte("package photos\n\ntype Photo struct {\n\tID int\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result = verifyChangedGoFormatting(root, changes)
+	if result.Status != EndpointPassed {
+		t.Fatalf("formatted result = %#v", result)
+	}
+}
+
+// surfaceCheckByID keeps quality assertions independent from other non-gating signals added to the verifier.
+func surfaceCheckByID(checks []EndpointResult, id string) *EndpointResult {
+	for index := range checks {
+		if checks[index].ID == id {
+			return &checks[index]
+		}
+	}
+	return nil
 }
 
 // TestRequiredSurfaceChangesRejectsDisconnectedApplicationCode requires a framework registration edit without dictating the constructor name.

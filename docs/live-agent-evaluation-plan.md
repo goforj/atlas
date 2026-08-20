@@ -26,8 +26,8 @@ The diagnostic core portfolio is implemented across Atlas and GoForj:
   prepared bases are implemented in GoForj;
 - the Atlas runner, guidance treatments, verifier, redacted authenticated
   artifacts, focused supervisor diff, and diagnostic report are implemented;
-- 32 GoForj scenario fixtures establish reusable starting state and exercise
-  the 31 promoted controller, command, job, migration, schedule,
+- 33 GoForj scenario fixtures establish reusable starting state and exercise
+  the 32 promoted controller, command, job, migration, schedule,
   event/subscriber, model, additional-App, named resource, Wire-repair, and
   clarification evaluations, including six application-shaped capstones that
   cross HTTP, repositories, cache, storage, events, jobs, and scheduling, plus
@@ -64,7 +64,7 @@ gate:
 | GoForj preparation | Scenario decoder, plan, preparation, clone, tree, and documentation-parity tests cover strict v2 YAML, unchanged v1 behavior, dependency ordering, target omission, symlink rejection, independent writable copies, and lexical tree identities. Tagged calibration covers the core golden Projects, targeted mutants, and safe abstention. |
 | Atlas evaluation core | Runner, artifact, manifest, diff, authenticated report, diagnostic, workflow, and isolation tests cover capability preflight, baseline timing, cancellation, timeout, cleanup, repairable finalization, sealing before verification, redaction, and HMAC-backed post-run tamper evidence for artifacts, plus separate outcome and conformance endpoints. Verifier phases keep separate writable Go state while using the supervisor's prepared module archives as a local proxy before falling back to the declared upstream. This HMAC evidence is not adversarial authentication when an unconfined candidate and the supervisor share a UID, because that candidate can read the signing key or replace retained files. |
 | Guidance ownership | Guidance reconciliation tests cover every native target, managed-block ownership, stable target selection, and legacy inference. Tagged `TestBaselineGuidanceSurvivesProjectLifecycle` proves baseline guidance survives render, build, and a representative generator workflow. |
-| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 32 versioned contracts and classify them as scaffold, feature, repair, abstention, or runtime-observability measurements. Every promoted evaluation has run through all four guidance profiles in fresh provider sessions. High-value and corrected contracts received targeted repeats rather than rerunning the whole portfolio until green. Behavior-sensitive feature contracts use verifier-owned runtime probes or observable command output for transactions, caching, storage, image revalidation, payload validation, route policy, commands, controllers, lifecycle readiness, outbound HTTP, mail, uploads, JSON APIs, auth registration, events, retry-safe jobs, schedules, and runtime observability. Scaffold contracts intentionally remain source, registration, compilation, or route-visibility measurements. GoForj's `docs/maintainer/atlas-evaluation-benchmark.md` owns the exact per-evaluation result, attempt count, provenance, and limitations. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
+| Diagnostic portfolio | Promoted manifests, workflows, and verifier tests bind all 33 versioned contracts and classify them as scaffold, feature, repair, abstention, or runtime-observability measurements. Every previously published evaluation has run through all four guidance profiles in fresh provider sessions; newly promoted evaluations remain explicitly unmeasured until their first retained live run. High-value and corrected contracts receive targeted repeats rather than rerunning the whole portfolio until green. Behavior-sensitive feature contracts use verifier-owned runtime probes or observable command output for transactions, caching, storage, image revalidation, payload validation, route policy, commands, controllers, lifecycle readiness, outbound HTTP, mail, uploads, JSON APIs, auth registration, events, retry-safe jobs, schedules, and runtime observability. Scaffold contracts intentionally remain source, registration, compilation, or route-visibility measurements. GoForj's `docs/maintainer/atlas-evaluation-benchmark.md` owns the exact per-evaluation result, attempt count, provenance, and limitations. Every result remains visibly diagnostic and authoritative endpoints remain ineligible. |
 
 Live calibration found real harness defects rather than being rerun until
 green. A valid transport-package controller exposed constructor-name
@@ -299,14 +299,25 @@ The current treatment ladder is cumulative:
 | `agents-skills` | yes | yes | — |
 | `atlas` | yes | yes | yes |
 
-The current benchmark includes every profile for every promoted evaluation. It
-is a broad diagnostic snapshot, not a reliability percentage: most matrix
+The published benchmark includes every profile for the portfolio recorded at
+that benchmark revision. Newly promoted evaluations, including
+`create-data-resource`, remain visibly unmeasured until fresh retained runs are
+added. The benchmark is a broad diagnostic snapshot, not a reliability percentage: most matrix
 cells contain one fresh attempt, while selected high-value and corrected cells
 contain repeats that demonstrate real model variance. Measure future guidance
 changes with adjacent profiles and repeated paired trials. Use `none` versus
 `atlas` only when the complete experience is the question. These runs extend
 diagnostic evidence; they do not replace the next architectural phase, which
 is the authoritative backend described below.
+
+The `create-data-resource` regression came from a realistic PhotoDrop build in
+which an agent hand-authored a GORM model and repository despite correct prose
+guidance. Atlas now treats broad application planning as a composition of
+ordered workflow segments, makes migration application and schema inspection
+prerequisites of model generation, and reports exact generator conformance
+separately from the resulting Project contract. The full PhotoDrop request is
+a deterministic planning fixture; the bounded live evaluation isolates the
+new-data-resource workflow so failures remain diagnosable.
 
 When promoting another evaluation, require all of the following:
 

@@ -55,6 +55,10 @@ var WorkflowDocsMap = map[string][]DocReference{
 		{Path: "core/apps.md", Heading: "Use an app as a command prefix"},
 		{Path: "core/app.md", Heading: "Named Apps"},
 	},
+	"goforj-frontend-change": {
+		{Path: "frontend/starter-kits.md", Heading: "Starter Kits"},
+		{Path: "core/local-first-development.md", Heading: "forj dev"},
+	},
 	"goforj-validate-change": {
 		{Path: "testing/overview.md", Heading: "Testing Layers"},
 		{Path: "reference/generation-commands.md", Heading: "Full Build Pipeline"},
@@ -141,6 +145,7 @@ type EvalFixture struct {
 	Task                string   `json:"task"`
 	App                 string   `json:"app,omitempty"`
 	WantWorkflowID      string   `json:"want_workflow_id"`
+	WantWorkflowIDs     []string `json:"want_workflow_ids,omitempty"`
 	WantCommandPart     string   `json:"want_command_part,omitempty"`
 	WantCommandParts    []string `json:"want_command_parts,omitempty"`
 	WantFilePart        string   `json:"want_file_part,omitempty"`
@@ -223,6 +228,37 @@ func EvalFixtures() []EvalFixture {
 func RegressionFixtures() []EvalFixture {
 	return []EvalFixture{
 		{Name: "catalog job keyword regression", Task: "add sync catalog job", App: "marketplace", WantWorkflowID: "goforj-add-job", WantCommandPart: "forj marketplace make:job", WantFilePart: "inject_jobs_app.go", WantDocsPath: "async/jobs.md", WantTools: []string{"workflow-plan", "scenario-guide", "resource-inventory"}},
+		{
+			Name:           "photodrop compositional planning regression",
+			Task:           "Build PhotoDrop with a photos database table and repository, upload API and gallery UI, thumbnail queue job, photo-created event subscriber, expired-share schedule, operator cleanup command, and existing observability.",
+			WantWorkflowID: "goforj-add-job-schedule",
+			WantWorkflowIDs: []string{
+				"goforj-add-data-resource",
+				"goforj-add-http-route",
+				"goforj-add-job",
+				"goforj-add-event-workflow",
+				"goforj-add-schedule",
+				"goforj-add-app-command",
+				"goforj-frontend-change",
+			},
+			WantCommandParts: []string{"make:migration", "forj migrate", "make:model", "make:controller", "make:job", "make:event", "make:subscriber", "make:schedule", "make:command"},
+			WantWarningParts: []string{"Never hand-create GORM models", "domain-native table names"},
+		},
+		{
+			Name:           "library application composition generalization",
+			Task:           "Build a library catalog with a database schema and repository, HTTP API controller, background indexing job, book-added event subscriber, recurring maintenance schedule, operator CLI command, and frontend page.",
+			WantWorkflowID: "goforj-add-job-schedule",
+			WantWorkflowIDs: []string{
+				"goforj-add-data-resource",
+				"goforj-add-http-route",
+				"goforj-add-job",
+				"goforj-add-event-workflow",
+				"goforj-add-schedule",
+				"goforj-add-app-command",
+				"goforj-frontend-change",
+			},
+			WantCommandParts: []string{"make:migration", "make:model", "make:controller", "make:job", "make:event", "make:subscriber", "make:schedule", "make:command"},
+		},
 	}
 }
 

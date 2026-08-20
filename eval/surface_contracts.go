@@ -80,6 +80,17 @@ func promotedSurfaceContracts() []surfaceContract {
 			commands: standardSurfaceCommands(),
 		},
 		{
+			id:             "create-data-resource/v1",
+			allowedChanges: []string{"migrations/*_create_photos.up.sql", "migrations/*_create_photos.down.sql", "internal/photos/*.go", "app/wire/inject_repositories_app.go"},
+			sources: []sourceContract{
+				{id: "photos-migration-up", paths: []string{"migrations/*_create_photos.up.sql"}, normalizedText: []string{"CREATE TABLE photos", "id", "storage_key", "created_at"}},
+				{id: "photos-migration-down", paths: []string{"migrations/*_create_photos.down.sql"}, normalizedText: []string{"DROP TABLE photos"}},
+				{id: "photo-model-repository", paths: []string{"internal/photos/*.go"}, identifiers: []string{"Photo", "StorageKey", "CreatedAt", "PhotoRepo", "ByID", "WithContext", "FindReady"}, stringLiterals: []string{"photos"}},
+				{id: "photo-repository-registration", paths: []string{"app/wire/inject_repositories_app.go"}, identifiers: []string{"NewPhotoRepo"}},
+			},
+			commands: standardSurfaceCommands(),
+		},
+		{
 			id:                  "model-relationships/v1",
 			allowedChanges:      []string{".db-relationships.yaml", "internal/content/*.go", "internal/models/*.go", "app/wire/inject_repositories_app.go"},
 			qualityTestPatterns: []string{"internal/content/*_test.go", "internal/models/*_test.go"},

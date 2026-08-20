@@ -1,12 +1,14 @@
 package eval
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
@@ -242,7 +244,7 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 	}
 	ownedPatterns := append(append([]string(nil), verifier.contract.allowedChanges...), verifier.contract.qualityTestPatterns...)
 	ownedPatterns = append(ownedPatterns, verifier.namedResourceOwnershipPatterns(input.ProjectRoot)...)
-	checks := []EndpointResult{verifySurfaceOwnership(input.Changes, ownedPatterns)}
+	checks := []EndpointResult{verifySurfaceOwnership(input.Changes, ownedPatterns), verifyChangedGoFormatting(input.ProjectRoot, input.Changes)}
 	if len(verifier.contract.requiredChanges) > 0 {
 		checks = append(checks, verifyRequiredSurfaceChanges(input.Changes, verifier.contract.requiredChanges))
 	}
@@ -284,6 +286,30 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		WorkflowConformance: EndpointResult{ID: "workflow-owned-by-runner", Status: EndpointIneligible},
 		Checks:              checks,
 	}, nil
+}
+
+// verifyChangedGoFormatting reports candidate-authored formatting separately from application correctness.
+func verifyChangedGoFormatting(root string, changes []ProjectChange) EndpointResult {
+	checked := 0
+	for _, change := range changes {
+		path := filepath.ToSlash(change.Path)
+		if change.After.Kind == "" || !strings.HasSuffix(path, ".go") {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			return EndpointResult{ID: "go-source-formatted", Kind: RequirementQuality, Status: EndpointFailed, Details: fmt.Sprintf("read changed Go source %q: %v", path, err)}
+		}
+		formatted, err := format.Source(body)
+		if err != nil {
+			return EndpointResult{ID: "go-source-formatted", Kind: RequirementQuality, Status: EndpointFailed, Details: fmt.Sprintf("format changed Go source %q: %v", path, err)}
+		}
+		checked++
+		if !bytes.Equal(body, formatted) {
+			return EndpointResult{ID: "go-source-formatted", Kind: RequirementQuality, Status: EndpointFailed, Details: fmt.Sprintf("changed Go source %q is not gofmt-formatted", path)}
+		}
+	}
+	return EndpointResult{ID: "go-source-formatted", Kind: RequirementQuality, Status: EndpointPassed, Details: fmt.Sprintf("checked %d changed Go files", checked)}
 }
 
 // project keeps candidate tests out of verifier execution while allowing a reviewed

@@ -10,6 +10,9 @@ import (
 // FilePolicyRequest asks Atlas to classify a project path.
 type FilePolicyRequest struct {
 	Path        string          `json:"path"`
+	Task        string          `json:"task,omitempty"`
+	Resource    string          `json:"resource,omitempty"`
+	WorkflowIDs []string        `json:"workflow_ids,omitempty"`
 	Project     project.Project `json:"project,omitempty"`
 	ProjectRoot string          `json:"project_root,omitempty"`
 	Rules       []OwnershipRule `json:"rules,omitempty"`
@@ -78,6 +81,22 @@ func FilePolicy(req FilePolicyRequest) FilePolicyResult {
 		return FilePolicyResult{Path: clean, Classification: "framework-owned-entrypoint", Editable: false, PreferredAction: "do not edit", ChangeThrough: "app composition and runtime wiring", App: appName, Owner: "framework", Reason: "App binary entrypoints should stay thin."}
 	case strings.HasPrefix(clean, "internal/runtime") || strings.HasPrefix(clean, "internal/http") || strings.HasPrefix(clean, "internal/jobs") || strings.HasPrefix(clean, "internal/schedules"):
 		return FilePolicyResult{Path: clean, Classification: "framework-owned-runtime", Editable: false, PreferredAction: "do not edit", ChangeThrough: "GoForj templates or generated extension points", Owner: "framework", Reason: "Framework runtime packages own bootstrap and lifecycle behavior."}
+	case dataGeneratorPolicyApplies(req, clean):
+		resource := dataPolicyResource(req, clean)
+		return FilePolicyResult{
+			Path:            clean,
+			Classification:  "generator-first-data",
+			Editable:        true,
+			PreferredAction: "generate then extend",
+			ChangeThrough:   "forj make:migration <name>, forj migrate, then forj make:model " + resource + " --package " + resource,
+			Owner:           "app",
+			Reason:          "GoForj derives the model, repository shape, and repository Wire registration from the applied schema; application-specific repository methods remain App-owned extensions.",
+			Warnings: []string{
+				"Never hand-create GORM models or persistence repositories when make:model applies.",
+				"Create and apply the migration before running make:model.",
+				"Use a domain-native table name unless an existing schema or explicit requirement requires a prefix.",
+			},
+		}
 	case strings.HasPrefix(clean, "internal/"):
 		return FilePolicyResult{Path: clean, Classification: "user-owned-domain", Editable: true, PreferredAction: "direct edit", Owner: "user", Reason: "Business behavior belongs in cohesive packages under internal."}
 	case strings.HasPrefix(clean, "migrations/"):
@@ -89,6 +108,34 @@ func FilePolicy(req FilePolicyRequest) FilePolicyResult {
 	default:
 		return FilePolicyResult{Path: clean, Classification: "user-owned", Editable: true, PreferredAction: "direct edit", Owner: "user", Reason: "Atlas has no generated-file rule for this path."}
 	}
+}
+
+// dataGeneratorPolicyApplies narrows generator-first ownership to persistence creation tasks instead of banning handwritten repositories globally.
+func dataGeneratorPolicyApplies(req FilePolicyRequest, path string) bool {
+	if !strings.HasPrefix(path, "internal/") {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(path))
+	if base != "repository.go" && !strings.Contains(base, "model") {
+		return false
+	}
+	if stringSliceContains(req.WorkflowIDs, "goforj-add-data-resource") {
+		return true
+	}
+	lower := strings.ToLower(req.Task)
+	return containsAny(lower, "make:model", "create model", "create repository", "new data resource", "database table", "persist")
+}
+
+// dataPolicyResource provides a useful maker command without treating task prose as a schema parser.
+func dataPolicyResource(req FilePolicyRequest, path string) string {
+	if resource := strings.TrimSpace(req.Resource); resource != "" {
+		return resource
+	}
+	parts := strings.Split(path, "/")
+	if len(parts) >= 3 && parts[0] == "internal" && strings.TrimSpace(parts[1]) != "" && parts[1] != "<package>" && parts[1] != "<domain>" {
+		return parts[1]
+	}
+	return "<table>"
 }
 
 // FilePolicies classifies a list of planned files with the same ownership model.

@@ -69,12 +69,12 @@ capabilities:
     area: data
     summary: Generate connection-aware migration pairs.
     tier: smoke
-    evaluations: [add-migration]
+    evaluations: [add-migration, create-data-resource]
   - id: data.models
     area: data
     summary: Generate database-derived models and repositories.
     tier: smoke
-    evaluations: [create-model]
+    evaluations: [create-data-resource, create-model]
   - id: data.multi-connection
     area: data
     summary: Place models, repositories, and migrations against the intended named database connection.
@@ -144,12 +144,12 @@ capabilities:
     area: generation
     summary: Generate matching up and down migrations.
     tier: core
-    evaluations: [add-migration]
+    evaluations: [add-migration, create-data-resource]
   - id: generation.model
     area: generation
     summary: Generate a model and repository from an existing database table.
     tier: core
-    evaluations: [create-model, model-relationships]
+    evaluations: [create-data-resource, create-model, model-relationships]
   - id: generation.schedule
     area: generation
     summary: Generate and register recurring work.

@@ -214,6 +214,8 @@ func toolResourceInventory() mcpgo.Tool {
 func toolGeneratedFilePolicy() mcpgo.Tool {
 	return baseTool("generated-file-policy", "Classifies whether a path is generated, app-owned, user-owned, or should be changed through GoForj commands.",
 		mcpgo.WithString("path", mcpgo.Description("Project-relative path to classify."), mcpgo.Required()),
+		mcpgo.WithString("task", mcpgo.Description("Task context used to distinguish generator-first creation from ordinary extension work.")),
+		mcpgo.WithString("resource", mcpgo.Description("Optional table or package name for task-specific maker guidance.")),
 	)
 }
 
