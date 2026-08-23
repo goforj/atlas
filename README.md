@@ -68,17 +68,26 @@ forj marketplace make:job sync-catalog
 
 ## Live Agent Evaluation
 
-Atlas includes an experimental diagnostic harness for measuring how coding
-agents work in disposable GoForj Projects. The first promoted comparison runs
-the same controller task once without Project guidance and once with the
-canonical `AGENTS.md` guidance:
+Atlas includes a diagnostic harness for measuring how fresh coding agents turn
+natural requests into working, maintainable GoForj Projects. The promoted
+portfolio can compare four cumulative guidance profiles: no framework
+guidance, `AGENTS.md`, recommended skills, and Atlas MCP. Start with the
+smallest adjacent smoke comparison that answers the question instead of paying
+for the complete portfolio:
 
 ```bash
+make -C /path/to/clean/goforj eval-runner EVAL_RUNNER=/tmp/forj-eval
+
 openssl rand -out /tmp/goforj-eval-artifact.key -hex 32
 chmod 600 /tmp/goforj-eval-artifact.key
 
-forj atlas:eval compare add-http-controller \
+/tmp/forj-eval atlas:eval suite core \
+  --tier smoke \
+  --control agents \
+  --treatment agents-skills \
   --model <model> \
+  --workers 4 \
+  --trials 1 \
   --credential /path/to/disposable-auth.json \
   --artifact-key /tmp/goforj-eval-artifact.key \
   --artifacts /tmp/goforj-eval-artifacts
@@ -95,6 +104,12 @@ top-level outcomes ineligible rather than promoting local diagnostics to an
 authoritative claim. See [the implementation plan](docs/live-agent-evaluation-plan.md)
 and [Codex adapter qualification](docs/codex-adapter-feasibility.md) for the
 boundary and release sequence.
+
+Maintainers resuming evaluation work should begin with the implementation
+plan's **Maintainer Handoff**, then read GoForj's
+[maintainer guide](https://github.com/goforj/goforj/blob/main/docs/maintainer/atlas-live-evaluations.md)
+and [recorded benchmark](https://github.com/goforj/goforj/blob/main/docs/maintainer/atlas-evaluation-benchmark.md)
+before interpreting pass rates or starting provider sessions.
 
 ## Development
 
