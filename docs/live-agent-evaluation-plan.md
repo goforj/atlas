@@ -336,10 +336,22 @@ For ordinary development, run deterministic unit, integration, golden, and mutan
 
 ## Publication Handoff
 
-The current verifier release is Atlas `v0.4.12`, selected by GoForj `main` at
-the time of the published four-profile benchmark. Do not assume those remain
-the current versions. Reconfirm remote tags, selected modules, and the
-benchmark's recorded identities whenever resuming release work.
+Atlas `v0.4.13` points to `5c9fe023` and contains the compositional workflow
+planning, task-aware generated-file policy, and `create-data-resource`
+evaluation. GoForj `main` at `d40562ee` selects that release and contains the
+matching generated scenario and verifier calibration. The latest GoForj tag is
+still `v0.26.1`, which predates this scenario; do not describe the
+`create-data-resource` integration as part of a released GoForj binary until a
+later tag contains `d40562ee`.
+
+The public scenario documentation is merged in the docs repository as **Add a
+Database-Backed Resource**. Photos remain the concrete example and the internal
+scenario identifier remains `create-photo-data-resource`; neither should be
+interpreted as a convention that application tables need a product prefix.
+
+Do not assume these remain the current versions. Reconfirm remote tags,
+selected modules, and the benchmark's recorded identities whenever resuming
+release work.
 
 For subsequent releases:
 
@@ -420,10 +432,20 @@ The diagnostic portfolio is complete when:
   provenance-guided diagnosis and a fresh stochastic rerun, not deterministic
   verifier replay of the original candidate tree.
 
-All six conditions are complete for local diagnostics, every promoted
-evaluation has live evidence across the four guidance profiles, and corrected
-high-value contracts have targeted reruns. The benchmark remains diagnostic
-because the local backend cannot provide adversarial isolation or trusted
-command evidence, not because the portfolio is missing provider sessions. The
-next implementation phase is the authoritative sandbox and its negative
-isolation suite, not more unconfined result promotion.
+All six conditions are complete for local diagnostics. The published
+four-profile benchmark covers the 32 evaluations promoted at its recorded
+revision, and corrected high-value contracts have targeted reruns.
+`create-data-resource` was promoted afterward as the thirty-third evaluation.
+One fresh `atlas`-profile attempt used the migration and model generators,
+preserved registration, produced formatted Go, and passed its seven outcome
+checks plus the formatting observation. That attempt was diagnostic only, did
+not compare treatments, and its temporary artifacts and external key were not
+retained; it must be rerun with retained authenticated artifacts before it can
+enter a published scorecard.
+
+The benchmark remains diagnostic because the local backend cannot provide
+adversarial isolation or trusted command evidence. The next implementation
+phase is the authoritative container or VM sandbox and its negative isolation
+suite, not another broad unconfined matrix. After that trust boundary exists,
+the next paid measurement should use repeated paired smoke trials to answer one
+specific adjacent-treatment question before expanding to the core portfolio.
