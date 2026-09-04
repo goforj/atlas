@@ -1,12 +1,12 @@
 module github.com/goforj/atlas
 
-go 1.25.0
+go 1.26.0
 
 require (
-	github.com/go-git/go-git/v5 v5.19.1
+	github.com/go-git/go-git/v5 v5.19.2
 	github.com/mark3labs/mcp-go v0.48.0
 	github.com/pmezard/go-difflib v1.0.0
-	golang.org/x/sys v0.43.0
+	golang.org/x/sys v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -31,7 +31,7 @@ require (
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
-	golang.org/x/net v0.53.0 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
