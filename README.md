@@ -136,3 +136,7 @@ Equivalent direct validation:
 ```bash
 GOCACHE=/tmp/gocache GOMODCACHE=/tmp/gomodcache go test ./...
 ```
+
+## Documentation
+
+Read the [atlas library documentation](https://goforj.dev/atlas) for standalone installation, usage, and API reference.
