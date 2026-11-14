@@ -1,0 +1,12 @@
+schema_version: 1
+id: configure-dispatch-startup
+summary: Validate and compose typed dispatch startup configuration.
+suite: core
+task_kind: feature
+project_scenario: dispatch-startup-config
+workflow: goforj-configure-dispatch-startup/v1
+verifier: configure-dispatch-startup/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off
