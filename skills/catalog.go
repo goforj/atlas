@@ -24,6 +24,7 @@ func Catalog() []Skill {
 	return []Skill{
 		skill("goforj-catalog-search", "Choose lexical catalog search, typed filters, indexing visibility, and safe highlights.", catalogSearch),
 		skill("goforj-feature-rollouts", "Stable tenant rollouts, explicit fallback, and request configuration snapshots.", featureRollouts),
+		skill("goforj-payload-encryption", "Authenticated payload storage, immutable cipher composition, and key rotation.", payloadEncryption),
 		skill("goforj-app-architecture", "Project, app, runtime, and package layout.", appArchitecture),
 		skill("goforj-app-registration", "App composition and registration points.", appRegistration),
 		skill("goforj-make-commands", "Prefer GoForj make commands for framework scaffolding.", makeCommands),

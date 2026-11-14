@@ -1,0 +1,12 @@
+schema_version: 1
+id: encrypt-partner-payloads
+summary: Authenticate stored partner payloads and preserve old-key reads during rotation.
+suite: core
+task_kind: feature
+project_scenario: partner-payload-rotation
+workflow: goforj-encrypt-partner-payloads/v1
+verifier: encrypt-partner-payloads/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off

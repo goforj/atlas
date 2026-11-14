@@ -463,3 +463,19 @@ The supervisor records exact messages and caller context, primary acceptance, de
 ## Targeted checkout rollout calibration
 
 The `target-feature-rollout` contract adds a prepared checkout request boundary with feature v0.1.0 installed by the supervisor. It measures integration and execution within that existing boundary, not unconstrained library discovery or candidate dependency installation. Required behavior covers tenant bucket stability, explicit missing-flag fallback, invalid-refresh retention, and captured configuration revision and evaluation time. Separate quality checks record the import, observed library calls, and candidate regression tests. The fixture now supplies a generated Checkout evaluator, and the service must resolve that typed accessor through its registered App provider. A supervisor-only helper binds the generated manager to controlled native sources and clocks after candidate writes are sealed; it does not add a framework constructor API. The framework resource tests separately exercise real file-backed startup, refresh, and shutdown. The GoForj companion scenario calibrates the golden implementation and compiling randomized-target and mixed-revision mutants without live provider sessions. Native API sources are linked from the always-recommended rollout skill while hosted feature documentation is prepared separately.
+## Authenticated payload rotation diagnostic
+
+`encrypt-partner-payloads/v1` protects application-owned payload persistence using
+the Project's existing crypt v1.2.0 dependency. The prepared fake-key compatibility
+vector makes the persisted envelope explicit. Independent reference readers
+verify current-key writes, previous-key reads, randomized encryption, tampered
+IV/value/MAC rejection, malformed envelopes, and frozen key snapshots. Injected
+repository/cipher probes verify cancellation, operational error identity, and
+no plaintext on failure; real Wire initialization rejects bad key configuration.
+Source API attribution is a separate quality observation, so a compatible
+alternative implementation can pass behavior without that observation.
+
+Preparation stages the existing dependency graph before candidate execution,
+with shell networking disabled for the candidate. Golden calibration rejects
+compiling plaintext-storage and dropped-previous-key mutants. The contract has
+no retained live provider attempts and changes no historical evaluation grade.
