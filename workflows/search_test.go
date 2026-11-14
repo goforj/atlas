@@ -114,3 +114,27 @@ func TestCatalogSearchOwnershipPreservesSchemaAndGeneratedBoundaries(t *testing.
 		}
 	}
 }
+
+// TestCatalogSearchComposesRegisteredConfiguration keeps independent policy work visible before generic heuristics.
+func TestCatalogSearchComposesRegisteredConfiguration(t *testing.T) {
+	const id = "goforj-test-environment"
+	applicationWorkflowDefinitions[id] = applicationWorkflowDefinition{
+		id:        id,
+		matches:   func(task string) bool { return strings.Contains(task, "environment") },
+		docsTopic: func(task string) bool { return strings.Contains(task, "environment") },
+	}
+	t.Cleanup(func() { delete(applicationWorkflowDefinitions, id) })
+	ctx := fixtureContext()
+	ctx.Project.Components = append(ctx.Project.Components, "search")
+	result, ok := Plan(ctx, PlanRequest{Task: "configure catalog search and typed environment configuration", App: "marketplace"})
+	if !ok || !slices.Contains(result.WorkflowIDs, id) || !slices.Contains(result.WorkflowIDs, "goforj-catalog-search") || !slices.Contains(result.Commands, "forj marketplace generate --search") {
+		t.Fatalf("composed search and configuration: %#v", result)
+	}
+	if slices.Contains(result.WorkflowIDs, "goforj-add-http-route") || slices.Contains(result.WorkflowIDs, "goforj-add-data-resource") {
+		t.Fatalf("incidental generator workflow: %v", result.WorkflowIDs)
+	}
+	readOnly, ok := Plan(ctx, PlanRequest{Task: "search docs for catalog search"})
+	if !ok || readOnly.WorkflowID != "goforj-read-docs" || len(readOnly.Commands) != 0 || len(readOnly.Files) != 0 || !docsContain(readOnly.Docs, "applications/library-resources.md") {
+		t.Fatalf("search documentation became index creation: %#v", readOnly)
+	}
+}

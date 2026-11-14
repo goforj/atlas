@@ -86,7 +86,7 @@ func DocsSectionPack(ctx context.Context, provider atlasdocs.Provider, workflowI
 	if workflowID == "" {
 		workflowID = Classify(task)
 	}
-	refs := WorkflowDocsMap[workflowID]
+	refs := applicationWorkflowDocs(workflowID, task)
 	if len(refs) == 0 {
 		refs = WorkflowDocsMap["goforj-add-http-route"]
 	}
@@ -139,6 +139,10 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 		if !scope.searchConfirmed {
 			reason = searchCapabilityWarning
 		}
+	}
+	if workflowID == "goforj-read-docs" {
+		command = "Atlas search-docs"
+		reason = "Read the requested documentation without proposing source changes."
 	}
 	return CommandAdviceResult{
 		WorkflowID: workflowID,
