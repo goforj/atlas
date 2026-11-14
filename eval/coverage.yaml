@@ -221,6 +221,11 @@ capabilities:
     tier: extended
     evaluations: []
 
+  - id: libraries.validation-presence
+    area: libraries
+    summary: Preserve PATCH presence and reusable validation with operational failure separation.
+    tier: extended
+    evaluations: [patch-customer-settings]
   - id: operations.backups
     area: operations
     summary: Configure and verify a recoverable application backup workflow.
