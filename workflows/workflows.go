@@ -153,6 +153,9 @@ func Plan(ctx Context, req PlanRequest) (PlanResult, bool) {
 	if !ok {
 		return PlanResult{}, false
 	}
+	if nonImplementationWorkflow(req.Task) == "goforj-read-docs" {
+		return applicationDocsPlan(app.Name, req.Task), true
+	}
 	workflowID := Classify(req.Task)
 	workflowIDs := ClassifyAll(req.Task)
 	scope := makeScope(app)
@@ -170,6 +173,7 @@ func Plan(ctx Context, req PlanRequest) (PlanResult, bool) {
 		Warnings:    mergeWorkflowWarnings(workflowIDs),
 	}
 	result.Segments, result.Steps = workflowSegments(workflowIDs, scope, layout)
+	constrainFeaturePlan(&result, p, scope)
 	result.Ownership = FilePolicies(FilePolicyRequest{Project: p, Task: req.Task, WorkflowIDs: workflowIDs}, result.Files)
 	result.Verification = ValidationPlan(ctx, PlanRequest{Task: req.Task, App: app.Name}).Steps
 	return result, true
@@ -178,22 +182,30 @@ func Plan(ctx Context, req PlanRequest) (PlanResult, bool) {
 // ClassifyAll returns every independently useful workflow present in a broad task.
 func ClassifyAll(task string) []string {
 	lower := strings.ToLower(task)
-	ids := []string{}
+	featureTask := isFeatureRolloutTask(lower)
+	if id := nonImplementationWorkflow(lower); id != "" {
+		return []string{id}
+	}
+	ids := applicationWorkflows(lower)
+	focused := len(ids) != 0
 	add := func(id string, matched bool) {
 		if matched && !stringSliceContains(ids, id) {
 			ids = append(ids, id)
 		}
 	}
-	add("goforj-wire-repair", containsAny(lower, "wire", "missing dependency", "duplicate provider"))
-	add("goforj-add-data-resource", containsAny(lower, "database", "repository", "migration", "model", "persistence", "schema", "table"))
-	add("goforj-add-http-route", containsAny(lower, "route", "controller", "http", "api", "json response", "upload"))
-	add("goforj-add-job", containsAny(lower, "job", "queue", "worker", "background"))
-	add("goforj-add-event-workflow", containsAny(lower, "event", "subscriber", "publish"))
-	add("goforj-add-schedule", containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily"))
-	add("goforj-add-app-command", containsAny(lower, "command", "cli", "operator"))
-	add("goforj-frontend-change", containsAny(lower, "frontend", "ui", "view", "page", "react", "vue", "templ", "htmx"))
-	add("goforj-debug-runtime", containsAny(lower, "debug", "diagnose", "runtime failure", "investigate logs", "troubleshoot"))
-	add("goforj-multi-app-change", containsAny(lower, "named app", "multi-app", "additional app"))
+	add("goforj-feature-rollouts", featureTask)
+	if !focused {
+		add("goforj-wire-repair", containsAny(lower, "wire", "missing dependency", "duplicate provider") || featureTask && containsAny(lower, "missing provider", "no provider"))
+		add("goforj-add-data-resource", containsAny(lower, "database", "repository", "migration", "model", "persistence", "schema") || hasTaskWord(lower, "table", "tables"))
+		add("goforj-add-http-route", featureTask && featureHTTPConcern(lower) || !featureTask && containsAny(lower, "route", "controller", "http", "api", "json response", "upload"))
+		add("goforj-add-job", containsAny(lower, "job", "queue", "worker", "background"))
+		add("goforj-add-event-workflow", containsAny(lower, "event", "subscriber", "publish"))
+		add("goforj-add-schedule", containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily") && (!featureTask || containsAny(lower, "cron", "scheduler", "scheduled job", "recurring job", "daily job")))
+		add("goforj-add-app-command", containsAny(lower, "command", "cli", "operator"))
+		add("goforj-frontend-change", containsAny(lower, "frontend", "ui", "view", "page", "react", "vue", "templ", "htmx"))
+		add("goforj-debug-runtime", containsAny(lower, "debug", "diagnose", "runtime failure", "investigate logs", "troubleshoot"))
+		add("goforj-multi-app-change", containsAny(lower, "named app", "multi-app", "additional app"))
+	}
 	if len(ids) == 0 {
 		return []string{Classify(task)}
 	}
@@ -203,6 +215,24 @@ func ClassifyAll(task string) []string {
 // Classify maps task text to a stable GoForj workflow id.
 func Classify(task string) string {
 	lower := strings.ToLower(task)
+	if id := nonImplementationWorkflow(lower); id != "" {
+		return id
+	}
+	if isFeatureRolloutTask(lower) {
+		switch {
+		case containsAny(lower, "missing provider", "duplicate provider", "no provider", "missing dependency", "wire error", "wire failure", "wire repair"):
+			return "goforj-wire-repair"
+		case containsAny(lower, "debug", "diagnose", "troubleshoot"):
+			return "goforj-debug-runtime"
+		case featureHTTPConcern(lower):
+			return "goforj-add-http-route"
+		default:
+			return "goforj-feature-rollouts"
+		}
+	}
+	if ids := applicationWorkflowIDs(lower, true); len(ids) != 0 {
+		return ids[0]
+	}
 	switch {
 	case containsAny(lower, "wire", "provider", "missing dependency", "duplicate provider"):
 		return "goforj-wire-repair"
@@ -263,6 +293,9 @@ type ValidationResult struct {
 func ValidationPlan(ctx Context, req PlanRequest) ValidationResult {
 	p := ctx.Project.WithDiscoveredDefaults()
 	app, _ := p.AppByName(req.App)
+	if nonImplementationWorkflow(req.Task) == "goforj-read-docs" {
+		return ValidationResult{App: app.Name}
+	}
 	workflowID := Classify(req.Task)
 	workflowIDs := ClassifyAll(req.Task)
 	scope := makeScope(app)
@@ -270,6 +303,9 @@ func ValidationPlan(ctx Context, req PlanRequest) ValidationResult {
 		{Command: "GOCACHE=/tmp/gocache GOMODCACHE=/tmp/gomodcache go test ./...", Purpose: "run Go tests with repo cache policy", Required: true},
 		{Command: "test -z \"$(gofmt -l $(find . -type f -name '*.go' -not -path './vendor/*'))\"", Purpose: "reject unformatted Go source before accepting the change", Required: true},
 		{Command: scope.build, Purpose: "refresh generated code, Wire, API index, and binary", Required: true},
+	}
+	if _, owned := applicationWorkflowDefinitions[workflowID]; owned {
+		steps = []ValidationStep{steps[1], steps[2], steps[0]}
 	}
 	switch workflowID {
 	case "goforj-add-http-route":
@@ -416,7 +452,13 @@ func appLayout(app project.App) layout {
 }
 
 func workflowCommands(workflowID string, scope appScope) []string {
+	if commands, ok := applicationWorkflowCommands(workflowID, scope); ok {
+		return commands
+	}
+
 	switch workflowID {
+	case "goforj-feature-rollouts":
+		return []string{scope.command("generate --feature"), scope.build}
 	case "goforj-add-http-route":
 		return []string{strings.Replace(scope.make, "*", "controller <name>", 1), scope.build, scope.command("route:list")}
 	case "goforj-add-app-command":
@@ -439,7 +481,13 @@ func workflowCommands(workflowID string, scope appScope) []string {
 }
 
 func workflowFiles(workflowID string, layout layout) []string {
+	if files, ok := applicationWorkflowFiles(workflowID, layout); ok {
+		return files
+	}
+
 	switch workflowID {
+	case "goforj-feature-rollouts":
+		return []string{".goforj.yml", ".env", "internal/features/manager_gen.go", "internal/features/accessors_gen.go", "internal/<domain>/service.go", "internal/<domain>/service_test.go", layout.wire + "/inject_services_app.go"}
 	case "goforj-add-http-route":
 		return []string{"internal/<domain>/controller.go", "internal/<domain>/service.go", "internal/<domain>/repository.go", layout.composition + "/routes.go", layout.wire + "/inject_http_controllers_app.go", layout.wire + "/inject_services_app.go", layout.wire + "/inject_repositories_app.go"}
 	case "goforj-add-app-command":
@@ -466,6 +514,8 @@ func workflowFiles(workflowID string, layout layout) []string {
 func workflowTools(workflowID string) []string {
 	tools := []string{"application-info", "project-layout", "workflow-plan", "registration-points", "docs-section-pack", "generated-file-policy", "validation-plan"}
 	switch workflowID {
+	case "goforj-feature-rollouts":
+		return append(tools, "resource-inventory", "scenario-guide", "version-alignment")
 	case "goforj-add-http-route":
 		return append(tools, "route-list", "resource-inventory")
 	case "goforj-add-app-command":
@@ -499,7 +549,13 @@ func workflowDocs(workflowID string) []DocReference {
 }
 
 func workflowWarnings(workflowID string) []string {
+	if definition, ok := applicationWorkflowDefinitions[workflowID]; ok && len(definition.warnings) != 0 {
+		return append([]string(nil), definition.warnings...)
+	}
+
 	switch workflowID {
+	case "goforj-feature-rollouts":
+		return []string{"Read goforj-feature-rollouts and verify the pinned GoForj version supports the optional feature component before enabling or generating it.", "Configure evaluator resources with FEATURE_* settings; flag names remain dynamic source definitions, and App lifecycle owns initial loading and refresh.", "Use Enabled for ordinary boolean checks. Capture Snapshot() before targeting when related decisions must share one configuration revision and evaluation time; For(target) alone does not freeze configuration, and flags do not replace authorization."}
 	case "goforj-add-job":
 		return []string{"Keep queue payloads small and typed.", "Delegate business behavior to services from the job handler."}
 	case "goforj-add-job-schedule":
@@ -524,6 +580,8 @@ func workflowWarnings(workflowID string) []string {
 func defaultScenarioRefs(query string) []DocReference {
 	workflowID := Classify(query)
 	switch workflowID {
+	case "goforj-feature-rollouts":
+		return []DocReference{{Path: "scenarios/tenant-checkout-rollout.md", Heading: "Starting State"}}
 	case "goforj-add-job":
 		return []DocReference{{Path: "scenarios/reports-generate-job.md", Heading: "What You Will Build"}}
 	case "goforj-add-schedule":
@@ -543,6 +601,8 @@ func workflowScenarioRefs(workflowIDs []string) []DocReference {
 	for _, workflowID := range workflowIDs {
 		var candidates []DocReference
 		switch workflowID {
+		case "goforj-feature-rollouts":
+			candidates = []DocReference{{Path: "scenarios/tenant-checkout-rollout.md", Heading: "Starting State"}}
 		case "goforj-add-data-resource":
 			candidates = []DocReference{{Path: "scenarios/create-user-model.md", Heading: "What You Will Build"}, {Path: "scenarios/create-photo-data-resource.md", Heading: "Starting State"}, {Path: "scenarios/user-post-relationships.md", Heading: "What You Will Build"}}
 		case "goforj-add-http-route":
@@ -579,7 +639,7 @@ func mergeWorkflowDocs(workflowIDs []string) []DocReference {
 	refs := []DocReference{}
 	for _, workflowID := range workflowIDs {
 		for _, ref := range workflowDocs(workflowID) {
-			if !docRefsContain(refs, ref.Path) {
+			if !docRefsContainSection(refs, ref) {
 				refs = append(refs, ref)
 			}
 		}
@@ -642,7 +702,7 @@ func workflowSegments(workflowIDs []string, scope appScope, layout layout) ([]Wo
 		keptSteps := segmentSteps[:0]
 		for _, step := range segmentSteps {
 			if isPostBuildCommand(step.Action) {
-				postBuild = append(postBuild, step)
+				postBuild = appendUniquePostBuildStep(postBuild, step)
 				continue
 			}
 			keptSteps = append(keptSteps, step)
@@ -671,6 +731,18 @@ func workflowSegments(workflowIDs []string, scope appScope, layout layout) ([]Wo
 
 // workflowSteps makes data prerequisites explicit while other workflows preserve their command order.
 func workflowSteps(workflowID string, scope appScope) []PlanStep {
+	if steps, ok := applicationWorkflowSteps(workflowID, scope); ok {
+		return steps
+	}
+
+	if workflowID == "goforj-feature-rollouts" {
+		return []PlanStep{
+			{WorkflowID: workflowID, Action: "inspect the pinned GoForj version and enable feature for the owning App in .goforj.yml", Purpose: "use supported framework resources without promoting them into unrelated Apps"},
+			{WorkflowID: workflowID, Action: "declare FEATURE_* evaluator resources in .env and the owning App overlay", Purpose: "separate configured evaluators from dynamic flag names"},
+			{WorkflowID: workflowID, Action: scope.command("generate --feature"), Purpose: "generate the manager and typed evaluator accessors"},
+			{WorkflowID: workflowID, Action: "inject the evaluator manager into the owning App service; use Enabled for ordinary checks or Snapshot() for related decisions requiring consistency", Purpose: "match the task's targeting and consistency requirements"},
+		}
+	}
 	if workflowID == "goforj-add-data-resource" {
 		return []PlanStep{
 			{WorkflowID: workflowID, Action: strings.Replace(scope.make, "*", "migration <name>", 1), Purpose: "create the connection-specific up/down migration pair"},
@@ -705,7 +777,7 @@ func appendUniqueStrings(existing []string, values ...string) []string {
 
 // isPostBuildCommand keeps runtime and registration inspection behind the shared generation pass.
 func isPostBuildCommand(command string) bool {
-	return strings.HasSuffix(command, "route:list") || strings.HasSuffix(command, " worker") || command == "forj worker"
+	return strings.HasSuffix(command, "route:list") || strings.HasSuffix(command, " worker") || command == "forj worker" || command == "go test ./..."
 }
 
 func containsAny(value string, needles ...string) bool {
@@ -726,4 +798,32 @@ func cloneMap(values map[string][]string) map[string][]string {
 		out[key] = append([]string(nil), value...)
 	}
 	return out
+}
+
+// isFeatureRolloutTask recognizes evaluator and targeting concerns before generic feature development vocabulary.
+func isFeatureRolloutTask(task string) bool {
+	if containsAny(task, "feature flag", "feature-flag", "flag resource", "feature evaluator", "flag evaluator", "generate --feature", "internal/features", "feature_") {
+		return true
+	}
+	if strings.Contains(task, "feature resource") && !hasTaskWord(task, "frontend", "ui", "react", "vue") && !strings.Contains(task, "feature-local") {
+		return true
+	}
+	return containsAny(task, "rollout", "roll out", "roll-out") && containsAny(task, "tenant", "target", "stable", "percentage", "bucket", "checkout")
+}
+
+// featureHTTPConcern keeps flag API discussions separate from an explicitly requested HTTP transport.
+func featureHTTPConcern(task string) bool {
+	return containsAny(task, "route", "controller", "http endpoint", "api endpoint", "http api", "json response", "upload")
+}
+
+// hasTaskWord bounds table cues so stable tenant rollouts retain their evaluator workflow.
+func hasTaskWord(task string, words ...string) bool {
+	for _, field := range strings.FieldsFunc(task, func(r rune) bool { return r < 'a' || r > 'z' }) {
+		for _, word := range words {
+			if field == word {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -12,6 +12,7 @@ import (
 	"testing"
 )
 
+// TestStdioProtocolToolDiscoveryAndCriticalCalls exercises workflow and docs routing over the real stdio protocol.
 func TestStdioProtocolToolDiscoveryAndCriticalCalls(t *testing.T) {
 	client := startStdioProtocolServer(t)
 	defer client.close(t)
@@ -39,6 +40,8 @@ func TestStdioProtocolToolDiscoveryAndCriticalCalls(t *testing.T) {
 	}{
 		{name: "workflow-plan", arguments: map[string]any{"task": "add checkout route", "app": "marketplace"}, want: "goforj-add-http-route"},
 		{name: "docs-section-pack", arguments: map[string]any{"workflow_id": "goforj-add-http-route"}, want: "applications/routes.md"},
+		{name: "workflow-plan", arguments: map[string]any{"task": "stable tenant checkout rollout", "app": "marketplace"}, want: "forj marketplace generate --help"},
+		{name: "docs-section-pack", arguments: map[string]any{"task": "stable tenant checkout rollout"}, want: "applications/library-resources.md"},
 		{name: "resource-inventory", arguments: map[string]any{}, want: "frontend_kit"},
 		{name: "validation-plan", arguments: map[string]any{"task": "add checkout route", "app": "marketplace"}, want: "forj marketplace build"},
 	}
