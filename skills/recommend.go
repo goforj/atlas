@@ -22,6 +22,7 @@ func Recommended(p project.Project) []Skill {
 		"goforj-testing-and-validation": true,
 		"goforj-wire-repair":            true,
 		"goforj-debug-runtime":          true,
+		"goforj-secret-reads":           true,
 		"goforj-multi-app-change":       len(p.Apps) > 1,
 		"goforj-validate-change":        true,
 		"goforj-notification-delivery":  true,

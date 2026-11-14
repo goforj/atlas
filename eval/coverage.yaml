@@ -221,6 +221,11 @@ capabilities:
     tier: extended
     evaluations: []
 
+  - id: libraries.secret-reads
+    area: libraries
+    summary: Read bound credentials with exact values and safe failures; pending published modules.
+    tier: core
+    evaluations: []
   - id: operations.backups
     area: operations
     summary: Configure and verify a recoverable application backup workflow.
