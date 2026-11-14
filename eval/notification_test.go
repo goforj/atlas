@@ -1,6 +1,9 @@
 package eval
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -31,5 +34,25 @@ func TestIncidentEvaluationPromotesNaturalAcceptanceTask(t *testing.T) {
 		if !strings.Contains(definition.Prompt, term) {
 			t.Errorf("prompt omits %q", term)
 		}
+	}
+}
+
+// TestNotificationSelectionQualityDoesNotGateBehavior preserves correct alternative sender composition.
+func TestNotificationSelectionQualityDoesNotGateBehavior(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "service.go"), []byte("package incidents\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	verifier := newSurfaceVerifier(&fakeCommandRunner{}, surfaceContract{id: "quality-test/v1", sources: []sourceContract{{id: "library-selection", kind: RequirementQuality, paths: []string{"service.go"}, stringLiterals: []string{"github.com/goforj/notification"}}}})
+	result, err := verifier.Verify(context.Background(), VerificationInput{ProjectRoot: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.FrameworkOutcome.Status != EndpointPassed {
+		t.Fatalf("library preference gated behavior: %#v", result)
+	}
+	check := result.Checks[len(result.Checks)-1]
+	if check.Kind != RequirementQuality || check.Status != EndpointFailed {
+		t.Fatalf("selection result = %#v", check)
 	}
 }

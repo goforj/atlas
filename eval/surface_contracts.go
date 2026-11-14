@@ -8,7 +8,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges:      []string{"internal/incidents/*.go"},
 			qualityTestPatterns: []string{"internal/incidents/*_test.go"},
 			sources: []sourceContract{
-				{id: "notification-library-composition", paths: []string{"internal/incidents/*.go"}, identifiers: []string{"AlertService", "NewAlertService", "Notify"}, selectorCalls: []string{"Fallback"}, forbiddenCalls: []string{"Background", "TODO"}},
+				{id: "notification-library-composition", kind: RequirementQuality, stringLiterals: []string{"github.com/goforj/notification"}, paths: []string{"internal/incidents/*.go"}, identifiers: []string{"AlertService", "NewAlertService", "Notify"}, selectorCalls: []string{"Fallback"}, forbiddenCalls: []string{"Background", "TODO"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
 				id:              "incident-notification-behavior",
