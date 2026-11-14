@@ -27,8 +27,8 @@ func applicationPlanningDocs() docs.StaticProvider {
 		{Path: "libraries/crypt.md", Content: "# Crypt Library for Go {#crypt-library-for-go}\n\n## Key format & rotation {#key-format-&-rotation}\n\nCurrent keys encrypt while previous keys retain authenticated reads."},
 		{Path: "libraries/secret.md", Content: "# Secret Library for Go {#secret-library-for-go}\n\n## Quick Start {#quick-start}\n\nInject a bound Reader and preserve classified lookup failures."},
 		{Path: "applications/library-selection.md", Content: "# Choosing Libraries\n\n## Match the Application Requirement\n\nChoose the supported library for application policy.\n\n## Preserve Input Meaning\n\nKeep presence and field errors separate from operational failure."},
-		{Path: "core/wiring-recipes.md", Content: "# Wiring Recipes\n\n## Quick Map\n\nRegister application constructors in the selected service provider set."},
-		{Path: "core/reading-wire-errors.md", Content: "# Reading Wire Errors\n\n## Fast Checklist\n\nInspect the provider chain before repairing required dependencies."},
+		{Path: "developer-tools/wiring-recipes.md", Content: "# Wiring Recipes\n\n## Quick Map\n\nRegister application constructors in the selected service provider set."},
+		{Path: "developer-tools/reading-wire-errors.md", Content: "# Reading Wire Errors\n\n## Fast Checklist\n\nInspect the provider chain before repairing required dependencies."},
 	}}
 }
 
@@ -151,7 +151,7 @@ func TestPlanningInspectionRequestsRemainReadOnly(t *testing.T) {
 	}
 	for _, task := range []string{"please search docs for Wire", "can you read documentation for Wire", "could you explain Wire providers", "search docs for Wire", "read documentation for Wire", "find docs for Wire", "show docs for Wire", "browse docs for Wire", "explain Wire providers", "look up Wire documentation"} {
 		plan, ok := Plan(fixtureContext(), PlanRequest{Task: task, App: "marketplace"})
-		if !ok || plan.WorkflowID != "goforj-read-docs" || len(plan.Commands) != 0 || len(plan.Files) != 0 || len(plan.Verification) != 0 || !docsContain(plan.Docs, "core/reading-wire-errors.md") {
+		if !ok || plan.WorkflowID != "goforj-read-docs" || len(plan.Commands) != 0 || len(plan.Files) != 0 || len(plan.Verification) != 0 || !docsContain(plan.Docs, "developer-tools/reading-wire-errors.md") {
 			t.Fatalf("docs request created implementation work: %#v", plan)
 		}
 		if result := ValidationPlan(fixtureContext(), PlanRequest{Task: task}); len(result.Steps) != 0 {
