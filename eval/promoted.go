@@ -13,6 +13,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 			},
 		},
 		{ID: "goforj-notify-incident/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-notification-boundary", "Inspect the incident and sender boundary before choosing delivery policy.", "internal/incidents/**", "internal/notifications/**", "app/wire/**", "go.mod")}},
+		{ID: "goforj-configure-dispatch-startup/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-startup-configuration", "Inspect the existing typed provider and App composition before changing startup policy.", "internal/dispatch/**", "app/lifecycle.go", "app/wire/**")}},
 		promotedGeneratorWorkflow("goforj-add-app-command/v1", "generate-invoice-command", "make:command", "invoices:show"),
 		promotedGeneratorWorkflow("goforj-add-job/v1", "generate-receipt-job", "make:job", "invoices:receipt"),
 		promotedGeneratorWorkflow("goforj-add-migration/v1", "generate-invoice-status-migration", "make:migration", "add_status_to_invoices"),

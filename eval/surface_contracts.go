@@ -3,6 +3,7 @@ package eval
 // promotedSurfaceContracts returns reviewed contracts for framework surfaces that do not need a bespoke behavioral oracle.
 func promotedSurfaceContracts() []surfaceContract {
 	return []surfaceContract{
+		dispatchEnvironmentContract(),
 		{
 			id:                  "catalog-search/v1",
 			allowedChanges:      []string{"internal/catalog/*.go", "app/wire/inject_services_app.go"},

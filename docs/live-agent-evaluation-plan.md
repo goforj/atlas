@@ -463,3 +463,17 @@ The supervisor records exact messages and caller context, primary acceptance, de
 ## Targeted checkout rollout calibration
 
 The `target-feature-rollout` contract adds a prepared checkout request boundary with feature v0.1.0 installed by the supervisor. It measures integration and execution within that existing boundary, not unconstrained library discovery or candidate dependency installation. Required behavior covers tenant bucket stability, explicit missing-flag fallback, invalid-refresh retention, and captured configuration revision and evaluation time. Separate quality checks record the import, observed library calls, and candidate regression tests. The fixture now supplies a generated Checkout evaluator, and the service must resolve that typed accessor through its registered App provider. A supervisor-only helper binds the generated manager to controlled native sources and clocks after candidate writes are sealed; it does not add a framework constructor API. The framework resource tests separately exercise real file-backed startup, refresh, and shutdown. The GoForj companion scenario calibrates the golden implementation and compiling randomized-target and mixed-revision mutants without live provider sessions. Native API sources are linked from the always-recommended rollout skill while hosted feature documentation is prepared separately.
+## Typed startup configuration diagnostic
+
+`configure-dispatch-startup/v1` uses an application-owned dispatch Config and the
+Project's installed env/v2 dependency. The provider rejects missing or invalid
+required values before Wire composition completes, while optional duration and
+boolean parse failures deliberately use the installed getter fallbacks.
+Supervisor-owned fresh-process cases verify process/file precedence, explicit
+empty process values, bounded parsing, safe String/GoString diagnostics, and
+immutable service snapshots through the real InitializeApplication path.
+Source API attribution is a separate quality observation and does not gate
+application behavior. Dependency installation is outside the candidate task;
+preparation stages the existing module graph and candidate shell networking is
+disabled. Golden calibration rejects compiling missing-token and changed-default
+mutants. This contract has no retained provider measurements.

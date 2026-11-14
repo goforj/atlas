@@ -221,6 +221,11 @@ capabilities:
     tier: extended
     evaluations: []
 
+  - id: libraries.environment-startup
+    area: libraries
+    summary: Compose required typed startup settings with process precedence and safe diagnostics.
+    tier: extended
+    evaluations: [configure-dispatch-startup]
   - id: operations.backups
     area: operations
     summary: Configure and verify a recoverable application backup workflow.
