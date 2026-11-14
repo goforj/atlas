@@ -30,6 +30,7 @@ func Catalog() []Skill {
 		skill("goforj-runtime-workflows", "Build, run, dev, app prefixes, and binaries.", runtimeWorkflows),
 		skill("goforj-database-and-data-access", "Repository/service boundaries, schema-derived models, relationships, and safe schema inspection.", databaseDataAccess),
 		skill("goforj-observability", "Logs, metrics, app/runtime identity, and Lighthouse boundaries.", observability),
+		skill("goforj-secret-reads", "Choose bound secret readers, preserve exact values, and handle safe credential failures.", secretReads),
 		skill("goforj-vue-starter-kit", "Vue starter kit paths, auth defaults, and embedded frontend assets.", vueStarterKit),
 		skill("goforj-react-starter-kit", "React starter kit paths, auth defaults, and embedded frontend assets.", reactStarterKit),
 		skill("goforj-templ-htmx-starter-kit", "templ and htmx starter kit paths, server-rendered UI, auth defaults, and embedded frontend assets.", templHTMXStarterKit),
