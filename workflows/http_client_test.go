@@ -41,16 +41,16 @@ func TestHTTPClientDocsLookupReadsCanonicalSections(t *testing.T) {
 		t.Fatalf("docs query generated source work: %#v", plan)
 	}
 	provider := docs.StaticProvider{Docs: []docs.Document{
-		{Path: "libraries/httpx.md", Content: "# HTTPX Library for Go {#httpx-library-for-go}\n\n## Installation {#installation}\n\nPreserve the installed version.\n\n## Retry {#retry-2}\n\nUse intentional bounded retries."},
+		{Path: "libraries/httpx.md", Content: "# HTTPX Library for Go {#httpx-library-for-go}\n\n## Installation {#installation}\n\nPreserve the installed version.\n\n## Retry {#retry-2}\n\n### RetryCount {#retrycount}\n\nRetryCount sets the maximum retry count.\n\n### RetryCondition {#retrycondition}\n\nRetryCondition overrides the default request-error policy."},
 		{Path: "applications/library-selection.md", Content: "# Choosing Libraries\n\n## Match the Application Requirement\n\nSelect the actual application boundary."},
 	}}
 	for _, request := range []struct{ id, task string }{{"", task}, {"goforj-http-client-resilience", ""}} {
 		pack, err := DocsSectionPack(context.Background(), provider, request.id, request.task, 30)
-		if err != nil || len(pack.Sections) != 3 || pack.Sections[0].Reference.Path != "libraries/httpx.md" {
+		if err != nil || len(pack.Sections) != 4 || pack.Sections[0].Reference.Path != "libraries/httpx.md" {
 			t.Fatalf("pack = %#v, error = %v", pack, err)
 		}
 		for _, section := range pack.Sections {
-			if !section.Found {
+			if !section.Found || strings.TrimSpace(section.Section.Body) == "" {
 				t.Fatalf("missing canonical section %#v", section.Reference)
 			}
 		}
