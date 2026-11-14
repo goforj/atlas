@@ -216,7 +216,6 @@ func ClassifyAll(task string) []string {
 	add("goforj-catalog-search", catalogSearchTask(lower))
 	add("goforj-add-http-route", catalogSearchEndpoint(lower))
 	add("goforj-notification-delivery", isNotificationTask(lower))
-	add("goforj-http-client-resilience", containsAny(lower, "outbound http", "outbound client", "remote client", "http client", "httpx", "tax-rate"))
 	if len(ids) == 0 {
 		return []string{Classify(task)}
 	}
@@ -277,8 +276,6 @@ func Classify(task string) string {
 		return "goforj-add-schedule"
 	case isNotificationTask(lower):
 		return "goforj-notification-delivery"
-	case containsAny(lower, "outbound http", "outbound client", "remote client", "http client", "httpx", "tax-rate"):
-		return "goforj-http-client-resilience"
 	case containsAny(lower, "job", "queue", "worker", "background"):
 		return "goforj-add-job"
 	case containsAny(lower, "event", "subscriber", "publish"):
