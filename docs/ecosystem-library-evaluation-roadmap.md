@@ -12,9 +12,9 @@ Keep the responsibilities distinct: feature resources own evaluators and refresh
 
 Retain the standalone library behavior probes as useful calibration, but compose promoted framework tasks through actual generated resources. Each resource PR, Atlas evaluation PR, GoForj calibration companion, and public-docs PR remains a separate review boundary. Validation and ordinary HTTP clients do not require new resource managers merely to participate in this work.
 
-## Current coverage
+## Baseline coverage
 
-Atlas has 32 evaluation manifests, 57 capability entries (40 mapped to evaluations and 17 planned), and 22 built-in skills. Those counts describe framework coverage, not library-selection coverage.
+At the assessment baseline, Atlas has 32 evaluation manifests, 57 capability entries (40 mapped to evaluations and 17 planned), and 22 built-in skills. Those counts describe framework coverage, not library-selection coverage.
 
 The main gaps are concrete:
 
@@ -94,9 +94,9 @@ Suggested title: `feat: teach and evaluate portable catalog search`.
 
 [search v0.1.1](https://github.com/goforj/search/tree/v0.1.1) adds a substantial application capability with no dedicated Atlas contract. Teach its use for lexical search, filters, facets, highlights, and an explicit indexing lifecycle. Keep the database as the durable source of truth; do not imply that this library provides vector or semantic search.
 
-Use a catalog task with descriptive text, a category filter, pagination, and highlights. Calibrate first with an actual local backend, such as the separately versioned Bleve driver, rather than a fake that only records method calls. Verify exact inclusion/exclusion, result totals and pagination, accepted-write visibility, and safe rendering of untrusted highlight segments. Include mutants that drop the filter or return stale results after an index update. Do not test backend-specific relevance scores as portable guarantees.
+Use a catalog task with descriptive text, a category filter, and pagination. Keep facets and safe highlight rendering as follow-up capabilities rather than claiming them from the first executable contract. Calibrate first with an actual local backend, such as the separately versioned Bleve driver, rather than a fake that only records method calls. Verify exact inclusion/exclusion, result totals and pagination, and accepted-write visibility. Include mutants that drop the filter or return stale results after an index update. Do not test backend-specific relevance scores as portable guarantees.
 
-Keep native service provisioning and a broad driver matrix outside the first PR. GoForj has no existing search generator in the inspected templates, so use application-owned composition and Wire registration without inventing `make:search`.
+Keep a broad driver matrix outside the first evaluation PR. The initial templates had no search resource generator. The resource-first implementation supplies optional `forj generate --search`, App-owned schema definitions, and explicit provisioning before runtime initialization. Compose the evaluation through that generated manager and Wire registration without inventing `make:search`.
 
 ### 3 Notification
 
