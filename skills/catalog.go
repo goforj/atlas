@@ -36,6 +36,7 @@ func Catalog() []Skill {
 		skill("goforj-react-starter-kit", "React starter kit paths, auth defaults, and embedded frontend assets.", reactStarterKit),
 		skill("goforj-templ-htmx-starter-kit", "templ and htmx starter kit paths, server-rendered UI, auth defaults, and embedded frontend assets.", templHTMXStarterKit),
 		skill("goforj-testing-and-validation", "Validation commands and render hygiene.", testingValidation),
+		skill("goforj-tenant-request-rate-limits", "Choose local or shared request budgets with trusted tenant identity and explicit failure policy.", tenantRequestRateLimits),
 		skill("goforj-add-http-route", "Workflow for adding HTTP routes, controllers, services, and route verification.", addHTTPRoute),
 		skill("goforj-add-app-command", "Workflow for adding app-owned CLI commands.", addAppCommand),
 		skill("goforj-notification-delivery", "Choose synchronous notification senders and explicit fallback policies.", notificationDelivery),
