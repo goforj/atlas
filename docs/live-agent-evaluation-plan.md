@@ -449,3 +449,9 @@ phase is the authoritative container or VM sandbox and its negative isolation
 suite, not another broad unconfined matrix. After that trust boundary exists,
 the next paid measurement should use repeated paired smoke trials to answer one
 specific adjacent-treatment question before expanding to the core portfolio.
+
+### Portable catalog search calibration
+
+The `catalog-search/v1` contract adds a natural product projection task with separately reported behavior and executed library-adoption checks. Its supervisor-owned probe uses the released embedded Bleve backend for exact category filtering, stable pagination, totals, replacement visibility, cancellation, and visibility failure. The matching GoForj scenario pins the root and driver modules independently at v0.1.1 before candidate execution; dependency installation is not measured. The companion calibration rejects compiling missing-filter and skipped-Wait mutants. Facets, safe highlight rendering, durable database writes, persistent index lifecycle, and other drivers remain outside this first behavior contract. Search guidance covers these boundaries, and facets/highlights remain planned capabilities.
+
+This evaluation has deterministic calibration only. It remains unmeasured by a fresh provider session, and retains the existing local diagnostic trust limits. No historical `/v1` contract is regraded.
