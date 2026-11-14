@@ -449,3 +449,20 @@ phase is the authoritative container or VM sandbox and its negative isolation
 suite, not another broad unconfined matrix. After that trust boundary exists,
 the next paid measurement should use repeated paired smoke trials to answer one
 specific adjacent-treatment question before expanding to the core portfolio.
+
+## Authenticated payload rotation diagnostic
+
+`encrypt-partner-payloads/v1` protects application-owned payload persistence using
+the Project's existing crypt v1.2.0 dependency. The prepared fake-key compatibility
+vector makes the persisted envelope explicit. Independent reference readers
+verify current-key writes, previous-key reads, randomized encryption, tampered
+IV/value/MAC rejection, malformed envelopes, and frozen key snapshots. Injected
+repository/cipher probes verify cancellation, operational error identity, and
+no plaintext on failure; real Wire initialization rejects bad key configuration.
+Source API attribution is a separate quality observation, so a compatible
+alternative implementation can pass behavior without that observation.
+
+Preparation stages the existing dependency graph before candidate execution,
+with shell networking disabled for the candidate. Golden calibration rejects
+compiling plaintext-storage and dropped-previous-key mutants. The contract has
+no retained live provider attempts and changes no historical evaluation grade.

@@ -200,6 +200,11 @@ capabilities:
     summary: Validate writes and return stable public errors without leaking domain internals.
     tier: smoke
     evaluations: [add-validated-write-endpoint]
+  - id: libraries.payload-encryption
+    area: libraries
+    summary: Authenticate stored payloads with current-key writes and retained old-key reads.
+    tier: extended
+    evaluations: [encrypt-partner-payloads]
   - id: operations.backups
     area: operations
     summary: Configure and verify a recoverable application backup workflow.

@@ -12,6 +12,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 				qualityInspection("inspect-project", "Inspect the owning App and existing invoice boundary before editing.", "app/**", "internal/invoices/**"),
 			},
 		},
+		{ID: "goforj-encrypt-partner-payloads/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-payload-boundary", "Inspect the repository, cipher seam, compatibility vector, and App composition before protecting stored payloads.", "internal/partnerpayloads/**", "app/lifecycle.go", "app/wire/**")}},
 		promotedGeneratorWorkflow("goforj-add-app-command/v1", "generate-invoice-command", "make:command", "invoices:show"),
 		promotedGeneratorWorkflow("goforj-add-job/v1", "generate-receipt-job", "make:job", "invoices:receipt"),
 		promotedGeneratorWorkflow("goforj-add-migration/v1", "generate-invoice-status-migration", "make:migration", "add_status_to_invoices"),
