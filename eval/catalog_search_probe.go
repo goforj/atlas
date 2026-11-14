@@ -7,7 +7,7 @@ func runCatalogSearchLibraryUseProbe(ctx context.Context, runner CommandRunner, 
 	result := runIsolatedCommand(ctx, runner, project, commandContract{
 		id:              "catalog-search-library-use",
 		arguments:       []string{"go", "test", "./internal/catalog", "-run", "^TestAtlasCatalogSearchLibraryPath$", "-count=1"},
-		supervisorFiles: []supervisorFile{{path: "internal/catalog/atlas_eval_catalog_test.go", body: catalogSearchBehaviorProbe}},
+		supervisorFiles: catalogSearchSupervisorFiles(),
 	})
 	result.Kind = RequirementQuality
 	return result
@@ -19,14 +19,15 @@ import (
  "context"
  "errors"
  "testing"
+ "path/filepath"
 
  "github.com/goforj/search"
- "github.com/goforj/search/driver/blevesearch"
+ "example.com/invoiceeval/internal/searches"
 )
 
 // atlasCatalogBackend observes root API calls while executing a real embedded backend.
 type atlasCatalogBackend struct {
- *blevesearch.Driver
+ search.Backend
  searches int
  writes int
  waits int
@@ -36,33 +37,26 @@ type atlasCatalogBackend struct {
 // Search records calls on the executed application path.
 func (backend *atlasCatalogBackend) Search(ctx context.Context, definition search.Definition, query search.Query) (search.Result, error) {
  backend.searches++
- return backend.Driver.Search(ctx, definition, query)
+ return backend.Backend.Search(ctx, definition, query)
 }
 
 // Upsert records writes without substituting a fake index.
 func (backend *atlasCatalogBackend) Upsert(ctx context.Context, definition search.Definition, document search.Document) (search.Receipt, error) {
  backend.writes++
- return backend.Driver.Upsert(ctx, definition, document)
+ return backend.Backend.Upsert(ctx, definition, document)
 }
 
 // Wait allows a terminal visibility failure to be checked independently of acceptance.
 func (backend *atlasCatalogBackend) Wait(ctx context.Context, receipt search.Receipt) (search.Outcome, error) {
  backend.waits++
  if backend.failWait { return search.Outcome{State: search.OutcomeFailed, Error: search.ErrMutationFailed}, nil }
- return backend.Driver.Wait(ctx, receipt)
+ return backend.Backend.Wait(ctx, receipt)
 }
 
 // TestAtlasCatalogSearchBehavior exercises filters, deterministic pages, replacement visibility, and actual library calls.
 func TestAtlasCatalogSearchBehavior(t *testing.T) {
  ctx := context.Background()
- driver, err := blevesearch.Open(ctx, blevesearch.Config{Memory: true})
- if err != nil { t.Fatal(err) }
- t.Cleanup(func() { _ = driver.Close() })
- if err := driver.CreateIndex(ctx, Definition()); err != nil { t.Fatal(err) }
- backend := &atlasCatalogBackend{Driver: driver}
- index, err := search.NewIndex(backend, Definition())
- if err != nil { t.Fatal(err) }
- service := NewService(index)
+ service, backend := atlasCatalogService(t)
  for _, product := range []Product{
   {ID:"p3", Description:"Red trail boot", Category:"outdoors"},
   {ID:"p1", Description:"Red hiking boot", Category:"outdoors"},
@@ -99,18 +93,51 @@ func TestAtlasCatalogSearchBehavior(t *testing.T) {
 // TestAtlasCatalogSearchLibraryPath records adoption separately from shopper-visible behavior.
 func TestAtlasCatalogSearchLibraryPath(t *testing.T) {
  ctx := context.Background()
- driver, err := blevesearch.Open(ctx, blevesearch.Config{Memory: true})
- if err != nil { t.Fatal(err) }
- t.Cleanup(func() { _ = driver.Close() })
- if err := driver.CreateIndex(ctx, Definition()); err != nil { t.Fatal(err) }
- backend := &atlasCatalogBackend{Driver: driver}
- index, err := search.NewIndex(backend, Definition())
- if err != nil { t.Fatal(err) }
- service := NewService(index)
+ service, backend := atlasCatalogService(t)
  if err := service.IndexProduct(ctx, Product{ID:"path", Description:"blue trail shoe", Category:"outdoors"}); err != nil { t.Fatal(err) }
  if _, err := service.Find(ctx, "trail", "outdoors", 0, 1); err != nil { t.Fatal(err) }
  if backend.searches != 1 || backend.writes != 1 || backend.waits != 1 {
   t.Fatalf("library calls on application path: search=%d upsert=%d wait=%d", backend.searches, backend.writes, backend.waits)
  }
+}
+
+// atlasCatalogService instruments an actual generated resource only inside the sealed supervisor clone.
+func atlasCatalogService(t *testing.T) (*Service, *atlasCatalogBackend) {
+ t.Helper()
+ ctx:=context.Background()
+ t.Setenv("SEARCH_CATALOG_PATH",filepath.Join(t.TempDir(),"catalog"))
+ defs:=map[string]search.Definition{"catalog":Definition()}
+ if err:=searches.Provision(ctx,defs);err!=nil{t.Fatal(err)}
+ manager,err:=searches.NewManager(ctx,defs);if err!=nil{t.Fatal(err)}
+ t.Cleanup(func(){_ = manager.Close()})
+ var backend *atlasCatalogBackend
+ if err:=searches.AtlasEvalWrapIndex(manager,"catalog",func(inner search.Backend) search.Backend {backend=&atlasCatalogBackend{Backend:inner};return backend});err!=nil{t.Fatal(err)}
+ return NewService(manager),backend
+}
+`
+
+// catalogSearchSupervisorFiles keeps oracle instrumentation outside the candidate-visible generated resource API.
+func catalogSearchSupervisorFiles() []supervisorFile {
+	return []supervisorFile{
+		{path: "internal/catalog/atlas_eval_catalog_test.go", body: catalogSearchBehaviorProbe},
+		{path: "internal/searches/atlas_eval_backend.go", body: catalogSearchManagerProbe},
+	}
+}
+
+const catalogSearchManagerProbe = `// Package searches composes App-owned lexical indexes.
+package searches
+import (
+ "fmt"
+ "github.com/goforj/search"
+)
+// AtlasEvalWrapIndex instruments only the supervisor's sealed clone while preserving actual backend ownership.
+func AtlasEvalWrapIndex(manager *Manager, name string, wrap func(search.Backend) search.Backend) error {
+ resource,exists:=manager.indexes[name]
+ if !exists{return fmt.Errorf("supervisor index %q is absent",name)}
+ index,err:=search.NewIndex(wrap(resource.backend),resource.index.Definition())
+ if err!=nil{return err}
+ resource.index=index
+ manager.indexes[name]=resource
+ return nil
 }
 `

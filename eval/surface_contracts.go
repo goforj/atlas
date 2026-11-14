@@ -8,12 +8,12 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges:      []string{"internal/catalog/*.go", "app/wire/inject_services_app.go"},
 			qualityTestPatterns: []string{"internal/catalog/*_test.go"},
 			sources: []sourceContract{
-				{id: "catalog-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"OpenIndex", "NewService"}},
+				{id: "catalog-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
 				id:              "catalog-search-behavior",
 				arguments:       []string{"go", "test", "./internal/catalog", "-run", "^TestAtlasCatalogSearchBehavior$", "-count=1"},
-				supervisorFiles: []supervisorFile{{path: "internal/catalog/atlas_eval_catalog_test.go", body: catalogSearchBehaviorProbe}},
+				supervisorFiles: catalogSearchSupervisorFiles(),
 			}, commandContract{
 				probe: runCatalogSearchLibraryUseProbe,
 			}),

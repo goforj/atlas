@@ -574,7 +574,9 @@ Declare searchable TextField values separately from filterable KeywordField valu
 
 Highlight fragments contain untrusted Segment.Text even when Matched is true. Escape every segment using the UI's text rendering; add trusted markup only around escaped matched text. Never render backend fragments as raw HTML.
 
-Compose an injected index in the selected App and register its owning service through App Wire sources. Keep backend provisioning and closing at the lifecycle/composition boundary. Bleve persistent indexes have a single process owner. Inspect supported make commands; do not invent 'make:search' or edit wire_gen.go.
+When adding lexical search to a GoForj Project, first enable the optional Search component for the owning App in .goforj.yml and use the resource generation path. For a GoForj Project with Search enabled, prefer the generated 'searches.Manager' and purpose-named accessor such as 'Catalog()' over opening a driver in application services. Declare the owning App's schema in 'SearchDefinitions()' under 'app/search.go' or 'app/<name>/search.go'; environment settings choose backend/path/endpoint/auth. Run 'forj generate --search' after named resource declarations. Empty App definitions are inert. Provision explicitly with 'searches.Provision(ctx, app.SearchDefinitions())' from a standalone bootstrap before App initialization; startup validates schemas and rejects drift. Keep rebuilds application-owned and stop the single Bleve owner before provisioning its path.
+
+Compose an injected manager or named index in the selected App and register its owning service through App Wire sources. Keep backend provisioning and closing at the lifecycle/composition boundary. Bleve persistent indexes have a single process owner. Inspect supported make commands; do not invent 'make:search' or edit wire_gen.go.
 
 Verify exact inclusions and exclusions, totals across multiple pages, category isolation, cancellation, and visible replacements after successful Wait using a real local backend. Test unsafe highlight input if rendering is added. A recording fake alone cannot prove backend matching or visibility.
 `

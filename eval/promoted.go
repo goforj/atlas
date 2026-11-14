@@ -108,7 +108,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 		},
 		{
 			ID:           "goforj-catalog-search/v1",
-			Requirements: []WorkflowRequirement{qualityInspection("inspect-catalog-boundary", "Inspect the projection schema, independently pinned modules, and App composition before adding search behavior.", "go.mod", "internal/catalog/**", "app/wire/**")},
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-catalog-boundary", "Inspect the projection schema, independently pinned modules, and App composition before adding search behavior.", "go.mod", "internal/catalog/**", "internal/searches/**", "app/search.go", "app/wire/**")},
 		},
 	}
 }
