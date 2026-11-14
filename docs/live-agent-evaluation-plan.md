@@ -449,3 +449,18 @@ phase is the authoritative container or VM sandbox and its negative isolation
 suite, not another broad unconfined matrix. After that trust boundary exists,
 the next paid measurement should use repeated paired smoke trials to answer one
 specific adjacent-treatment question before expanding to the core portfolio.
+
+## Typed startup configuration diagnostic
+
+`configure-dispatch-startup/v1` uses an application-owned dispatch Config and the
+Project's installed env/v2 dependency. The provider rejects missing or invalid
+required values before Wire composition completes, while optional duration and
+boolean parse failures deliberately use the installed getter fallbacks.
+Supervisor-owned fresh-process cases verify process/file precedence, explicit
+empty process values, bounded parsing, safe String/GoString diagnostics, and
+immutable service snapshots through the real InitializeApplication path.
+Source API attribution is a separate quality observation and does not gate
+application behavior. Dependency installation is outside the candidate task;
+preparation stages the existing module graph and candidate shell networking is
+disabled. Golden calibration rejects compiling missing-token and changed-default
+mutants. This contract has no retained provider measurements.
