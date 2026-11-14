@@ -691,7 +691,7 @@ func workflowSegments(workflowIDs []string, scope appScope, layout layout) ([]Wo
 		keptSteps := segmentSteps[:0]
 		for _, step := range segmentSteps {
 			if isPostBuildCommand(step.Action) {
-				postBuild = append(postBuild, step)
+				postBuild = appendUniquePostBuildStep(postBuild, step)
 				continue
 			}
 			keptSteps = append(keptSteps, step)

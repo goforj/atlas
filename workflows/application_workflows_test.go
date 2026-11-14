@@ -197,3 +197,13 @@ func TestApplicationCommandTemplatesPreserveDeclaredGenerators(t *testing.T) {
 		t.Fatalf("declared commands = %v", commands)
 	}
 }
+
+// TestSharedPostBuildVerificationRunsOnce preserves one test pass after a composed provider build.
+func TestSharedPostBuildVerificationRunsOnce(t *testing.T) {
+	steps := appendUniquePostBuildStep(nil, PlanStep{Action: "go test ./..."})
+	steps = appendUniquePostBuildStep(steps, PlanStep{Action: "go test ./..."})
+	steps = appendUniquePostBuildStep(steps, PlanStep{Action: "forj marketplace route:list"})
+	if len(steps) != 2 || steps[0].Action != "go test ./..." || steps[1].Action != "forj marketplace route:list" {
+		t.Fatalf("post-build steps = %v", steps)
+	}
+}

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// applicationWorkflowDefinition keeps library-specific application work outside broad generator heuristics.
+// applicationWorkflowDefinition keeps focused intent modular; omitted metadata retains established workflow policies.
 type applicationWorkflowDefinition struct {
 	commands  []string
 	id        string
@@ -19,7 +19,7 @@ type applicationWorkflowDefinition struct {
 }
 
 var applicationWorkflowDefinitions = map[string]applicationWorkflowDefinition{}
-var applicationChangePattern = regexp.MustCompile(`\b(add|create|implement|update|change|configure|bind|wire|inject|use|validate|normalize|preserve|distinguish|encrypt|decrypt|rotate|read|resolve|fetch|load|protect|reject|require|introduce|integrate|fix|repair|support|ensure|make|set up|look up)\b`)
+var applicationChangePattern = regexp.MustCompile(`\b(add|create|implement|update|change|configure|bind|wire|inject|use|validate|normalize|preserve|distinguish|encrypt|decrypt|rotate|read|resolve|fetch|load|protect|reject|require|introduce|integrate|fix|repair|support|ensure|make|set up|look up|declare|harden|build|improve|send|notify|search|index|target|evaluate|enable|disable|roll out)\b`)
 var applicationSurfacePattern = regexp.MustCompile(`\b(add|create|generate|introduce|expose)\s+(?:[a-z0-9_-]+\s+){0,4}(route|endpoint|controller|job|schedule|command)\b`)
 
 // init makes explicit docs requests addressable without turning them into source work.
@@ -108,7 +108,7 @@ func applicationWorkflows(task string) []string {
 	return ids
 }
 
-// applicationWorkflowCommands recommends actual build and test commands without inventing a generator.
+// applicationWorkflowCommands scopes declared commands and retains existing policies when metadata is omitted.
 func applicationWorkflowCommands(id string, scope appScope) ([]string, bool) {
 	if id == "goforj-read-docs" {
 		return nil, true
@@ -190,4 +190,14 @@ func applicationDocsPlan(app, task string) PlanResult {
 		Tools: []string{"search-docs", "read-doc-section", "docs-section-pack"}, Docs: applicationWorkflowDocs("goforj-read-docs", task),
 		Steps: []PlanStep{{Order: 1, WorkflowID: "goforj-read-docs", Action: "Atlas search-docs and read-doc-section", Purpose: "read the requested documentation before proposing implementation work"}},
 	}
+}
+
+// appendUniquePostBuildStep avoids repeating shared verification after multiple explicit application concerns.
+func appendUniquePostBuildStep(steps []PlanStep, step PlanStep) []PlanStep {
+	for _, existing := range steps {
+		if existing.Action == step.Action {
+			return steps
+		}
+	}
+	return append(steps, step)
 }
