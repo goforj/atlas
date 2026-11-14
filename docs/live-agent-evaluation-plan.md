@@ -449,3 +449,5 @@ phase is the authoritative container or VM sandbox and its negative isolation
 suite, not another broad unconfined matrix. After that trust boundary exists,
 the next paid measurement should use repeated paired smoke trials to answer one
 specific adjacent-treatment question before expanding to the core portfolio.
+
+The `instrument-checkout-metrics` contract adds business instrumentation to a prepared checkout service using the existing App registry and metrics v0.2.0. Required checks measure successful counter increments, duration histogram counts/sums/buckets with a controlled clock, unchanged errors and cancellation, bounded labels, repeated registration, actual Prometheus values, and execution through the registered App provider. Import adoption and authored tests remain quality signals. The fixture supplies the dependency and metrics component, so this evaluates integration and execution rather than unconstrained library discovery. GoForj calibration covers compiling registration-only, high-cardinality, and detached-registry mutants without paid model sessions.

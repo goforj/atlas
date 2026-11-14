@@ -106,6 +106,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 			ID:           "goforj-clarify-unknown-shape/v1",
 			Requirements: []WorkflowRequirement{qualityInspection("inspect-project", "Inspect the existing application boundaries before requesting a decision.", ".goforj.yml", "app/**", "internal/**")},
 		},
+		{ID: "goforj-business-metrics/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-existing-registry", "Inspect the App registry and existing checkout operation before adding business metrics.", "internal/checkout/**", "internal/metrics/**", "app/wire/**")}},
 	}
 }
 
