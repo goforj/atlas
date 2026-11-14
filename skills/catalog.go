@@ -28,6 +28,7 @@ func Catalog() []Skill {
 		skill("goforj-app-registration", "App composition and registration points.", appRegistration),
 		skill("goforj-make-commands", "Prefer GoForj make commands for framework scaffolding.", makeCommands),
 		skill("goforj-go-package-design", "Package-scoped Go code and cohesive API shapes instead of class-style nesting.", goPackageDesign),
+		skill("goforj-library-selection", "Choose GoForj libraries from application needs, existing dependencies, and versioned contracts.", librarySelection),
 		skill("goforj-migrations", "Raw DDL and app-scoped migration ownership.", migrations),
 		skill("goforj-runtime-workflows", "Build, run, dev, app prefixes, and binaries.", runtimeWorkflows),
 		skill("goforj-database-and-data-access", "Repository/service boundaries, schema-derived models, relationships, and safe schema inspection.", databaseDataAccess),
