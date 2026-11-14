@@ -449,3 +449,9 @@ phase is the authoritative container or VM sandbox and its negative isolation
 suite, not another broad unconfined matrix. After that trust boundary exists,
 the next paid measurement should use repeated paired smoke trials to answer one
 specific adjacent-treatment question before expanding to the core portfolio.
+
+## Incident notification calibration
+
+`notify-incident` adds an independent `notify-incident/v1` contract for synchronous incident acceptance through injected senders. Its natural task does not name the expected library or composition helper. The companion GoForj `incident-notification` scenario prepares notification v0.1.0 and its sender boundary before candidate execution; dependency installation and transport provisioning are outside the measured task. The App enables the notification component and compiles primary and secondary named accessors. The candidate registers a manager-injected provider; a local HTTP probe executes it through those accessors, including acceptance followed by a lost response connection.
+
+The supervisor records exact messages and caller context, primary acceptance, definitive rejection and secondary failure, uncertain or unclassified acceptance, transient failures, throttling, and cancellation. A nil result proves handling or acceptance only. Library composition is a separate source observation; behavior comes from executed sender probes, and regression-test evidence uses the existing quality endpoint. The companion calibration accepts the reviewed golden and rejects a compiling discard-and-report-success mutant and a compiling provider that calls the primary accessor without using its sender. No real notifications or paid provider attempts are needed for deterministic calibration. This addition does not change historical contracts or extend the published benchmark scorecard.

@@ -2,6 +2,7 @@ package eval
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -246,7 +247,7 @@ func TestPromotedEvaluationIDsReturnsStableSuiteCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PromotedEvaluationIDs(): %v", err)
 	}
-	if len(ids) != 32 || ids[0] != "add-app-command" || ids[len(ids)-1] == "unknown-framework-shape" {
+	if len(ids) < 32 || !slices.IsSorted(ids) || ids[0] != "add-app-command" || slices.Contains(ids, "unknown-framework-shape") {
 		t.Fatalf("ids = %v", ids)
 	}
 }

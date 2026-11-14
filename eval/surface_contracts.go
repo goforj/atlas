@@ -4,6 +4,21 @@ package eval
 func promotedSurfaceContracts() []surfaceContract {
 	return []surfaceContract{
 		{
+			id:                  "notify-incident/v1",
+			allowedChanges:      []string{"internal/incidents/*.go", "app/wire/inject_services_app.go", "app/wire/app.go"},
+			qualityTestPatterns: []string{"internal/incidents/*_test.go"},
+			sources: []sourceContract{
+				{id: "incident-primary-injection", paths: []string{"internal/incidents/*.go"}, providerConnection: &providerConnectionContract{accessor: "Primary", managerImportSuffix: "/internal/notifications", wirePaths: []string{"app/wire/inject_services_app.go"}}},
+				{id: "incident-secondary-injection", paths: []string{"internal/incidents/*.go"}, providerConnection: &providerConnectionContract{accessor: "Secondary", managerImportSuffix: "/internal/notifications", wirePaths: []string{"app/wire/inject_services_app.go"}}},
+				{id: "notification-library-composition", kind: RequirementQuality, stringLiterals: []string{"github.com/goforj/notification"}, paths: []string{"internal/incidents/*.go"}, identifiers: []string{"AlertService", "NewAlertService", "Notify"}, selectorCalls: []string{"Fallback"}, forbiddenCalls: []string{"Background", "TODO"}},
+			},
+			commands: standardSurfaceCommands(commandContract{
+				id:              "incident-notification-behavior",
+				arguments:       []string{"go", "test", "./internal/incidents", "-run", "^TestAtlas(Configured)?IncidentNotificationBehavior$", "-count=1"},
+				supervisorFiles: []supervisorFile{{path: "internal/incidents/atlas_eval_notification_test.go", body: incidentNotificationBehaviorProbe}},
+			}),
+		},
+		{
 			id:             "add-app-command/v1",
 			allowedChanges: []string{"internal/invoices/*_cmd.go", "internal/invoices/*_cmd_test.go", "app/commands.go", "app/wire/inject_cmd_app.go"},
 			sources: []sourceContract{
