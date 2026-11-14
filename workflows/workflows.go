@@ -187,7 +187,7 @@ func ClassifyAll(task string) []string {
 	add("goforj-wire-repair", containsAny(lower, "wire", "missing dependency", "duplicate provider"))
 	add("goforj-add-data-resource", containsAny(lower, "database", "repository", "migration", "model", "persistence", "schema", "table"))
 	add("goforj-add-http-route", containsAny(lower, "route", "controller", "http", "api", "json response", "upload"))
-	add("goforj-http-client-resilience", containsAny(lower, "outbound", "remote client", "http client", "tax-rate"))
+	add("goforj-http-client-resilience", containsAny(lower, "outbound http", "outbound client", "remote client", "http client", "httpx", "tax-rate"))
 	add("goforj-add-job", containsAny(lower, "job", "queue", "worker", "background"))
 	add("goforj-add-event-workflow", containsAny(lower, "event", "subscriber", "publish"))
 	add("goforj-add-schedule", containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily"))
@@ -217,7 +217,7 @@ func Classify(task string) string {
 		return "goforj-add-http-route"
 	case containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily"):
 		return "goforj-add-schedule"
-	case containsAny(lower, "outbound", "remote client", "http client", "tax-rate"):
+	case containsAny(lower, "outbound http", "outbound client", "remote client", "http client", "httpx", "tax-rate"):
 		return "goforj-http-client-resilience"
 	case containsAny(lower, "job", "queue", "worker", "background"):
 		return "goforj-add-job"
