@@ -25,6 +25,7 @@ func Recommended(p project.Project) []Skill {
 	}
 	if hasComponent(p, "web-api") || hasComponent(p, "web-ui") {
 		enabled["goforj-add-http-route"] = true
+		enabled["goforj-validation"] = true
 	}
 	if hasComponent(p, "cli") {
 		enabled["goforj-add-app-command"] = true
