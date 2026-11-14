@@ -13,6 +13,7 @@ func TestCatalogContainsRequiredSkills(t *testing.T) {
 		"goforj-app-registration",
 		"goforj-make-commands",
 		"goforj-go-package-design",
+		"goforj-library-selection",
 		"goforj-migrations",
 		"goforj-runtime-workflows",
 		"goforj-database-and-data-access",
@@ -111,7 +112,7 @@ func TestRecommendedSkillsAreProjectTailored(t *testing.T) {
 		FrontendKit: "react",
 		Apps:        []project.App{{Name: "app", Default: true}, {Name: "marketplace"}},
 	})
-	for _, want := range []string{"goforj-react-starter-kit", "goforj-add-http-route", "goforj-add-app-command", "goforj-add-job", "goforj-multi-app-change"} {
+	for _, want := range []string{"goforj-library-selection", "goforj-react-starter-kit", "goforj-add-http-route", "goforj-add-app-command", "goforj-add-job", "goforj-multi-app-change"} {
 		if !containsName(names, want) {
 			t.Fatalf("recommended skills missing %s in %#v", want, names)
 		}
@@ -120,6 +121,17 @@ func TestRecommendedSkillsAreProjectTailored(t *testing.T) {
 		if containsName(names, notWant) {
 			t.Fatalf("recommended skills should not include %s in %#v", notWant, names)
 		}
+	}
+}
+
+// TestLibrarySelectionPrecedesComponentSelection keeps dependency discovery available in minimal Projects.
+func TestLibrarySelectionPrecedesComponentSelection(t *testing.T) {
+	names := RecommendedNames(project.Project{Name: "minimal"})
+	if !containsName(names, "goforj-library-selection") {
+		t.Fatalf("minimal Project cannot discover ecosystem choices: %v", names)
+	}
+	if containsName(names, "goforj-add-http-route") || containsName(names, "goforj-add-job") {
+		t.Fatalf("library discovery should not enable unrelated framework workflows: %v", names)
 	}
 }
 
