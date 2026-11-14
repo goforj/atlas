@@ -616,7 +616,7 @@ func mergeWorkflowDocs(workflowIDs []string) []DocReference {
 	refs := []DocReference{}
 	for _, workflowID := range workflowIDs {
 		for _, ref := range workflowDocs(workflowID) {
-			if !docRefsContain(refs, ref.Path) {
+			if !docRefsContainSection(refs, ref) {
 				refs = append(refs, ref)
 			}
 		}

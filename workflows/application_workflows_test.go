@@ -207,3 +207,11 @@ func TestSharedPostBuildVerificationRunsOnce(t *testing.T) {
 		t.Fatalf("post-build steps = %v", steps)
 	}
 }
+
+// TestDocumentationIdentityPreservesSamePageSections prevents an installation section from hiding retry guidance.
+func TestDocumentationIdentityPreservesSamePageSections(t *testing.T) {
+	refs := []DocReference{{Path: "libraries/httpx.md", Heading: "Installation {#installation}"}}
+	if !docRefsContainSection(refs, refs[0]) || docRefsContainSection(refs, DocReference{Path: "libraries/httpx.md", Heading: "Retry {#retry-2}"}) || docRefsContainSection(refs, DocReference{Path: "libraries/crypt.md", Heading: refs[0].Heading}) {
+		t.Fatal("documentation identity collapsed different sections or pages")
+	}
+}
