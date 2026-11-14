@@ -1,0 +1,12 @@
+schema_version: 1
+id: instrument-checkout-metrics
+summary: Record completed checkout counts and duration in the owning App registry.
+suite: core
+task_kind: feature
+project_scenario: checkout-business-metrics
+workflow: goforj-business-metrics/v1
+verifier: checkout-business-metrics/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off

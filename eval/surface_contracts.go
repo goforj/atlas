@@ -4,6 +4,19 @@ package eval
 func promotedSurfaceContracts() []surfaceContract {
 	return []surfaceContract{
 		{
+			id:                  "checkout-business-metrics/v1",
+			allowedChanges:      []string{"internal/checkout/*.go", "app/wire/inject_services_app.go"},
+			qualityTestPatterns: []string{"internal/checkout/*_test.go"},
+			sources: []sourceContract{
+				{id: "metrics-library-adoption", kind: RequirementQuality, paths: []string{"internal/checkout/*.go"}, stringLiterals: []string{"github.com/goforj/metrics"}},
+				{id: "metrics-registry-connection", paths: []string{"app/wire/*.go", "internal/checkout/*.go"}, providerConnection: &providerConnectionContract{accessor: "Registry", managerImportSuffix: "/internal/metrics", wirePaths: []string{"app/wire/inject_services_app.go"}}},
+			},
+			commands: standardSurfaceCommands(
+				commandContract{id: "business-metrics-behavior", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasBusinessMetricsBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_metrics_test.go", body: businessMetricsBehaviorProbe}, {path: "internal/checkout/atlas_eval_prometheus_test.go", body: businessMetricsPrometheusProbe}}},
+				commandContract{id: "business-metrics-app-registry", probe: runBusinessMetricsProviderProbe},
+			),
+		},
+		{
 			id:             "add-app-command/v1",
 			allowedChanges: []string{"internal/invoices/*_cmd.go", "internal/invoices/*_cmd_test.go", "app/commands.go", "app/wire/inject_cmd_app.go"},
 			sources: []sourceContract{
