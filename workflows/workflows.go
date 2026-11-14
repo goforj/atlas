@@ -555,7 +555,7 @@ func workflowWarnings(workflowID string) []string {
 
 	switch workflowID {
 	case "goforj-feature-rollouts":
-		return []string{"Read goforj-feature-rollouts and verify the pinned GoForj version supports the optional feature component before enabling or generating it.", "Configure evaluator resources with FEATURE_* settings; flag names remain dynamic source definitions, and App lifecycle owns initial loading and refresh.", "Capture Snapshot() once before request targeting; an ordinary For(target) scope does not freeze configuration, and flags do not replace authorization."}
+		return []string{"Read goforj-feature-rollouts and verify the pinned GoForj version supports the optional feature component before enabling or generating it.", "Configure evaluator resources with FEATURE_* settings; flag names remain dynamic source definitions, and App lifecycle owns initial loading and refresh.", "Use Enabled for ordinary boolean checks. Capture Snapshot() before targeting when related decisions must share one configuration revision and evaluation time; For(target) alone does not freeze configuration, and flags do not replace authorization."}
 	case "goforj-add-job":
 		return []string{"Keep queue payloads small and typed.", "Delegate business behavior to services from the job handler."}
 	case "goforj-add-job-schedule":
@@ -740,7 +740,7 @@ func workflowSteps(workflowID string, scope appScope) []PlanStep {
 			{WorkflowID: workflowID, Action: "inspect the pinned GoForj version and enable feature for the owning App in .goforj.yml", Purpose: "use supported framework resources without promoting them into unrelated Apps"},
 			{WorkflowID: workflowID, Action: "declare FEATURE_* evaluator resources in .env and the owning App overlay", Purpose: "separate configured evaluators from dynamic flag names"},
 			{WorkflowID: workflowID, Action: scope.command("generate --feature"), Purpose: "generate the manager and typed evaluator accessors"},
-			{WorkflowID: workflowID, Action: "inject the evaluator manager into the owning App service and capture one request Snapshot()", Purpose: "preserve one configuration revision and evaluation time across related decisions"},
+			{WorkflowID: workflowID, Action: "inject the evaluator manager into the owning App service; use Enabled for ordinary checks or Snapshot() for related decisions requiring consistency", Purpose: "match the task's targeting and consistency requirements"},
 		}
 	}
 	if workflowID == "goforj-add-data-resource" {
