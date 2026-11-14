@@ -169,7 +169,7 @@ func applicationWorkflowDocs(id, task string) []DocReference {
 	refs := []DocReference{}
 	for _, workflowID := range applicationWorkflowIDs(strings.ToLower(task), false) {
 		for _, ref := range WorkflowDocsMap[workflowID] {
-			if !docRefsContain(refs, ref.Path) {
+			if !docRefsContainSection(refs, ref) {
 				refs = append(refs, ref)
 			}
 		}
@@ -200,4 +200,14 @@ func appendUniquePostBuildStep(steps []PlanStep, step PlanStep) []PlanStep {
 		}
 	}
 	return append(steps, step)
+}
+
+// docRefsContainSection preserves distinct sections on one page while deduplicating repeated requests.
+func docRefsContainSection(refs []DocReference, candidate DocReference) bool {
+	for _, ref := range refs {
+		if ref.Path == candidate.Path && ref.Heading == candidate.Heading {
+			return true
+		}
+	}
+	return false
 }
