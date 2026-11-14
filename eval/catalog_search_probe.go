@@ -1,5 +1,18 @@
 package eval
 
+import "context"
+
+// runCatalogSearchLibraryUseProbe reports executed adoption as quality without changing the application outcome.
+func runCatalogSearchLibraryUseProbe(ctx context.Context, runner CommandRunner, project VerifierProject) EndpointResult {
+	result := runIsolatedCommand(ctx, runner, project, commandContract{
+		id:              "catalog-search-library-use",
+		arguments:       []string{"go", "test", "./internal/catalog", "-run", "^TestAtlasCatalogSearchLibraryPath$", "-count=1"},
+		supervisorFiles: []supervisorFile{{path: "internal/catalog/atlas_eval_catalog_test.go", body: catalogSearchBehaviorProbe}},
+	})
+	result.Kind = RequirementQuality
+	return result
+}
+
 const catalogSearchBehaviorProbe = `package catalog
 
 import (

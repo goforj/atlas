@@ -15,9 +15,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				arguments:       []string{"go", "test", "./internal/catalog", "-run", "^TestAtlasCatalogSearchBehavior$", "-count=1"},
 				supervisorFiles: []supervisorFile{{path: "internal/catalog/atlas_eval_catalog_test.go", body: catalogSearchBehaviorProbe}},
 			}, commandContract{
-				id:              "catalog-search-library-use",
-				arguments:       []string{"go", "test", "./internal/catalog", "-run", "^TestAtlasCatalogSearchLibraryPath$", "-count=1"},
-				supervisorFiles: []supervisorFile{{path: "internal/catalog/atlas_eval_catalog_test.go", body: catalogSearchBehaviorProbe}},
+				probe: runCatalogSearchLibraryUseProbe,
 			}),
 		},
 		{
