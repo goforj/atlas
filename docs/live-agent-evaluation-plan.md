@@ -449,3 +449,7 @@ phase is the authoritative container or VM sandbox and its negative isolation
 suite, not another broad unconfined matrix. After that trust boundary exists,
 the next paid measurement should use repeated paired smoke trials to answer one
 specific adjacent-treatment question before expanding to the core portfolio.
+
+## Targeted checkout rollout calibration
+
+The `target-feature-rollout` contract adds a prepared checkout request boundary with feature v0.1.0 installed by the supervisor. It measures integration and execution within that existing boundary, not unconstrained library discovery or candidate dependency installation. Required behavior covers tenant bucket stability, explicit missing-flag fallback, invalid-refresh retention, and captured configuration revision and evaluation time. Separate quality checks record the import, observed library calls, and candidate regression tests. The GoForj companion scenario calibrates the golden implementation and compiling randomized-target and mixed-revision mutants without live provider sessions. Native API sources are linked from the always-recommended rollout skill while hosted feature documentation is prepared separately.

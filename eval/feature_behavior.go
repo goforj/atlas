@@ -1,5 +1,14 @@
 package eval
 
+import "context"
+
+// runFeatureLibraryUseProbe records observed library execution as an independent quality signal.
+func runFeatureLibraryUseProbe(ctx context.Context, runner CommandRunner, project VerifierProject) EndpointResult {
+	result := runIsolatedCommand(ctx, runner, project, commandContract{id: "feature-library-execution", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasFeatureLibraryExecution$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_feature_test.go", body: featureRolloutBehaviorProbe}}})
+	result.Kind = RequirementQuality
+	return result
+}
+
 // featureRolloutBehaviorProbe exercises the application boundary against native controlled configuration.
 const featureRolloutBehaviorProbe = `package checkout
 
@@ -26,8 +35,7 @@ func TestAtlasFeatureRolloutBehavior(t *testing.T) {
     source := feature.SourceFunc(func(context.Context) (feature.Document, error) { return document, nil })
     engine, err := feature.Open(ctx, source, feature.WithClock(func() time.Time { return now }))
     if err != nil { t.Fatal(err) }
-    var observations atomic.Int64
-    flags := feature.New(engine, feature.WithObserver(feature.ObserverFunc(func(context.Context, feature.Observation) { observations.Add(1) })))
+    flags := feature.New(engine)
     service := NewService(flags)
     if _, err := service.Begin(ctx, ""); err == nil { t.Fatal("empty tenant accepted") }
     seen := map[bool]bool{}
@@ -37,9 +45,7 @@ func TestAtlasFeatureRolloutBehavior(t *testing.T) {
         for attempt := 0; attempt < 8; attempt++ {
             request, err := service.Begin(ctx, tenant)
             if err != nil { t.Fatal(err) }
-            before := observations.Load()
             got := request.Checkout(ctx)
-            if observations.Load() == before { t.Fatal("feature library was not evaluated on the application path") }
             if got != expected { t.Fatalf("unstable or incorrect assignment for %s", tenant) }
             seen[got] = true
         }
@@ -50,7 +56,7 @@ func TestAtlasFeatureRolloutBehavior(t *testing.T) {
     if len(seen) != 2 { t.Fatal("tenant rollout collapsed into one decision") }
 
     // A channel orders a concurrent publication between related request decisions.
-    document = feature.Document{Schema: feature.SchemaVersion, Flags: map[string]feature.Flag{
+    document = feature.Document{Schema: feature.TypedSchemaVersion, Flags: map[string]feature.Flag{
         "checkout-v2": {Default: false}, "receipt-v2": {Default: false, Rules: []feature.Rule{{Value: true, Start: &start}}},
     }}
     if err := engine.Refresh(ctx); err != nil { t.Fatal(err) }
@@ -75,5 +81,24 @@ func TestAtlasFeatureRolloutBehavior(t *testing.T) {
     if err := engine.Refresh(ctx); err != nil { t.Fatal(err) }
     missing, err := service.Begin(ctx, "tenant:acme")
     if err != nil || missing.Checkout(ctx) || missing.Receipt(ctx) { t.Fatalf("missing flags ignored false fallback: %v", err) }
+}
+
+// TestAtlasFeatureLibraryExecution records adoption separately from required presentation behavior.
+func TestAtlasFeatureLibraryExecution(t *testing.T) {
+    ctx := context.Background()
+    source, err := feature.NewMemorySource(feature.Document{Schema: feature.SchemaVersion, Flags: map[string]feature.Flag{"checkout-v2": {Default: true}, "receipt-v2": {Default: true}}})
+    if err != nil { t.Fatal(err) }
+    engine, err := feature.Open(ctx, source)
+    if err != nil { t.Fatal(err) }
+    var count atomic.Int64
+    flags := feature.New(engine, feature.WithObserver(feature.ObserverFunc(func(context.Context, feature.Observation) { count.Add(1) })))
+    request, err := NewService(flags).Begin(ctx, "tenant:acme")
+    if err != nil { t.Fatal(err) }
+    before := count.Load()
+    request.Checkout(ctx)
+    if count.Load() == before { t.Fatal("checkout did not evaluate the injected library") }
+    before = count.Load()
+    request.Receipt(ctx)
+    if count.Load() == before { t.Fatal("receipt did not evaluate the injected library") }
 }
 `

@@ -8,7 +8,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			allowedChanges:      []string{"internal/checkout/*.go"},
 			qualityTestPatterns: []string{"internal/checkout/*_test.go"},
 			sources:             []sourceContract{{id: "feature-library-selection", kind: RequirementQuality, paths: []string{"internal/checkout/*.go"}, stringLiterals: []string{"github.com/goforj/feature"}}},
-			commands:            standardSurfaceCommands(commandContract{id: "feature-rollout-behavior", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasFeatureRolloutBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_feature_test.go", body: featureRolloutBehaviorProbe}}}),
+			commands:            standardSurfaceCommands(commandContract{id: "feature-rollout-behavior", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasFeatureRolloutBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_feature_test.go", body: featureRolloutBehaviorProbe}}}, commandContract{id: "feature-library-execution", probe: runFeatureLibraryUseProbe}),
 		},
 		{
 			id:             "add-app-command/v1",
