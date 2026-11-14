@@ -138,3 +138,22 @@ func containsName(names []string, want string) bool {
 	}
 	return false
 }
+
+// TestCatalogSearchIsDiscoverableBeforeInstallation keeps selection guidance available without a search component or dependency.
+func TestCatalogSearchIsDiscoverableBeforeInstallation(t *testing.T) {
+	found := false
+	for _, skill := range Recommended(project.Project{Name: "catalog"}) {
+		if skill.Name != "goforj-catalog-search" {
+			continue
+		}
+		found = true
+		for _, phrase := range []string{"lexical", "durable truth", "Index.Wait", "Outcome.State", "KeywordField", "Segment.Text", "make:search", "independently versioned", "SearchDefinitions", "generate --search", "searches.Manager"} {
+			if !strings.Contains(skill.Content, phrase) {
+				t.Errorf("search skill missing %q", phrase)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("search skill unavailable before dependency installation")
+	}
+}

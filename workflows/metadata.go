@@ -11,6 +11,7 @@ import (
 
 // WorkflowDocsMap maps workflow ids to the docs sections agents should read first.
 var WorkflowDocsMap = map[string][]DocReference{
+	"goforj-catalog-search": {{Path: "applications/library-resources.md", Heading: "Declare and Provision a Search Index"}, {Path: "libraries/search.md", Heading: "Quick Start {#quick-start}"}},
 	"goforj-add-http-route": {
 		{Path: "applications/routes.md", Heading: "Where Routes Live"},
 		{Path: "applications/controllers.md", Heading: "Controller Shape"},
@@ -85,7 +86,7 @@ func DocsSectionPack(ctx context.Context, provider atlasdocs.Provider, workflowI
 	if workflowID == "" {
 		workflowID = Classify(task)
 	}
-	refs := WorkflowDocsMap[workflowID]
+	refs := applicationWorkflowDocs(workflowID, task)
 	if len(refs) == 0 {
 		refs = WorkflowDocsMap["goforj-add-http-route"]
 	}
@@ -129,13 +130,25 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 		resource = "<name>"
 	}
 	scope := makeScope(app)
+	scope.searchConfirmed = projectHasSearch(p)
 	command := firstCommand(workflowCommands(workflowID, scope))
 	command = strings.ReplaceAll(command, "<name>", resource)
+	reason := "GoForj make commands update generated files, app registration, and Wire surfaces together."
+	if workflowID == "goforj-catalog-search" {
+		reason = "Generate named search accessors from the owning App resource configuration, then provision its Go-defined schemas explicitly."
+		if !scope.searchConfirmed {
+			reason = searchCapabilityWarning
+		}
+	}
+	if workflowID == "goforj-read-docs" {
+		command = "Atlas search-docs"
+		reason = "Read the requested documentation without proposing source changes."
+	}
 	return CommandAdviceResult{
 		WorkflowID: workflowID,
 		App:        app.Name,
 		Command:    command,
-		Reason:     "GoForj make commands update generated files, app registration, and Wire surfaces together.",
+		Reason:     reason,
 	}, true
 }
 

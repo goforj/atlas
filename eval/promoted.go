@@ -106,6 +106,10 @@ func PromotedWorkflows() []WorkflowExpectation {
 			ID:           "goforj-clarify-unknown-shape/v1",
 			Requirements: []WorkflowRequirement{qualityInspection("inspect-project", "Inspect the existing application boundaries before requesting a decision.", ".goforj.yml", "app/**", "internal/**")},
 		},
+		{
+			ID:           "goforj-catalog-search/v1",
+			Requirements: []WorkflowRequirement{qualityInspection("inspect-catalog-boundary", "Inspect the projection schema, independently pinned modules, and App composition before adding search behavior.", "go.mod", "internal/catalog/**", "internal/searches/**", "app/search.go", "app/wire/**")},
+		},
 	}
 }
 

@@ -1,0 +1,12 @@
+schema_version: 1
+id: catalog-search
+summary: Add lexical catalog search with exact category filtering, stable pages, and visible updates.
+suite: core
+task_kind: feature
+project_scenario: catalog-search
+workflow: goforj-catalog-search/v1
+verifier: catalog-search/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off
