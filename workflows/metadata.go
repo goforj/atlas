@@ -11,7 +11,7 @@ import (
 
 // WorkflowDocsMap maps workflow ids to the docs sections agents should read first.
 var WorkflowDocsMap = map[string][]DocReference{
-	"goforj-notification-delivery": {{Path: "libraries/notification.md", Heading: "Composition"}, {Path: "libraries/notification.md", Heading: "Custom senders"}, {Path: "async/events-vs-queues.md", Heading: "Default Recommendation"}},
+	"goforj-notification-delivery": {{Path: "applications/library-resources.md", Heading: "Configure a Notification Sender"}, {Path: "libraries/notification.md", Heading: "Composition"}, {Path: "libraries/notification.md", Heading: "Custom senders"}, {Path: "async/events-vs-queues.md", Heading: "Default Recommendation"}},
 	"goforj-add-http-route": {
 		{Path: "applications/routes.md", Heading: "Where Routes Live"},
 		{Path: "applications/controllers.md", Heading: "Controller Shape"},
@@ -86,7 +86,7 @@ func DocsSectionPack(ctx context.Context, provider atlasdocs.Provider, workflowI
 	if workflowID == "" {
 		workflowID = Classify(task)
 	}
-	refs := WorkflowDocsMap[workflowID]
+	refs := applicationWorkflowDocs(workflowID, task)
 	if len(refs) == 0 {
 		refs = WorkflowDocsMap["goforj-add-http-route"]
 	}
@@ -132,11 +132,27 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 	scope := makeScope(app)
 	command := firstCommand(workflowCommands(workflowID, scope))
 	command = strings.ReplaceAll(command, "<name>", resource)
+	reason := "GoForj make commands update generated files, App registration, and Wire surfaces together."
+	if _, ok := applicationWorkflowDefinitions[workflowID]; ok {
+		reason = "Update the application-owned boundary and provider inputs, then build and test the selected App."
+	}
+	if workflowID == "goforj-read-docs" {
+		command = "Atlas search-docs"
+		reason = "Read the requested documentation without proposing source changes."
+	}
+	if workflowID == "goforj-notification-delivery" {
+		reason = "Declare NOTIFICATION_* sender resources before generating the manager and typed accessors for the owning App."
+		if !projectHasNotificationComponent(p) {
+			command = scope.command("generate --help")
+			reason = "Inspect whether the selected CLI supports --notification before enabling the optional component."
+		}
+	}
+
 	return CommandAdviceResult{
 		WorkflowID: workflowID,
 		App:        app.Name,
 		Command:    command,
-		Reason:     "GoForj make commands update generated files, app registration, and Wire surfaces together.",
+		Reason:     reason,
 	}, true
 }
 
