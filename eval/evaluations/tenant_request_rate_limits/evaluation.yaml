@@ -1,0 +1,12 @@
+schema_version: 1
+id: tenant-request-rate-limits
+summary: Enforce an authenticated tenant export budget across App instances with explicit failure policy.
+suite: core
+task_kind: feature
+project_scenario: tenant-request-rate-limits
+workflow: goforj-tenant-request-rate-limits/v1
+verifier: tenant-request-rate-limits/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off
