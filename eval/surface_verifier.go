@@ -45,6 +45,7 @@ type textExclusion struct {
 
 // sourceContract requires syntax-bearing facts from one or more candidate-owned files.
 type sourceContract struct {
+	kind                 RequirementKind
 	id                   string
 	paths                []string
 	identifiers          []string
@@ -252,7 +253,9 @@ func (verifier *surfaceVerifier) Verify(ctx context.Context, input VerificationI
 		checks = append(checks, verifyCandidateTestQuality(input.ProjectRoot, input.Changes, verifier.contract.qualityTestPatterns))
 	}
 	for _, contract := range verifier.contract.sources {
-		checks = append(checks, verifySurfaceSource(input.ProjectRoot, contract))
+		result := verifySurfaceSource(input.ProjectRoot, contract)
+		result.Kind = contract.kind
+		checks = append(checks, result)
 	}
 	for _, exclusion := range verifier.contract.forbiddenText {
 		checks = append(checks, verifySurfaceTextAbsent(input.ProjectRoot, exclusion))

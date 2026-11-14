@@ -449,3 +449,24 @@ phase is the authoritative container or VM sandbox and its negative isolation
 suite, not another broad unconfined matrix. After that trust boundary exists,
 the next paid measurement should use repeated paired smoke trials to answer one
 specific adjacent-treatment question before expanding to the core portfolio.
+
+## Presence-aware validation diagnostic
+
+`patch-customer-settings/v1` adds an application-shaped PATCH task without changing
+`add-validated-write-endpoint/v1` or regrading its retained results. GoForj's
+`customer-settings-validation` preparation stages `github.com/goforj/validation`
+v0.2.0 before the candidate starts; dependency installation is outside this
+measurement, and candidate shell networking remains disabled.
+
+Supervisor probes exercise omitted values, explicit null, supplied zero and
+false, normalization, inclusive bounds, atomic failure, stable public field
+codes, reusable service policy, cancellation, and operational rule failures.
+Library adoption has separate quality observations: syntax-bearing call-path
+checks and a runtime probe requiring real library issues from the executed
+application update. Those observations do not gate application behavior. Native
+HTTP projects receive the dedicated `goforj-validation` skill; its choice rules
+also preserve adequate simple checks and explicit existing validators.
+
+The companion golden calibration rejects compiling context-loss and false-loss
+mutants. This contract has deterministic calibration only. No provider session
+or treatment-effect measurement is implied.

@@ -3,6 +3,7 @@ package eval
 // promotedSurfaceContracts returns reviewed contracts for framework surfaces that do not need a bespoke behavioral oracle.
 func promotedSurfaceContracts() []surfaceContract {
 	return []surfaceContract{
+		settingsValidationContract(),
 		{
 			id:             "add-app-command/v1",
 			allowedChanges: []string{"internal/invoices/*_cmd.go", "internal/invoices/*_cmd_test.go", "app/commands.go", "app/wire/inject_cmd_app.go"},
