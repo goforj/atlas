@@ -89,7 +89,7 @@ func DocsSectionPack(ctx context.Context, provider atlasdocs.Provider, workflowI
 	if workflowID == "" {
 		workflowID = Classify(task)
 	}
-	refs := WorkflowDocsMap[workflowID]
+	refs := applicationWorkflowDocs(workflowID, task)
 	if len(refs) == 0 {
 		refs = WorkflowDocsMap["goforj-add-http-route"]
 	}
@@ -136,6 +136,13 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 	command := firstCommand(workflowCommands(workflowID, scope))
 	command = strings.ReplaceAll(command, "<name>", resource)
 	reason := "GoForj make commands update generated files, app registration, and Wire surfaces together."
+	if _, ok := applicationWorkflowDefinitions[workflowID]; ok {
+		reason = "Update the application-owned boundary and provider inputs, then build and test the selected App."
+	}
+	if workflowID == "goforj-read-docs" {
+		command = "Atlas search-docs"
+		reason = "Read the requested documentation without proposing source changes."
+	}
 	if workflowID == "goforj-feature-rollouts" {
 		if projectHasFeatureComponent(p) {
 			reason = "Declare FEATURE_* evaluator resources before generating their typed accessors for the owning App."

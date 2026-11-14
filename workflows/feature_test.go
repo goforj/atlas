@@ -123,3 +123,19 @@ func TestFeatureDocsPackAndGeneratedOwnership(t *testing.T) {
 		}
 	}
 }
+
+// TestFeatureDocumentationPlansRemainReadOnly keeps evaluator explanations independent from source generation.
+func TestFeatureDocumentationPlansRemainReadOnly(t *testing.T) {
+	for _, task := range []string{"explain tenant feature rollouts", "read docs for feature flag resources", "search documentation for stable tenant rollout snapshots"} {
+		for _, app := range []string{"app", "marketplace"} {
+			plan, ok := Plan(fixtureContext(), PlanRequest{Task: task, App: app})
+			if !ok || plan.WorkflowID != "goforj-read-docs" || len(plan.Commands) != 0 || len(plan.Files) != 0 || len(plan.Verification) != 0 || !docsContain(plan.Docs, "applications/library-resources.md") || !docsContain(plan.Docs, "libraries/feature.md") {
+				t.Fatalf("docs plan=%#v", plan)
+			}
+			advice, ok := CommandAdvice(fixtureContext(), CommandAdviceRequest{Task: task, App: app})
+			if !ok || advice.Command != "Atlas search-docs" {
+				t.Fatalf("advice=%#v", advice)
+			}
+		}
+	}
+}

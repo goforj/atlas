@@ -68,3 +68,8 @@ func constrainFeaturePlan(result *PlanResult, p project.Project, scope appScope)
 		segment.Warnings = append(segment.Warnings, "Inspect CLI support before enabling the optional feature component.")
 	}
 }
+
+// init registers evaluator concerns without replacing capability-specific generation guidance.
+func init() {
+	registerApplicationWorkflow(applicationWorkflowDefinition{id: "goforj-feature-rollouts", matches: isFeatureRolloutTask, docsTopic: isFeatureRolloutTask})
+}
