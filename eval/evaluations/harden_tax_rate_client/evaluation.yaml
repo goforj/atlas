@@ -1,0 +1,12 @@
+schema_version: 1
+id: harden-tax-rate-client
+summary: Bound transient tax-rate retries while preserving errors and caller cancellation.
+suite: core
+task_kind: feature
+project_scenario: resilient-tax-rate-http
+workflow: goforj-harden-tax-rate-client/v1
+verifier: harden-tax-rate-client/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off

@@ -11,6 +11,7 @@ import (
 
 // WorkflowDocsMap maps workflow ids to the docs sections agents should read first.
 var WorkflowDocsMap = map[string][]DocReference{
+	"goforj-http-client-resilience": {{Path: "libraries/httpx.md", Heading: "Installation"}, {Path: "libraries/httpx.md", Heading: "Retry"}},
 	"goforj-add-http-route": {
 		{Path: "applications/routes.md", Heading: "Where Routes Live"},
 		{Path: "applications/controllers.md", Heading: "Controller Shape"},

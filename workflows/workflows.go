@@ -187,6 +187,7 @@ func ClassifyAll(task string) []string {
 	add("goforj-wire-repair", containsAny(lower, "wire", "missing dependency", "duplicate provider"))
 	add("goforj-add-data-resource", containsAny(lower, "database", "repository", "migration", "model", "persistence", "schema", "table"))
 	add("goforj-add-http-route", containsAny(lower, "route", "controller", "http", "api", "json response", "upload"))
+	add("goforj-http-client-resilience", containsAny(lower, "outbound", "remote client", "http client", "tax-rate"))
 	add("goforj-add-job", containsAny(lower, "job", "queue", "worker", "background"))
 	add("goforj-add-event-workflow", containsAny(lower, "event", "subscriber", "publish"))
 	add("goforj-add-schedule", containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily"))
@@ -216,6 +217,8 @@ func Classify(task string) string {
 		return "goforj-add-http-route"
 	case containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily"):
 		return "goforj-add-schedule"
+	case containsAny(lower, "outbound", "remote client", "http client", "tax-rate"):
+		return "goforj-http-client-resilience"
 	case containsAny(lower, "job", "queue", "worker", "background"):
 		return "goforj-add-job"
 	case containsAny(lower, "event", "subscriber", "publish"):
@@ -440,6 +443,8 @@ func workflowCommands(workflowID string, scope appScope) []string {
 
 func workflowFiles(workflowID string, layout layout) []string {
 	switch workflowID {
+	case "goforj-http-client-resilience":
+		return []string{"internal/<domain>/client.go", "internal/<domain>/client_test.go", layout.wire + "/inject_services_app.go"}
 	case "goforj-add-http-route":
 		return []string{"internal/<domain>/controller.go", "internal/<domain>/service.go", "internal/<domain>/repository.go", layout.composition + "/routes.go", layout.wire + "/inject_http_controllers_app.go", layout.wire + "/inject_services_app.go", layout.wire + "/inject_repositories_app.go"}
 	case "goforj-add-app-command":
@@ -500,6 +505,8 @@ func workflowDocs(workflowID string) []DocReference {
 
 func workflowWarnings(workflowID string) []string {
 	switch workflowID {
+	case "goforj-http-client-resilience":
+		return []string{"Inspect the actual Project HTTP client pin before selecting APIs; do not blindly upgrade v1 to v2.", "Bound retries per operation and preserve caller cancellation, typed errors, and non-idempotent request behavior."}
 	case "goforj-add-job":
 		return []string{"Keep queue payloads small and typed.", "Delegate business behavior to services from the job handler."}
 	case "goforj-add-job-schedule":
