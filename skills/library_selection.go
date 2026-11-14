@@ -31,7 +31,7 @@ Preserve an explicit existing dependency and adequate standard-library code unle
 
 Use events ('github.com/goforj/events') for typed reactions and fanout. Delivery and failure guarantees depend on the selected driver. Use queue ('github.com/goforj/queue') for deferred work that needs an explicit backend, retries, job identity, and worker lifecycle. Use scheduler ('github.com/goforj/scheduler/v2') to decide when work is dispatched, with explicit timezone and overlap policy. A scheduler is not itself a durability guarantee.
 
-For framework participation, inspect 'forj' help and use the existing App-scoped generators and named managers. For standalone library composition without a generator, put constructors in the owning App's service Wire set and keep provider setup outside domain behavior. Do not invent 'make:search', 'make:feature', or other commands from a library name.
+For framework participation, inspect the Project version, 'forj' help, and generated App-scoped managers first. Prefer supported resource managers and their named accessors for configured infrastructure so driver selection and lifecycle stay framework-owned. Where that Project version has no resource integration, compose the standalone dependency through an explicit provider and keep setup outside domain behavior. Do not invent 'make:search', 'make:feature', or other commands from a library name.
 
 ## Smaller Supporting Libraries
 

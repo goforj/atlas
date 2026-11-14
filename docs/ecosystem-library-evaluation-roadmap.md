@@ -1,8 +1,16 @@
 # GoForj library guidance and evaluation roadmap
 
-Prioritize validation, search, notification, and feature support, with one focused enhancement PR at a time. Each PR should teach agents when to select the library and independently verify the resulting behavior. Follow with deeper httpx, cache, configuration, and metrics cases. Prepare secret guidance now, but keep its released-module evaluation pending publication.
+Prioritize validation and framework resource integration for search, notification, and feature support. Give each framework resource its own PR, then teach and evaluate its generated manager/accessor in a separate Atlas PR. Follow with deeper httpx, cache, configuration, and metrics cases. Prepare secret guidance now, but keep its released-module evaluation pending publication.
 
 Assessment date: November 13, 2026, America/Chicago. Initial research used Atlas `17d7436` on `fix/codex-mcp-readiness` and GoForj `v0.37.0`. Implementation PRs start from the current remote default branches and recheck the relevant contracts. The queue below describes proposed coverage, not live evaluation results.
+
+## Framework resources before their evaluations
+
+The implementation direction is framework resources first for feature, search, and notification. These are configured infrastructure dependencies, like cache, storage, queues, events, and mail. Their framework PRs should establish optional components, supported-driver selection, default and named accessors, explicit injection, App ownership, and lifecycle cleanup before Atlas promotes application guidance for them.
+
+Keep the responsibilities distinct: feature resources own evaluators and refresh; search resources own configured indexes while schemas and indexing workflows stay application-owned; notification resources own configured senders while delivery policy and durable jobs remain explicit. Component-off Projects must not acquire their packages, environment settings, or dependencies.
+
+Retain the standalone library behavior probes as useful calibration, but compose promoted framework tasks through actual generated resources. Each resource PR, Atlas evaluation PR, GoForj calibration companion, and public-docs PR remains a separate review boundary. Validation and ordinary HTTP clients do not require new resource managers merely to participate in this work.
 
 ## Current coverage
 
