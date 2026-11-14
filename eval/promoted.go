@@ -13,6 +13,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 			},
 		},
 		{ID: "goforj-notify-incident/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-notification-boundary", "Inspect the incident and sender boundary before choosing delivery policy.", "internal/incidents/**", "internal/notifications/**", "app/wire/**", "go.mod")}},
+		{ID: "goforj-harden-tax-rate-client/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-http-client-policy", "Inspect the existing client, Project pin, and provider before changing retry semantics.", "internal/taxrates/**", "go.mod", "app/wire/**")}},
 		promotedGeneratorWorkflow("goforj-add-app-command/v1", "generate-invoice-command", "make:command", "invoices:show"),
 		promotedGeneratorWorkflow("goforj-add-job/v1", "generate-receipt-job", "make:job", "invoices:receipt"),
 		promotedGeneratorWorkflow("goforj-add-migration/v1", "generate-invoice-status-migration", "make:migration", "add_status_to_invoices"),
