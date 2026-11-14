@@ -200,6 +200,11 @@ capabilities:
     summary: Validate writes and return stable public errors without leaking domain internals.
     tier: smoke
     evaluations: [add-validated-write-endpoint]
+  - id: libraries.notification-boundaries
+    area: libraries
+    summary: Preserve synchronous acceptance and conservative primary/fallback notification policy.
+    tier: core
+    evaluations: [notify-incident]
   - id: operations.backups
     area: operations
     summary: Configure and verify a recoverable application backup workflow.

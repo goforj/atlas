@@ -1,0 +1,12 @@
+schema_version: 1
+id: notify-incident
+summary: Alert operators with explicit primary and fallback acceptance boundaries.
+suite: core
+task_kind: feature
+project_scenario: incident-notification
+workflow: goforj-notify-incident/v1
+verifier: notify-incident/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off

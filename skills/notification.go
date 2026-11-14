@@ -1,0 +1,14 @@
+package skills
+
+const notificationDelivery = `# Notification delivery boundaries
+
+Choose github.com/goforj/notification for portable multi-channel plain-text messages and sender composition. Choose mail for email composition and delivery, events for reactions to domain facts, and queue for durable deferred work. Keep adequate existing standard-library or explicit provider code when portability or composition is unnecessary. Do not replace mail merely because its messages are notifications.
+
+Inspect the existing application boundary and the selected release API before editing. notification v0.1.0 exposes Sender.Send(context.Context, Message) error and SenderFunc. Message has Title and Body. Inject senders into application services; configure destinations, credentials, and driver lifecycle in startup composition. There is no make:notification generator. Keep business message content in the feature package and preserve caller context.
+
+A synchronous nil error means local handling or provider acceptance, never proof of recipient receipt. New validates and sanitizes one sender call. Fallback(primary, secondary) tries the secondary only after permanent rejection, unauthorized credentials, or unsupported rendering. It stops on ErrOutcomeUnknown, unclassified failures, ErrRetryable, ErrThrottled, and cancellation. Do not retry or fall back automatically when the primary may already have accepted a message. Fanout intentionally sends to every target and is unsuitable as a primary/fallback substitute.
+
+Neither Send nor Fallback starts background delivery or adds retries. Durable scheduling, retry policy, and idempotency belong to an explicit queue or application workflow. Use errors.Is for classified failures. Test primary success, definitive rejection, secondary failure, uncertain acceptance, cancellation, exact message data, and caller context with recording SenderFunc implementations. Do not send real notifications during tests.
+
+Use Atlas search-docs for the notification library and read-doc-section for its released API when available. Validate the owning package and App composition with go test and forj build. Keep library adoption, observable delivery policy, composition, and regression-test quality as separate evidence.
+`

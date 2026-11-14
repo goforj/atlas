@@ -36,6 +36,7 @@ func Catalog() []Skill {
 		skill("goforj-testing-and-validation", "Validation commands and render hygiene.", testingValidation),
 		skill("goforj-add-http-route", "Workflow for adding HTTP routes, controllers, services, and route verification.", addHTTPRoute),
 		skill("goforj-add-app-command", "Workflow for adding app-owned CLI commands.", addAppCommand),
+		skill("goforj-notification-delivery", "Choose synchronous notification senders and explicit fallback policies.", notificationDelivery),
 		skill("goforj-add-job", "Workflow for adding durable queued jobs.", addJob),
 		skill("goforj-add-schedule", "Workflow for adding recurring scheduler work.", addSchedule),
 		skill("goforj-add-event-workflow", "Workflow for typed events and subscribers.", addEventWorkflow),

@@ -11,6 +11,7 @@ import (
 
 // WorkflowDocsMap maps workflow ids to the docs sections agents should read first.
 var WorkflowDocsMap = map[string][]DocReference{
+	"goforj-notification-delivery": {{Path: "libraries/notification.md", Heading: "Composition"}, {Path: "libraries/notification.md", Heading: "Custom senders"}, {Path: "async/events-vs-queues.md", Heading: "Default Recommendation"}},
 	"goforj-add-http-route": {
 		{Path: "applications/routes.md", Heading: "Where Routes Live"},
 		{Path: "applications/controllers.md", Heading: "Controller Shape"},
