@@ -175,7 +175,7 @@ func applicationWorkflowDocs(id, task string) []DocReference {
 		}
 	}
 	if strings.Contains(strings.ToLower(task), "wire") {
-		refs = append(refs, DocReference{Path: "core/reading-wire-errors.md", Heading: "Fast Checklist"})
+		refs = append(refs, DocReference{Path: "developer-tools/reading-wire-errors.md", Heading: "Fast Checklist"})
 	}
 	if len(refs) == 0 {
 		return WorkflowDocsMap[id]
