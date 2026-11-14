@@ -189,7 +189,7 @@ capabilities:
     area: http
     summary: Rate-limit a route with explicit identity, policy, and response behavior.
     tier: core
-    evaluations: []
+    evaluations: [tenant-request-rate-limits]
   - id: http.sessions-cookies
     area: http
     summary: Preserve session expiry, refresh, revocation, cookie, and CSRF boundaries.

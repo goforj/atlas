@@ -102,6 +102,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 			ID:           "goforj-runtime-observability/v1",
 			Requirements: []WorkflowRequirement{qualityInspection("inspect-observability-surfaces", "Inspect generated metrics, inspect capture, and Lighthouse operator surfaces before reporting runtime readiness.", ".env.local", "internal/metrics/**", "internal/inspects/**")},
 		},
+		{ID: "goforj-tenant-request-rate-limits/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-tenant-policy", "Inspect authenticated identity, the named shared cache, and route ownership before implementing request budgets.", "internal/requests/**", "internal/caches/**", "app/wire/**", ".env")}},
 		{
 			ID:           "goforj-clarify-unknown-shape/v1",
 			Requirements: []WorkflowRequirement{qualityInspection("inspect-project", "Inspect the existing application boundaries before requesting a decision.", ".goforj.yml", "app/**", "internal/**")},

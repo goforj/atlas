@@ -23,6 +23,7 @@ func Recommended(p project.Project) []Skill {
 		"goforj-multi-app-change":       len(p.Apps) > 1,
 		"goforj-validate-change":        true,
 	}
+	enabled["goforj-tenant-request-rate-limits"] = true
 	if hasComponent(p, "web-api") || hasComponent(p, "web-ui") {
 		enabled["goforj-add-http-route"] = true
 	}
