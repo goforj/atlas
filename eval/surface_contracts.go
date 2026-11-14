@@ -4,6 +4,13 @@ package eval
 func promotedSurfaceContracts() []surfaceContract {
 	return []surfaceContract{
 		{
+			id:                  "target-feature-rollout/v1",
+			allowedChanges:      []string{"internal/checkout/*.go"},
+			qualityTestPatterns: []string{"internal/checkout/*_test.go"},
+			sources:             []sourceContract{{id: "feature-library-selection", kind: RequirementQuality, paths: []string{"internal/checkout/*.go"}, stringLiterals: []string{"github.com/goforj/feature"}}},
+			commands:            standardSurfaceCommands(commandContract{id: "feature-rollout-behavior", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasFeatureRolloutBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_feature_test.go", body: featureRolloutBehaviorProbe}}}),
+		},
+		{
 			id:             "add-app-command/v1",
 			allowedChanges: []string{"internal/invoices/*_cmd.go", "internal/invoices/*_cmd_test.go", "app/commands.go", "app/wire/inject_cmd_app.go"},
 			sources: []sourceContract{
