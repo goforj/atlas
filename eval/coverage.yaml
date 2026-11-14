@@ -221,6 +221,11 @@ capabilities:
     tier: extended
     evaluations: []
 
+  - id: libraries.metrics-business
+    area: libraries
+    summary: Update bounded business counters and duration histograms in the existing App registry.
+    tier: core
+    evaluations: [instrument-checkout-metrics]
   - id: operations.backups
     area: operations
     summary: Configure and verify a recoverable application backup workflow.
