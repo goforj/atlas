@@ -11,6 +11,10 @@ import (
 
 // WorkflowDocsMap maps workflow ids to the docs sections agents should read first.
 var WorkflowDocsMap = map[string][]DocReference{
+	"goforj-feature-rollouts": {
+		{Path: "applications/library-resources.md", Heading: "Configure a Feature Evaluator"},
+		{Path: "libraries/feature.md", Heading: "Features.Snapshot {#features.snapshot}"},
+	},
 	"goforj-add-http-route": {
 		{Path: "applications/routes.md", Heading: "Where Routes Live"},
 		{Path: "applications/controllers.md", Heading: "Controller Shape"},
@@ -131,11 +135,20 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 	scope := makeScope(app)
 	command := firstCommand(workflowCommands(workflowID, scope))
 	command = strings.ReplaceAll(command, "<name>", resource)
+	reason := "GoForj make commands update generated files, app registration, and Wire surfaces together."
+	if workflowID == "goforj-feature-rollouts" {
+		if projectHasFeatureComponent(p) {
+			reason = "Declare FEATURE_* evaluator resources before generating their typed accessors for the owning App."
+		} else {
+			command = scope.command("generate --help")
+			reason = "Inspect whether the selected CLI supports --feature before enabling or generating the optional component."
+		}
+	}
 	return CommandAdviceResult{
 		WorkflowID: workflowID,
 		App:        app.Name,
 		Command:    command,
-		Reason:     "GoForj make commands update generated files, app registration, and Wire surfaces together.",
+		Reason:     reason,
 	}, true
 }
 

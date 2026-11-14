@@ -69,6 +69,8 @@ func FilePolicy(req FilePolicyRequest) FilePolicyResult {
 	namedApp := appName != "" && appName != project.DefaultAppName
 	frontendKit := strings.TrimSpace(req.Project.FrontendKit)
 	switch {
+	case strings.HasPrefix(clean, "internal/features/") && strings.HasSuffix(clean, "_gen.go"):
+		return FilePolicyResult{Path: clean, Classification: "generated", Editable: false, PreferredAction: "regenerate", ChangeThrough: "FEATURE_* configuration and forj generate --feature", Owner: "framework-generator", Reason: "Evaluator managers and typed accessors are generated from the configured resource contract."}
 	case strings.HasSuffix(clean, "wire_gen.go"):
 		return FilePolicyResult{Path: clean, Classification: "generated", Editable: false, PreferredAction: "regenerate", ChangeThrough: "forj build", App: appName, Owner: "framework-generator", Reason: "Wire generated output must not be edited by hand.", Warnings: []string{"Fix provider sets, then regenerate with forj build."}}
 	case strings.Contains(clean, "/wire/") && strings.HasPrefix(clean, "app/"):
