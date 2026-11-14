@@ -449,3 +449,7 @@ phase is the authoritative container or VM sandbox and its negative isolation
 suite, not another broad unconfined matrix. After that trust boundary exists,
 the next paid measurement should use repeated paired smoke trials to answer one
 specific adjacent-treatment question before expanding to the core portfolio.
+
+## Tax-rate resilience calibration
+
+`harden-tax-rate-client/v1` preserves the original outbound-client contract and adds a separate task over the existing prepared v2.0.1 client. Dependency installation is outside candidate execution; generated App defaults and their v1 dependency pin remain unchanged. Local HTTP probes count recovery and exhaustion attempts, reject retries outside 502/503, verify escaped paths and typed status/decoding errors, and exercise pre-canceled, in-flight canceled, and deadline-limited callers. Library selection is a separate quality observation. GoForj owns the reusable golden and compiling semantic-mutant calibration. No paid provider attempts or new benchmark claims are required.

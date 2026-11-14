@@ -190,6 +190,11 @@ capabilities:
     summary: Rate-limit a route with explicit identity, policy, and response behavior.
     tier: core
     evaluations: []
+  - id: http.retry-policy
+    area: http
+    summary: Bound explicitly transient outbound retries and preserve typed errors and caller cancellation.
+    tier: core
+    evaluations: [harden-tax-rate-client]
   - id: http.sessions-cookies
     area: http
     summary: Preserve session expiry, refresh, revocation, cookie, and CSRF boundaries.

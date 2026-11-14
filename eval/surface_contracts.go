@@ -4,6 +4,19 @@ package eval
 func promotedSurfaceContracts() []surfaceContract {
 	return []surfaceContract{
 		{
+			id:                  "harden-tax-rate-client/v1",
+			allowedChanges:      []string{"internal/taxrates/*.go"},
+			qualityTestPatterns: []string{"internal/taxrates/*_test.go"},
+			sources: []sourceContract{
+				{id: "httpx-client-selection", kind: RequirementQuality, paths: []string{"internal/taxrates/*.go"}, stringLiterals: []string{"github.com/goforj/httpx/v2"}, selectorCalls: []string{"GetCtx"}},
+			},
+			commands: standardSurfaceCommands(commandContract{
+				id:              "tax-rate-resilience-behavior",
+				arguments:       []string{"go", "test", "./internal/taxrates", "-run", "^TestAtlasTaxRateResilience(Counts|PreCanceled|InFlightCancel|InFlightDeadline)$", "-count=1"},
+				supervisorFiles: []supervisorFile{{path: "internal/taxrates/atlas_eval_resilience_test.go", body: taxRateResilienceBehaviorProbe}},
+			}),
+		},
+		{
 			id:             "add-app-command/v1",
 			allowedChanges: []string{"internal/invoices/*_cmd.go", "internal/invoices/*_cmd_test.go", "app/commands.go", "app/wire/inject_cmd_app.go"},
 			sources: []sourceContract{
