@@ -24,7 +24,7 @@ func TestAtlasResourceApp(t *testing.T) {
  atlasBuildResourceApp(t,root,env)
  done := make(chan struct{})
  var output string; var runErr error
- 
+
  go func(){ output,runErr = atlasRunResourceTool(t,root,env,"go","run","./cmd/app","hello:world"); close(done) }()
  defer func(){ select { case <-done: case <-time.After(20*time.Second): } }()
  client := &http.Client{Timeout:time.Second}
