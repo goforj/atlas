@@ -40,7 +40,7 @@ func Compose(p project.Project) string {
 	out.WriteString("- Treat generated registration points as in-use framework code: preserve the generated integration unless the requested design deliberately replaces it.\n\n")
 
 	out.WriteString("## Evidence And Validation\n\n")
-	out.WriteString("- For a new library need, consult the `goforj-library-selection` skill when installed, inspect existing imports and pinned module versions, and preserve adequate existing code. Verify library APIs and optional driver versions before adding dependencies.\n")
+	out.WriteString("- For new reusable application policy, consult `goforj-library-selection` and the focused library guidance before designing types. Inspect existing imports and pinned module versions, preserve working code, and verify compatible library APIs and optional driver versions before adding dependencies.\n")
 	out.WriteString("- Prefer local configuration, generated source, CLI inspection commands, and focused tests as evidence for how this Project works.\n")
 	out.WriteString("- Use Atlas project inspection and version-aware documentation when available. Otherwise consult the documentation matching the Project's GoForj version at `https://goforj.dev`; ask before inventing a convention when local and documented evidence are insufficient.\n")
 	out.WriteString("- If the requested execution primitive, owning App, or package boundary remains ambiguous, inspect read-only evidence and ask the user before running generators, builds, or other commands that mutate Project state.\n")
