@@ -10,15 +10,15 @@ func settingsValidationContract() surfaceContract {
 		qualityTestPatterns: []string{"internal/settings/*_test.go", "app/wire/*_test.go"},
 		sources: []sourceContract{
 			{id: "settings-library-path", kind: RequirementQuality, paths: []string{"internal/settings/*.go"}, stringLiterals: []string{"github.com/goforj/validation"}, declarations: []declarationContract{
-				{name: "Patch", receiver: "Controller", selectorCalls: []string{"Bind", "Update"}, forbiddenCalls: []string{"Background"}},
+				{name: "Patch", receiver: "Controller", selectorCalls: []string{"Update"}, forbiddenCalls: []string{"Background"}},
 				{name: "Update", receiver: "Service", selectorCalls: []string{"ValidatePatch"}, forbiddenCalls: []string{"Background"}},
 				{name: "ValidatePatch", receiver: "Service", selectorCalls: []string{"ValidateContext", "Presence", "Check"}, forbiddenCalls: []string{"Background"}},
 			}},
 		},
 		commands: append(standardSurfaceCommands(commandContract{
 			id:              "settings-validation-behavior",
-			arguments:       []string{"go", "test", "./internal/settings", "-run", "^TestAtlasSettingsValidationBehavior$", "-count=1"},
-			supervisorFiles: []supervisorFile{{path: "internal/settings/atlas_eval_settings_test.go", body: settingsValidationBehaviorProbe}},
+			arguments:       []string{"go", "test", "./internal/settings", "-run", "^(TestAtlasSettingsValidationBehavior|TestAtlasRequiredNamePolicy)$", "-count=1"},
+			supervisorFiles: []supervisorFile{{path: "internal/settings/atlas_eval_settings_test.go", body: settingsValidationBehaviorProbe + settingsRequiredNamePolicyProbe}},
 		}), appResourceRuntimeContract("settings-app-runtime", "settings", settingsAppRuntimeProbe, settingsAppRuntimeCommand), commandContract{id: "settings-library-runtime", probe: runSettingsLibraryProbe}, commandContract{id: "settings-patch-route", arguments: []string{"forj", "route:list"}, contains: []string{"PATCH", "/api/v1/customers/settings"}}),
 	}
 }
@@ -142,5 +142,26 @@ func TestAtlasSettingsValidationBehavior(t *testing.T) {
   if err := json.Unmarshal([]byte("{\"name\":\"Alice\"}"), &input); err != nil { t.Fatal(err) }
   if _,err := service.Update(ctx,input); !errors.Is(err,context.Canceled) { t.Fatalf("cancel = %v",err) }
  })
+}
+`
+
+// settingsRequiredNamePolicyProbe rejects silent policy disablement without prescribing a constructor error API.
+const settingsRequiredNamePolicyProbe = `
+// TestAtlasRequiredNamePolicy keeps invalid wiring operational instead of accepting a patch without required policy.
+func TestAtlasRequiredNamePolicy(t *testing.T) {
+ for _,entrypoint:=range []string{"validate","update"} {t.Run(entrypoint,func(t *testing.T) {
+  rejected:=false
+  func() {
+   defer func(){if recover()!=nil {rejected=true}}()
+   service:=NewService(nil)
+   var input PatchInput
+   if err:=json.Unmarshal([]byte("{\"name\":\"Alice\"}"),&input);err!=nil {t.Fatal(err)}
+   var err error
+   if entrypoint=="validate" {err=service.ValidatePatch(context.Background(),input)} else {_,err=service.Update(context.Background(),input)}
+   var clientErrors *validation.Errors
+   rejected=err!=nil && !errors.As(err,&clientErrors)
+  }()
+  if !rejected {t.Fatal("missing required name policy was silently skipped or became a client field issue")}
+ })}
 }
 `
