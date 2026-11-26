@@ -4,8 +4,8 @@ package eval
 func dispatchEnvironmentContract() surfaceContract {
 	return surfaceContract{
 		id:                  "configure-dispatch-startup/v1",
-		allowedChanges:      []string{"internal/dispatch/*.go", "app/lifecycle.go", "app/wire/inject_services_app.go"},
-		qualityTestPatterns: []string{"internal/dispatch/*_test.go"},
+		allowedChanges:      []string{"internal/dispatch/*.go", "app/lifecycle.go", "app/wire/inject_services_app.go", "app/wire/*_test.go", "app/lifecycle_test.go"},
+		qualityTestPatterns: []string{"internal/dispatch/*_test.go", "app/wire/*_test.go", "app/lifecycle_test.go"},
 		sources: []sourceContract{
 			{id: "dispatch-config-composition", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"LoadConfig", "NewService"}},
 			{id: "dispatch-env-api", kind: RequirementQuality, paths: []string{"internal/dispatch/*.go"}, stringLiterals: []string{"github.com/goforj/env/v2"}, declarations: []declarationContract{{name: "LoadConfig", selectorCalls: []string{"Load", "WithPrefix", "GetInt", "GetDuration", "GetBool"}}}},
