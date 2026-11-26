@@ -32,7 +32,7 @@ func TestDispatchStartupEvaluationResolves(t *testing.T) {
 			t.Errorf("natural task leaks %q", recipe)
 		}
 	}
-	if _, err := parser.ParseFile(token.NewFileSet(), "probe_test.go", dispatchEnvironmentProbe, parser.AllErrors); err != nil {
+	if _, err := parser.ParseFile(token.NewFileSet(), "probe_test.go", dispatchEnvironmentProbe + appResourceRuntimeHelpers, parser.AllErrors); err != nil {
 		t.Fatal(err)
 	}
 }

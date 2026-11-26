@@ -10,17 +10,19 @@ func dispatchEnvironmentContract() surfaceContract {
 			{id: "dispatch-config-composition", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"LoadConfig", "NewService"}},
 			{id: "dispatch-env-api", kind: RequirementQuality, paths: []string{"internal/dispatch/*.go"}, stringLiterals: []string{"github.com/goforj/env/v2"}, declarations: []declarationContract{{name: "LoadConfig", selectorCalls: []string{"Load", "WithPrefix", "GetInt", "GetDuration", "GetBool"}}}},
 		},
-		commands: standardSurfaceCommands(commandContract{
+		commands: append(standardSurfaceCommands(commandContract{
 			id:              "dispatch-startup-behavior",
 			arguments:       []string{"go", "test", "./internal/dispatch", "-run", "^TestAtlasDispatchEnvironmentBehavior$", "-count=1"},
 			supervisorFiles: []supervisorFile{{path: "internal/dispatch/atlas_eval_environment_test.go", body: dispatchEnvironmentProbe}},
-		}),
+		}), appResourceRuntimeContract("dispatch-app-runtime", "dispatch", dispatchEnvironmentProbe, dispatchAppRuntimeCommand)),
 	}
 }
 
 const dispatchEnvironmentProbe = `package dispatch_test
 
 import (
+ "context"
+ "encoding/json"
  "fmt"
  "os"
  "os/exec"
@@ -29,7 +31,6 @@ import (
  "testing"
  "time"
 
- "example.com/invoiceeval/app/wire"
  "example.com/invoiceeval/internal/dispatch"
 )
 
@@ -92,17 +93,17 @@ func TestAtlasDispatchEnvironmentChild(t *testing.T) {
  name := os.Getenv("ATLAS_DISPATCH_CASE"); if name == "" { t.Skip("invoked by the supervisor parent") }
  test,ok := atlasDispatchCases()[name]; if !ok { t.Fatal("unknown startup case") }
  config,err := dispatch.LoadConfig()
- _,startupErr := wire.InitializeApplication()
+
  if test.wantError != "" {
-  if err == nil || startupErr == nil { t.Fatalf("invalid settings did not stop provider and App composition: %v/%v",err,startupErr) }
+  if err == nil { t.Fatalf("invalid settings did not stop provider and App composition: %v/%v",err,err) }
   if config != (dispatch.Config{}) { t.Fatal("failed provider returned a partially usable config") }
-  for _,failure := range []error{err,startupErr} {
+  for _,failure := range []error{err,err} {
    if test.wantError != "*" && !strings.Contains(failure.Error(),test.wantError) { t.Fatalf("error did not identify %q: %v",test.wantError,failure) }
    for _,private := range []string{"fake-env-token-keep-private","file-private-token","bad-workers-private","99999999999999999999999999999"} { if strings.Contains(failure.Error(),private) { t.Fatal("startup error leaked a submitted value") } }
   }
   return
  }
- if err != nil || startupErr != nil { t.Fatalf("valid settings rejected: %v/%v",err,startupErr) }
+ if err != nil { t.Fatalf("valid settings rejected: %v/%v",err,err) }
  if config != test.want { t.Fatal("typed configuration or precedence differs from the requested startup policy") }
  for _,diagnostic := range []string{config.String(),config.GoString(),fmt.Sprint(config),fmt.Sprintf("%+v",config),fmt.Sprintf("%#v",config)} {
   if strings.Contains(diagnostic,strings.TrimSpace(config.Token)) { t.Fatal("configuration diagnostic leaked or omitted its credential redaction") }
@@ -111,5 +112,53 @@ func TestAtlasDispatchEnvironmentChild(t *testing.T) {
  if err := os.Setenv("DISPATCH_WORKERS","63"); err != nil { t.Fatal(err) }
  if err := os.Setenv("DISPATCH_TOKEN","changed-after-startup"); err != nil { t.Fatal(err) }
  if service.Snapshot() != config { t.Fatal("service reread mutable process configuration") }
+}
+// TestAtlasResourceApp executes each startup policy through the submitted active App graph.
+func TestAtlasResourceApp(t *testing.T) {
+ root := atlasAppRoot(t)
+ atlasBuildResourceApp(t,root,nil)
+ for name,test := range atlasDispatchCases() { t.Run(name,func(t *testing.T) {
+  // The process environment wins over the fixture file while required missing keys stay explicit.
+  env := []string{"DISPATCH_TOKEN=", "DISPATCH_WORKERS=", "DISPATCH_TIMEOUT=", "DISPATCH_ENABLED=", "DISPATCH_REGION="}
+  env = append(env,test.process...)
+  path := filepath.Join(root,".env")
+  original,err := os.ReadFile(path); if err != nil { t.Fatal(err) }
+  defer os.WriteFile(path,original,0600)
+  if err := os.WriteFile(path,[]byte("APP_ENV=local\n"+test.file),0600); err != nil { t.Fatal(err) }
+  if test.file != "" && len(test.process)==0 { env=nil }
+  output,runErr := atlasRunResourceApp(t,root,env)
+  if test.wantError != "" {
+   if runErr==nil { t.Fatalf("App accepted invalid startup: %s",output) }
+   if test.wantError!="*" && !strings.Contains(output,test.wantError) { t.Fatalf("App startup missing key %s: %s",test.wantError,output) }
+   return
+  }
+  if runErr!=nil { t.Fatalf("App startup: %v\n%s",runErr,output) }
+  marker := "atlas-dispatch-app:"
+  index := strings.Index(output,marker); if index<0 { t.Fatalf("App did not consume dispatch service: %s",output) }
+  var got dispatch.Config
+  if err := json.Unmarshal([]byte(strings.Split(output[index+len(marker):],"\n")[0]),&got); err!=nil { t.Fatal(err) }
+  if got!=test.want { t.Fatalf("App snapshot differs from startup policy") }
+ }) }
+}
+`
+
+// dispatchAppRuntimeCommand consumes the configured service through the generated command registry.
+const dispatchAppRuntimeCommand = `package cmd
+import (
+ "encoding/json"
+ "fmt"
+ "example.com/invoiceeval/internal/dispatch"
+)
+// HelloWorldCmd requires the submitted App-owned dispatch service.
+type HelloWorldCmd struct { service *dispatch.Service }
+// NewHelloWorldCmd roots the submitted provider in the existing command graph.
+func NewHelloWorldCmd(service *dispatch.Service) *HelloWorldCmd { return &HelloWorldCmd{service:service} }
+// Signature preserves the generated command identity.
+func (*HelloWorldCmd) Signature() string { return ` + "`" + `name:"hello:world" help:"Dispatch startup verification"` + "`" + ` }
+// Run reports only supervisor-owned fake configuration for exact startup comparison.
+func (command *HelloWorldCmd) Run() error {
+ body,err := json.Marshal(command.service.Snapshot()); if err!=nil { return err }
+ fmt.Printf("atlas-dispatch-app:%s\n",body)
+ return nil
 }
 `
