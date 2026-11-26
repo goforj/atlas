@@ -19,7 +19,7 @@ type applicationWorkflowDefinition struct {
 }
 
 var applicationWorkflowDefinitions = map[string]applicationWorkflowDefinition{}
-var applicationChangePattern = regexp.MustCompile(`\b(add|create|implement|update|change|configure|bind|wire|inject|use|validate|normalize|preserve|distinguish|encrypt|decrypt|rotate|read|resolve|fetch|load|protect|reject|require|introduce|integrate|fix|repair|support|ensure|make|set up|look up|declare|harden|build|improve|send|notify|search|index|target|evaluate|enable|disable|roll out)\b`)
+var applicationChangePattern = regexp.MustCompile(`\b(add|create|implement|update|change|configure|bind|wire|inject|use|validate|normalize|preserve|distinguish|encrypt|decrypt|rotate|read|resolve|fetch|load|protect|reject|require|introduce|integrate|fix|repair|support|ensure|make|set up|look up|declare|harden|build|improve|send|notify|search|index|target|evaluate|enable|disable|roll out|instrument|increment|record|observe|measure)\b`)
 var applicationSurfacePattern = regexp.MustCompile(`\b(add|create|generate|introduce|expose)\s+(?:[a-z0-9_-]+\s+){0,4}(route|endpoint|controller|job|schedule|command)\b`)
 
 // init makes explicit docs requests addressable without turning them into source work.

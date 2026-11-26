@@ -22,6 +22,7 @@ type Prompt struct {
 // Catalog returns the built-in GoForj Atlas skills.
 func Catalog() []Skill {
 	return []Skill{
+		skill("goforj-feature-rollouts", "Stable tenant rollouts, explicit fallback, and request configuration snapshots.", featureRollouts),
 		skill("goforj-app-architecture", "Project, app, runtime, and package layout.", appArchitecture),
 		skill("goforj-app-registration", "App composition and registration points.", appRegistration),
 		skill("goforj-make-commands", "Prefer GoForj make commands for framework scaffolding.", makeCommands),
