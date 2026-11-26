@@ -10,11 +10,13 @@ Use this skill when an application need could use an ecosystem library: reusable
 
 Inspect 'go.mod', existing imports, '.goforj.yml', the owning App, and nearby services before selecting a dependency. With Atlas, use 'application-info', 'resource-inventory', 'search-docs', and 'read-doc-section'; inspect 'version-alignment' when docs and code disagree. Without Atlas MCP, read local source and the documentation matching the installed module version.
 
+For new reusable behavior that matches a library below, read its focused skill or versioned documentation before designing application types. A dependency can be absent because this is a new concern: verify a published compatible version and add an explicit pin when its contract fits. Keep application types focused on domain state, transport mapping, and policy composition.
+
 Preserve an explicit existing dependency and adequate standard-library code unless the requested behavior warrants a change. Do not rewrite working code just because an ecosystem alternative exists. Resolve minimum Go versions, module major suffixes, optional driver modules, and published tags before changing 'go.mod'. Never guess an API from the library's name or use '@latest' as a compatibility policy.
 
 ## Choose By Application Need
 
-- Reusable decoded-input rules, stable field errors, and omitted/null/zero distinctions: validation ('github.com/goforj/validation'). This differs from running tests and from nullable database values.
+- Reusable decoded-input rules, stable field errors, and omitted/null/zero distinctions: validation ('github.com/goforj/validation'). Read 'goforj-validation' when installed and 'libraries/validation.md' before implementing a new PATCH policy. Compose compatible library presence, rule, and issue primitives, and retain the App's public HTTP error format. Routine test execution and nullable database values have separate contracts.
 - Lexical catalog search, typed filters, facets, and highlights: search ('github.com/goforj/search'). Keep indexing and write visibility explicit, preserve the database as the durable source of truth, and inspect separately versioned drivers. Do not infer semantic or vector search support.
 - Channel messages and deliberate fanout or fallback: notification ('github.com/goforj/notification'). A send is synchronous; acceptance is not proof of recipient delivery, automatic retries, or durable background work.
 - Targeted release controls, typed fallbacks, and stable tenant rollouts: feature ('github.com/goforj/feature'). Use the documented snapshot boundary when one request needs a consistent revision. A flag does not replace authorization.
