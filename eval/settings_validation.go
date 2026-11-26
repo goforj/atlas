@@ -19,7 +19,7 @@ func settingsValidationContract() surfaceContract {
 			id:              "settings-validation-behavior",
 			arguments:       []string{"go", "test", "./internal/settings", "-run", "^TestAtlasSettingsValidationBehavior$", "-count=1"},
 			supervisorFiles: []supervisorFile{{path: "internal/settings/atlas_eval_settings_test.go", body: settingsValidationBehaviorProbe}},
-		}), commandContract{id: "settings-library-runtime", probe: runSettingsLibraryProbe}, commandContract{id: "settings-patch-route", arguments: []string{"forj", "route:list"}, contains: []string{"PATCH", "/api/v1/customers/settings"}}),
+		}), appResourceRuntimeContract("settings-app-runtime", "settings", settingsAppRuntimeProbe, settingsAppRuntimeCommand), commandContract{id: "settings-library-runtime", probe: runSettingsLibraryProbe}, commandContract{id: "settings-patch-route", arguments: []string{"forj", "route:list"}, contains: []string{"PATCH", "/api/v1/customers/settings"}}),
 	}
 }
 

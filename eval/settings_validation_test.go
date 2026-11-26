@@ -38,8 +38,13 @@ func TestSettingsValidationProbeParses(t *testing.T) {
 	if _, err := parser.ParseFile(token.NewFileSet(), "probe_test.go", settingsValidationBehaviorProbe, parser.AllErrors); err != nil {
 		t.Fatal(err)
 	}
+	for _, source := range []string{settingsAppRuntimeProbe + appResourceRuntimeHelpers, settingsAppRuntimeCommand} {
+		if _, err := parser.ParseFile(token.NewFileSet(), "app.go", source, parser.AllErrors); err != nil {
+			t.Fatal(err)
+		}
+	}
 	contract := settingsValidationContract()
-	if contract.sources[0].id != "settings-library-path" || contract.commands[len(contract.commands)-3].id != "settings-validation-behavior" {
+	if contract.sources[0].id != "settings-library-path" || contract.commands[len(contract.commands)-4].id != "settings-validation-behavior" {
 		t.Fatalf("contract = %#v", contract)
 	}
 }
