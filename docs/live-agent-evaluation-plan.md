@@ -463,19 +463,15 @@ The supervisor records exact messages and caller context, primary acceptance, de
 ## Targeted checkout rollout calibration
 
 The `target-feature-rollout` contract adds a prepared checkout request boundary with feature v0.1.0 installed by the supervisor. It measures integration and execution within that existing boundary, not unconstrained library discovery or candidate dependency installation. Required behavior covers tenant bucket stability, explicit missing-flag fallback, invalid-refresh retention, and captured configuration revision and evaluation time. Separate quality checks record the import, observed library calls, and candidate regression tests. The fixture now supplies a generated Checkout evaluator, and the service must resolve that typed accessor through its registered App provider. A supervisor-only helper binds the generated manager to controlled native sources and clocks after candidate writes are sealed; it does not add a framework constructor API. The framework resource tests separately exercise real file-backed startup, refresh, and shutdown. The GoForj companion scenario calibrates the golden implementation and compiling randomized-target and mixed-revision mutants without live provider sessions. Native API sources are linked from the always-recommended rollout skill while hosted feature documentation is prepared separately.
-## Authenticated payload rotation diagnostic
+## Authenticated payload rotation diagnostics
 
-`encrypt-partner-payloads/v1` protects application-owned payload persistence using
-the Project's existing crypt v1.2.0 dependency. The prepared fake-key compatibility
-vector makes the persisted envelope explicit. Independent reference readers
-verify current-key writes, previous-key reads, randomized encryption, tampered
-IV/value/MAC rejection, malformed envelopes, and frozen key snapshots. Injected
-repository/cipher probes verify cancellation, operational error identity, and
-no plaintext on failure. A required App runtime gate injects the submitted service into an existing command through the active Wire graph, checks current-key writes, old-key reads and authentication, and rejects bad key configuration before readiness.
-Source API attribution is a separate quality observation, so a compatible
-alternative implementation can pass behavior without that observation.
+`encrypt-partner-payloads/v1` uses the existing crypt v1.2.0 envelope and fake-key compatibility vector. Independent readers verify current-key writes, previous-key reads, randomized authentication, tamper rejection, immutable key snapshots, and safe operational failures. The App gate checks invalid-key readiness in the original submitted App before adding its command consumer, then exercises the service through active Wire providers. Calibration rejects lifecycle-only and unused-provider disconnections as well as compiling plaintext-storage and dropped-previous-key mutants. Library attribution remains a separate quality observation.
 
-Preparation stages the existing dependency graph before candidate execution,
-with shell networking disabled for the candidate. Golden calibration rejects
-compiling plaintext-storage and dropped-previous-key mutants. The contract has
-no retained live provider attempts and changes no historical evaluation grade.
+Retained 2026-11-26 native Codex `gpt-6.1-sol` Atlas-guided diagnostics preserve all four outcomes:
+
+- Attempt 1, `trial-20261126t215753-0bd9cc08475d-atlas`, Atlas `5b9d9c5c2dc28affec9eeac5aaf82e7df250d224` / GoForj `bae254c87d9f278c4d453180d05a7060205c51ad`: App startup regression tests were incorrectly outside ownership scope, so runtime checks were skipped. The scope now accepts owning App test files while rejecting unrelated production edits.
+- Attempt 2, `trial-20261126t222253-3a88f3db605f-atlas`, Atlas `ec9fce1896d2ad6e403c7c94caf03a96f0deb0bb` / GoForj `dfc2c811f106a6a8fbbd70afd52c7f6f7056d4b4`: The existing crypt v1.2.0 dependency moved from indirect to direct when imported, tripping ownership before runtime checks. Preparation now stages that same published version as direct; module versions remain locked.
+- Attempt 3, `trial-20261126t223156-d7c5747f8f21-atlas`, Atlas `ec9fce1896d2ad6e403c7c94caf03a96f0deb0bb` / GoForj `fa0452d4ccdc50d915b0f5f2162e1afb0e4fad5c`: The actual App authentication/rotation check passed, but the standalone pre-canceled Save case failed because cipher/storage work began. The natural task and skill now explicitly state the existing no-work cancellation boundary; the probe is unchanged.
+- Attempt 4, `trial-20261126t223946-4e8a10470a1c-atlas`, Atlas `07c37072fb3c88935f877d89d587a312759cca50` / GoForj `aacc2914611bed048ce838004912a4dd407a63c1`: Every executed required check passed, including standalone encryption behavior, original App invalid-key readiness, and real App authentication/rotation. Regression-test and crypt-adoption quality checks passed.
+
+Signed reports, native events, source diffs, and the actor's installed encryption/validation skill reads are retained. These are `unconfined-local` diagnostics: trusted read attribution and authoritative framework outcomes remain ineligible. They do not change the historical benchmark or establish treatment efficacy. Subsequent maintainer-note commits change prose only; the measured functional revisions are the hashes above.
