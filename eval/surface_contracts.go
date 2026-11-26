@@ -11,7 +11,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "feature-library-adoption", kind: RequirementQuality, paths: []string{"internal/checkout/*.go"}, stringLiterals: []string{"github.com/goforj/feature"}},
 				{id: "feature-resource-accessor", paths: []string{"internal/checkout/*.go"}, providerConnection: &providerConnectionContract{accessor: "Checkout", managerImportSuffix: "/internal/features", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
-			commands: standardSurfaceCommands(commandContract{id: "feature-rollout-behavior", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasFeatureRolloutBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_feature_test.go", body: featureRolloutBehaviorProbe}, {path: "internal/features/atlas_eval_manager.go", body: featureManagerFixtureSource}}}, commandContract{id: "feature-library-execution", probe: runFeatureLibraryUseProbe}),
+			commands: standardSurfaceCommands(appResourceRuntimeContract("feature-app-runtime", "checkout", featureAppRuntimeProbe, featureAppRuntimeCommand), commandContract{id: "feature-rollout-behavior", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasFeatureRolloutBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_feature_test.go", body: featureRolloutBehaviorProbe}, {path: "internal/features/atlas_eval_manager.go", body: featureManagerFixtureSource}}}, commandContract{id: "feature-library-execution", probe: runFeatureLibraryUseProbe}),
 		},
 		{
 			id:             "add-app-command/v1",
