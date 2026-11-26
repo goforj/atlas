@@ -59,3 +59,20 @@ func TestPayloadAppRuntimeSourcesParse(t *testing.T) {
 		}
 	}
 }
+
+// TestPayloadAppCompositionTestsStayInScope permits startup regression tests while rejecting unrelated App implementation changes.
+func TestPayloadAppCompositionTestsStayInScope(t *testing.T) {
+	contract := partnerPayloadEncryptionContract()
+	for _, test := range []struct {
+		path string
+		want EndpointStatus
+	}{
+		{"app/wire/partnerpayloads_test.go", EndpointPassed},
+		{"app/wire/unrelated.go", EndpointFailed},
+	} {
+		result := verifySurfaceOwnership([]ProjectChange{{Path: test.path, After: ProjectPathState{Kind: "file"}}}, contract.allowedChanges)
+		if result.Status != test.want {
+			t.Fatalf("ownership %s = %s", test.path, result.Status)
+		}
+	}
+}
