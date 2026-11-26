@@ -49,3 +49,13 @@ func TestCryptSourceAttributionDoesNotGateBehavior(t *testing.T) {
 		t.Fatal("library source attribution became a behavior gate")
 	}
 }
+
+// TestPayloadAppRuntimeSourcesParse catches invalid nested supervisor programs before rendered calibration.
+func TestPayloadAppRuntimeSourcesParse(t *testing.T) {
+	contract := appResourceRuntimeContract("payload-app-runtime", "partnerpayloads", payloadAppRuntimeProbe, payloadAppRuntimeCommand)
+	for name, source := range map[string]string{"app_test.go": contract.supervisorFiles[0].body, "command.go": payloadAppRuntimeCommand} {
+		if _, err := parser.ParseFile(token.NewFileSet(), name, source, parser.AllErrors); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

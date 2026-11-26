@@ -18,7 +18,7 @@ func partnerPayloadEncryptionContract() surfaceContract {
 			id:              "payload-encryption-behavior",
 			arguments:       []string{"go", "test", "./internal/partnerpayloads", "-run", "^TestAtlasPayloadEncryptionBehavior$", "-count=1"},
 			supervisorFiles: []supervisorFile{{path: "internal/partnerpayloads/atlas_eval_encryption_test.go", body: payloadEncryptionProbe}},
-		}),
+		}, appResourceRuntimeContract("payload-app-runtime", "partnerpayloads", payloadAppRuntimeProbe, payloadAppRuntimeCommand)),
 	}
 }
 
@@ -35,7 +35,6 @@ import (
  "testing"
 
  "github.com/goforj/crypt"
- "example.com/invoiceeval/app/wire"
  "example.com/invoiceeval/internal/partnerpayloads"
 )
 
@@ -105,7 +104,6 @@ func TestAtlasPayloadEncryptionBehavior(t *testing.T) {
  t.Setenv("APP_KEY",atlasPayloadKey(0x22,32))
  t.Setenv("APP_PREVIOUS_KEYS",atlasPayloadKey(0x11,32)+", "+atlasPayloadKey(0x33,32))
  cipher,err := partnerpayloads.NewCipher(); if err != nil { t.Fatal(err) }
- if _,err := wire.InitializeApplication(); err != nil { t.Fatalf("valid key graph rejected: %v",err) }
  repository := partnerpayloads.NewRepository()
  service := partnerpayloads.NewService(repository,cipher)
  current := atlasPayloadReference(t,0x22,32)
@@ -174,8 +172,7 @@ func TestAtlasPayloadEncryptionBehavior(t *testing.T) {
   for _,test := range tests { t.Run(test.name,func(t *testing.T) {
    t.Setenv("APP_KEY",test.current); t.Setenv("APP_PREVIOUS_KEYS",test.previous)
    cipher,err := partnerpayloads.NewCipher(); if err == nil || cipher != nil { t.Fatal("invalid keys returned a usable cipher") }
-   _,startupErr := wire.InitializeApplication(); if startupErr == nil { t.Fatal("invalid key graph reached completed App composition") }
-   for _,failure := range []error{err,startupErr} { for _,key := range []string{test.current,test.previous} { if key != "" && strings.Contains(failure.Error(),key) { t.Fatal("key diagnostic exposed submitted key material") } } }
+   for _,failure := range []error{err} { for _,key := range []string{test.current,test.previous} { if key != "" && strings.Contains(failure.Error(),key) { t.Fatal("key diagnostic exposed submitted key material") } } }
   }) }
  })
  t.Run("operational-errors-and-context",func(t *testing.T) {

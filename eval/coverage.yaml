@@ -215,17 +215,17 @@ capabilities:
     summary: Preserve synchronous acceptance and conservative primary/fallback notification policy.
     tier: core
     evaluations: [notify-incident]
+  - id: libraries.payload-encryption
+    area: libraries
+    summary: Authenticate stored payloads with current-key writes and retained old-key reads.
+    tier: extended
+    evaluations: [encrypt-partner-payloads]
   - id: libraries.search-highlights-facets
     area: libraries
     summary: Render untrusted highlight segments safely and preserve facet counts, truncation, and precision.
     tier: extended
     evaluations: []
 
-  - id: libraries.payload-encryption
-    area: libraries
-    summary: Authenticate stored payloads with current-key writes and retained old-key reads.
-    tier: extended
-    evaluations: [encrypt-partner-payloads]
   - id: operations.backups
     area: operations
     summary: Configure and verify a recoverable application backup workflow.

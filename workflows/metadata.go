@@ -137,14 +137,6 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 	scope := makeScope(app)
 	scope.searchConfirmed = projectHasSearch(p)
 	command := firstCommand(workflowCommands(workflowID, scope))
-	reason := "GoForj make commands update generated files, app registration, and Wire surfaces together."
-	if _, ok := applicationWorkflowDefinitions[workflowID]; ok {
-		reason = "Update the application-owned boundary and provider inputs, then build and test the selected App."
-	}
-	if workflowID == "goforj-read-docs" {
-		command = "Atlas search-docs"
-		reason = "Read the requested documentation without proposing source changes."
-	}
 	command = strings.ReplaceAll(command, "<name>", resource)
 	reason := "GoForj make commands update generated files, App registration, and Wire surfaces together."
 	if _, ok := applicationWorkflowDefinitions[workflowID]; ok {

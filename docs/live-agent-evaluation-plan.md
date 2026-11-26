@@ -471,7 +471,7 @@ vector makes the persisted envelope explicit. Independent reference readers
 verify current-key writes, previous-key reads, randomized encryption, tampered
 IV/value/MAC rejection, malformed envelopes, and frozen key snapshots. Injected
 repository/cipher probes verify cancellation, operational error identity, and
-no plaintext on failure; real Wire initialization rejects bad key configuration.
+no plaintext on failure. A required App runtime gate injects the submitted service into an existing command through the active Wire graph, checks current-key writes, old-key reads and authentication, and rejects bad key configuration before readiness.
 Source API attribution is a separate quality observation, so a compatible
 alternative implementation can pass behavior without that observation.
 
