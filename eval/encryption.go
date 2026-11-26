@@ -4,8 +4,8 @@ package eval
 func partnerPayloadEncryptionContract() surfaceContract {
 	return surfaceContract{
 		id:                  "encrypt-partner-payloads/v1",
-		allowedChanges:      []string{"internal/partnerpayloads/*.go", "app/lifecycle.go", "app/wire/inject_services_app.go", "app/wire/*_test.go"},
-		qualityTestPatterns: []string{"internal/partnerpayloads/*_test.go", "app/wire/*_test.go"},
+		allowedChanges:      []string{"internal/partnerpayloads/*.go", "app/lifecycle.go", "app/wire/inject_services_app.go", "app/wire/*_test.go", "app/lifecycle_test.go"},
+		qualityTestPatterns: []string{"internal/partnerpayloads/*_test.go", "app/wire/*_test.go", "app/lifecycle_test.go"},
 		sources: []sourceContract{
 			{id: "payload-cipher-composition", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewCipher", "NewRepository", "NewService"}},
 			{id: "payload-crypt-api", kind: RequirementQuality, paths: []string{"internal/partnerpayloads/*.go"}, stringLiterals: []string{"github.com/goforj/crypt"}, declarations: []declarationContract{

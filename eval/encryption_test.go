@@ -68,6 +68,8 @@ func TestPayloadAppCompositionTestsStayInScope(t *testing.T) {
 		want EndpointStatus
 	}{
 		{"app/wire/partnerpayloads_test.go", EndpointPassed},
+		{"app/lifecycle_test.go", EndpointPassed},
+		{"app/unrelated.go", EndpointFailed},
 		{"app/wire/unrelated.go", EndpointFailed},
 	} {
 		result := verifySurfaceOwnership([]ProjectChange{{Path: test.path, After: ProjectPathState{Kind: "file"}}}, contract.allowedChanges)
