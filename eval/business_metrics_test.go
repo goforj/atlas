@@ -32,14 +32,6 @@ func TestBusinessMetricsManifestAndQuality(t *testing.T) {
 	}
 }
 
-// TestBusinessMetricsProviderProbeRejectsMissingProvider keeps unresolved App wiring out of executable probes.
-func TestBusinessMetricsProviderProbeRejectsMissingProvider(t *testing.T) {
-	result := runBusinessMetricsProviderProbe(context.Background(), &fakeCommandRunner{}, VerifierProject{Root: t.TempDir()})
-	if result.Status != EndpointFailed {
-		t.Fatalf("missing provider=%#v", result)
-	}
-}
-
 // TestBusinessMetricsLocalProviderRegistrationRequiresSameDirectory keeps private App factories connected without accepting sibling names.
 func TestBusinessMetricsLocalProviderRegistrationRequiresSameDirectory(t *testing.T) {
 	file, err := parser.ParseFile(token.NewFileSet(), "inject_services_app.go", `package wire;import "github.com/goforj/wire";var appSet=wire.NewSet(provideCheckout)`, 0)

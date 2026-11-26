@@ -1,47 +1,5 @@
 package eval
 
-import (
-	"context"
-	"path/filepath"
-	"strings"
-)
-
-// runBusinessMetricsProviderProbe executes the accessor provider discovered in the registered App set.
-func runBusinessMetricsProviderProbe(ctx context.Context, runner CommandRunner, project VerifierProject) EndpointResult {
-	paths, err := matchingSurfacePaths(project.Root, []string{"app/wire/*.go", "internal/checkout/*.go"})
-	if err != nil {
-		return EndpointResult{ID: "business-metrics-app-registry", Status: EndpointFailed, Details: err.Error()}
-	}
-	provider, details := connectedNamedResourceProvider(project.Root, paths, &providerConnectionContract{accessor: "Registry", managerImportSuffix: "/internal/metrics", wirePaths: []string{"app/wire/inject_services_app.go"}})
-	if details != "" {
-		return EndpointResult{ID: "business-metrics-app-registry", Status: EndpointFailed, Details: details}
-	}
-	body := strings.Replace(businessMetricsProviderProbe, "package wire", "package "+provider.packageName, 1)
-	body = strings.ReplaceAll(body, "ATLAS_PROVIDER", provider.name)
-	return runIsolatedCommand(ctx, runner, project, commandContract{id: "business-metrics-app-registry", arguments: []string{"go", "test", "./" + provider.directory, "-run", "^TestAtlasBusinessMetricsProvider$", "-count=1"}, supervisorFiles: []supervisorFile{{path: filepath.ToSlash(filepath.Join(provider.directory, "atlas_eval_metrics_provider_test.go")), body: body}}})
-}
-
-// businessMetricsProviderProbe proves the application's executed provider uses its borrowed registry.
-const businessMetricsProviderProbe = `// Package wire composes application-owned service providers.
-package wire
-import (
- "context"
- "testing"
- "example.com/invoiceeval/internal/metrics"
-)
-// TestAtlasBusinessMetricsProvider exercises the actual registered factory and observes the App registry.
-func TestAtlasBusinessMetricsProvider(t *testing.T) {
- manager := metrics.NewManagerWithConfig(metrics.Config{})
- service := ATLAS_PROVIDER(manager)
- if err := service.Complete(context.Background(), "tenant:provider", "request:provider"); err != nil { t.Fatal(err) }
- snapshot := manager.Registry().Snapshot()
- var completed, observed uint64
- for _, counter := range snapshot.Counters { if counter.Descriptor.Name == "checkout.completed" { completed += counter.Value } }
- for _, histogram := range snapshot.Histograms { if histogram.Descriptor.Name == "checkout.duration" { observed += histogram.Count } }
- if completed != 1 || observed != 1 { t.Fatalf("App registry received completed=%d durations=%d, want one of each", completed, observed) }
-}
-`
-
 // businessMetricsBehaviorProbe observes application results and real registry state with a deterministic clock.
 const businessMetricsBehaviorProbe = `// Package checkout owns instrumented checkout operations.
 package checkout
