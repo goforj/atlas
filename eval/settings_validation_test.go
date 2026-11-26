@@ -37,7 +37,7 @@ func TestSettingsValidationContractPreservesHistoricEvaluation(t *testing.T) {
 
 // TestSettingsValidationProbeParses keeps supervisor-owned executable evidence valid before Project calibration.
 func TestSettingsValidationProbeParses(t *testing.T) {
-	if _, err := parser.ParseFile(token.NewFileSet(), "probe_test.go", settingsValidationBehaviorProbe, parser.AllErrors); err != nil {
+	if _, err := parser.ParseFile(token.NewFileSet(), "probe_test.go", settingsValidationBehaviorProbe+settingsRequiredNamePolicyProbe, parser.AllErrors); err != nil {
 		t.Fatal(err)
 	}
 	for _, source := range []string{settingsAppRuntimeProbe + appResourceRuntimeHelpers, settingsAppRuntimeCommand} {
@@ -120,5 +120,59 @@ func TestSettingsValidationOwningCompositionTests(t *testing.T) {
 				t.Fatalf("ownership/behavior for %s = %#v, commands=%d", test.path, result.Checks, len(runner.commands))
 			}
 		})
+	}
+}
+
+// TestSettingsLibraryPathAcceptsStandardJSONDecoder keeps binding strategy separate from validation library adoption.
+func TestSettingsLibraryPathAcceptsStandardJSONDecoder(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "internal", "settings"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	sources := map[string]string{
+		"controller.go": `// Package settings supplies application validation source evidence.
+package settings
+import (
+ "encoding/json"
+ "github.com/goforj/web"
+)
+// Controller keeps transport decoding separate from application validation.
+type Controller struct { service *Service }
+// Patch accepts ordinary JSON decoding before invoking the shared policy.
+func (controller *Controller) Patch(request web.Context) error {
+ var input PatchInput
+ if err:=json.NewDecoder(request.Request().Body).Decode(&input);err!=nil {return err}
+ _,err:=controller.service.Update(request.Context(),input)
+ return err
+}
+`,
+		"service.go": `// Package settings supplies application validation source evidence.
+package settings
+import (
+ "context"
+ "github.com/goforj/validation"
+)
+// Settings reserves the application result shape.
+type Settings struct{}
+// PatchInput preserves supplied name values for shared validation.
+type PatchInput struct { Name validation.Input[string] }
+// Service requires the injected name policy.
+type Service struct { check func(context.Context,string)error }
+// Update invokes reusable policy before applying state.
+func (service *Service) Update(ctx context.Context,input PatchInput) (Settings,error) { return Settings{},service.ValidatePatch(ctx,input) }
+// ValidatePatch executes real library fields with the caller context.
+func (service *Service) ValidatePatch(ctx context.Context,input PatchInput) error {
+ return validation.ValidateContext(ctx,validation.Presence("name",input.Name,func(value string)validation.Field{return validation.String("",value).Check(service.check)}))
+}
+`,
+	}
+	for name, body := range sources {
+		if err := os.WriteFile(filepath.Join(root, "internal", "settings", name), []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := verifySurfaceSource(root, settingsValidationContract().sources[0])
+	if check.Status != EndpointPassed {
+		t.Fatalf("standard decoder library attribution=%#v", check)
 	}
 }
