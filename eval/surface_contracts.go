@@ -46,7 +46,7 @@ func promotedSurfaceContracts() []surfaceContract {
 		{
 			id:                  "checkout-business-metrics/v1",
 			allowedChanges:      []string{"internal/checkout/*.go", "app/wire/inject_services_app.go", "app/lifecycle.go"},
-			qualityTestPatterns: []string{"internal/checkout/*_test.go", "internal/http/metrics_test.go"},
+			qualityTestPatterns: []string{"internal/checkout/*_test.go", "internal/http/metrics_test.go", "app/wire/*_test.go", "app/lifecycle_test.go"},
 			sources: []sourceContract{
 				{id: "metrics-library-adoption", kind: RequirementQuality, paths: []string{"internal/checkout/*.go"}, stringLiterals: []string{"github.com/goforj/metrics"}},
 				{id: "metrics-registry-connection", paths: []string{"app/wire/*.go", "internal/checkout/*.go"}, providerConnection: &providerConnectionContract{accessor: "Registry", managerImportSuffix: "/internal/metrics", wirePaths: []string{"app/wire/inject_services_app.go"}}},

@@ -73,6 +73,9 @@ func TestBusinessMetricsOwnsAppCompositionAndScrapeTests(t *testing.T) {
 	}{
 		{"app/lifecycle.go", EndpointPassed},
 		{"internal/http/metrics_test.go", EndpointPassed},
+		{"app/wire/checkout_test.go", EndpointPassed},
+		{"app/lifecycle_test.go", EndpointPassed},
+		{"app/wire/unrelated_controller.go", EndpointFailed},
 		{"internal/http/metrics.go", EndpointFailed},
 		{"internal/http/server.go", EndpointFailed},
 		{"app/routes.go", EndpointFailed},
