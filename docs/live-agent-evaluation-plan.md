@@ -515,3 +515,7 @@ Preparation stages the existing dependency graph before candidate execution,
 with shell networking disabled for the candidate. Golden calibration rejects
 compiling plaintext-storage and dropped-previous-key mutants. The contract has
 no retained live provider attempts and changes no historical evaluation grade.
+
+## Tax-rate resilience calibration
+
+`harden-tax-rate-client/v1` preserves the original outbound-client contract and adds a separate task over the existing prepared v2.0.1 client. Dependency installation is outside candidate execution; generated App defaults and their v1 dependency pin remain unchanged. Local HTTP probes count recovery and exhaustion attempts, reject retries outside 502/503, verify escaped paths and typed status/decoding errors, and exercise pre-canceled, in-flight canceled, and deadline-limited callers. A required App runtime gate injects the configured client into an existing generated command and verifies recovery, exhaustion, and permanent-status request counts against a controlled local server. Library selection is a separate quality observation. GoForj owns the reusable golden and compiling semantic-mutant calibration. No paid provider attempts or new benchmark claims are required.

@@ -570,6 +570,8 @@ func workflowFiles(workflowID string, layout layout) []string {
 		return []string{".goforj.yml", ".env", layout.composition + "/search.go", "internal/searches/manager_gen.go", "internal/searches/accessors_gen.go", "internal/<domain>/service.go", "internal/<domain>/service_test.go", layout.wire + "/inject_services_app.go"}
 	case "goforj-feature-rollouts":
 		return []string{".goforj.yml", ".env", "internal/features/manager_gen.go", "internal/features/accessors_gen.go", "internal/<domain>/service.go", "internal/<domain>/service_test.go", layout.wire + "/inject_services_app.go"}
+	case "goforj-http-client-resilience":
+		return []string{"internal/<domain>/client.go", "internal/<domain>/client_test.go", layout.wire + "/inject_services_app.go"}
 	case "goforj-add-http-route":
 		return []string{"internal/<domain>/controller.go", "internal/<domain>/service.go", "internal/<domain>/repository.go", layout.composition + "/routes.go", layout.wire + "/inject_http_controllers_app.go", layout.wire + "/inject_services_app.go", layout.wire + "/inject_repositories_app.go"}
 	case "goforj-add-app-command":
@@ -641,6 +643,8 @@ func workflowWarnings(workflowID string) []string {
 		return []string{"Read goforj-catalog-search before choosing lexical search; preserve the database as durable truth.", "Declare App-owned schemas, provision explicitly before initialization, and reuse generated named accessors; do not invent make:search.", "Wait for mutation visibility and inspect terminal outcomes; highlights remain untrusted text."}
 	case "goforj-feature-rollouts":
 		return []string{"Read goforj-feature-rollouts and verify the pinned GoForj version supports the optional feature component before enabling or generating it.", "Configure evaluator resources with FEATURE_* settings; flag names remain dynamic source definitions, and App lifecycle owns initial loading and refresh.", "Use Enabled for ordinary boolean checks. Capture Snapshot() before targeting when related decisions must share one configuration revision and evaluation time; For(target) alone does not freeze configuration, and flags do not replace authorization."}
+	case "goforj-http-client-resilience":
+		return []string{"Inspect the actual Project HTTP client pin before selecting APIs; do not blindly upgrade v1 to v2.", "Bound retries per operation and preserve caller cancellation, typed errors, and non-idempotent request behavior."}
 	case "goforj-add-job":
 		return []string{"Keep queue payloads small and typed.", "Delegate business behavior to services from the job handler."}
 	case "goforj-add-job-schedule":

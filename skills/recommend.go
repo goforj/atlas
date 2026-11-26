@@ -27,6 +27,7 @@ func Recommended(p project.Project) []Skill {
 		"goforj-multi-app-change":       len(p.Apps) > 1,
 		"goforj-validate-change":        true,
 		"goforj-notification-delivery":  true,
+		"goforj-http-client-resilience": true,
 	}
 	enabled["goforj-environment-configuration"] = true
 	enabled["goforj-payload-encryption"] = true

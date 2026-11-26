@@ -16,6 +16,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 		{ID: "goforj-patch-customer-settings/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-settings-boundary", "Inspect prepared settings state and shared validation policy.", "internal/settings/**", "go.mod")}},
 		{ID: "goforj-configure-dispatch-startup/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-startup-configuration", "Inspect the existing typed provider and App composition before changing startup policy.", "internal/dispatch/**", "app/lifecycle.go", "app/wire/**")}},
 		{ID: "goforj-encrypt-partner-payloads/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-payload-boundary", "Inspect the repository, cipher seam, compatibility vector, and App composition before protecting stored payloads.", "internal/partnerpayloads/**", "app/lifecycle.go", "app/wire/**")}},
+		{ID: "goforj-harden-tax-rate-client/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-http-client-policy", "Inspect the existing client, Project pin, and provider before changing retry semantics.", "internal/taxrates/**", "go.mod", "app/wire/**")}},
 		promotedGeneratorWorkflow("goforj-add-app-command/v1", "generate-invoice-command", "make:command", "invoices:show"),
 		promotedGeneratorWorkflow("goforj-add-job/v1", "generate-receipt-job", "make:job", "invoices:receipt"),
 		promotedGeneratorWorkflow("goforj-add-migration/v1", "generate-invoice-status-migration", "make:migration", "add_status_to_invoices"),
