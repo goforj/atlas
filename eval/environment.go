@@ -74,6 +74,10 @@ func atlasDispatchCases() map[string]atlasDispatchCase {
 // TestAtlasDispatchEnvironmentBehavior gives each loader-precedence case a fresh process and private files.
 func TestAtlasDispatchEnvironmentBehavior(t *testing.T) {
  executable,err := os.Executable(); if err != nil { t.Fatal(err) }
+ t.Run("bounded-child-output",func(t *testing.T) {
+  output,err:=atlasRunDispatchChild(t,executable,t.TempDir(),append(os.Environ(),"ATLAS_DISPATCH_NOISY_CHILD=1"),"-test.run=^TestAtlasDispatchEnvironmentNoisyChild$")
+  if err==nil || !strings.Contains(err.Error(),"output exceeds") || len(output)>1<<20 {t.Fatalf("noisy child was not bounded: bytes=%d error=%v",len(output),err)}
+ })
  for name,test := range atlasDispatchCases() { t.Run(name,func(t *testing.T) {
   root := t.TempDir()
   if err := os.WriteFile(filepath.Join(root,".env"),[]byte("APP_ENV=local\n"+test.file),0600); err != nil { t.Fatal(err) }
@@ -84,11 +88,25 @@ func TestAtlasDispatchEnvironmentBehavior(t *testing.T) {
   }
   environment = append(environment,"APP_ENV=local","ENV_DEBUG=0","ATLAS_DISPATCH_CASE="+name)
   environment = append(environment,test.process...)
-  command := exec.CommandContext(t.Context(),executable,"-test.run=^TestAtlasDispatchEnvironmentChild$","-test.count=1")
-  command.Dir = root
-  command.Env = environment
-  if output,err := command.CombinedOutput(); err != nil { t.Fatalf("isolated startup failed: %v\n%s",err,output) }
+  if output,err := atlasRunDispatchChild(t,executable,root,environment,"-test.run=^TestAtlasDispatchEnvironmentChild$","-test.count=1"); err != nil { t.Fatalf("isolated startup failed: %v\n%s",err,output) }
  }) }
+}
+
+// atlasRunDispatchChild bounds candidate-controlled startup output before retaining it in the supervisor process.
+func atlasRunDispatchChild(t *testing.T, executable, root string, environment []string, args ...string) (string,error) {
+ t.Helper()
+ ctx,cancel:=context.WithCancel(t.Context()); defer cancel()
+ command:=exec.CommandContext(ctx,executable,args...); command.Dir=root;command.Env=environment;command.WaitDelay=2*time.Second
+ output:=&atlasResourceOutput{cancel:cancel};command.Stdout=output;command.Stderr=output
+ err:=command.Run()
+ if output.exceeded {return output.body.String(),fmt.Errorf("dispatch child output exceeds %d bytes",1<<20)}
+ return output.body.String(),err
+}
+
+// TestAtlasDispatchEnvironmentNoisyChild exercises the real subprocess ceiling without trusting candidate output volume.
+func TestAtlasDispatchEnvironmentNoisyChild(t *testing.T) {
+ if os.Getenv("ATLAS_DISPATCH_NOISY_CHILD")!="1" {t.Skip("invoked by supervisor output calibration")}
+ for {fmt.Print(strings.Repeat("x",32<<10))}
 }
 
 // TestAtlasDispatchEnvironmentChild verifies the provider and the real generated Wire initialization path.
