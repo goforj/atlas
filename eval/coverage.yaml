@@ -205,6 +205,11 @@ capabilities:
     summary: Execute lexical catalog search with typed category isolation, stable pagination, and confirmed update visibility.
     tier: core
     evaluations: [catalog-search]
+  - id: libraries.environment-startup
+    area: libraries
+    summary: Compose required typed startup settings with process precedence and safe diagnostics.
+    tier: extended
+    evaluations: [configure-dispatch-startup]
   - id: libraries.feature-rollout
     area: libraries
     summary: Stable tenant targeting, fallback, and consistent request snapshots.

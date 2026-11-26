@@ -483,3 +483,18 @@ also preserve adequate simple checks and explicit existing validators.
 The companion golden calibration rejects compiling context-loss and false-loss
 mutants. This contract has deterministic calibration only. No provider session
 or treatment-effect measurement is implied.
+
+## Typed startup configuration diagnostic
+
+`configure-dispatch-startup/v1` uses an application-owned dispatch Config and the
+Project's installed env/v2 dependency. The provider rejects missing or invalid
+required values before Wire composition completes, while optional duration and
+boolean parse failures deliberately use the installed getter fallbacks.
+Supervisor-owned fresh-process cases verify process/file precedence, explicit
+empty process values, bounded parsing, safe String/GoString diagnostics, and
+immutable service snapshots through the real InitializeApplication path.
+Source API attribution is a separate quality observation and does not gate
+application behavior. Dependency installation is outside the candidate task;
+preparation stages the existing module graph and candidate shell networking is
+disabled. Golden calibration rejects compiling missing-token and changed-default
+mutants. This contract has no retained provider measurements.
