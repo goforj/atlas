@@ -45,8 +45,8 @@ func promotedSurfaceContracts() []surfaceContract {
 		},
 		{
 			id:                  "harden-tax-rate-client/v1",
-			allowedChanges:      []string{"internal/taxrates/*.go", "app/wire/inject_services_app.go"},
-			qualityTestPatterns: []string{"internal/taxrates/*_test.go"},
+			allowedChanges:      []string{"internal/taxrates/*.go", "app/wire/inject_services_app.go", "app/wire/*_test.go"},
+			qualityTestPatterns: []string{"internal/taxrates/*_test.go", "app/wire/*_test.go"},
 			sources: []sourceContract{
 				{id: "httpx-client-selection", kind: RequirementQuality, paths: []string{"internal/taxrates/*.go"}, stringLiterals: []string{"github.com/goforj/httpx/v2"}, selectorCalls: []string{"GetCtx"}},
 			},

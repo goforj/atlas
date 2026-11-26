@@ -114,3 +114,26 @@ func TestTaxRateAppRuntimeSourcesParse(t *testing.T) {
 		}
 	}
 }
+
+// TestTaxRateAppCompositionTestsStayInScope accepts provider regression tests without expanding production ownership.
+func TestTaxRateAppCompositionTestsStayInScope(t *testing.T) {
+	var contract surfaceContract
+	for _, candidate := range promotedSurfaceContracts() {
+		if candidate.id == "harden-tax-rate-client/v1" {
+			contract = candidate
+		}
+	}
+	for _, test := range []struct {
+		path string
+		want EndpointStatus
+	}{
+		{"app/wire/taxrates_test.go", EndpointPassed},
+		{"app/wire/unrelated.go", EndpointFailed},
+		{"internal/runtime/override.go", EndpointFailed},
+	} {
+		result := verifySurfaceOwnership([]ProjectChange{{Path: test.path, After: ProjectPathState{Kind: "file"}}}, contract.allowedChanges)
+		if result.Status != test.want {
+			t.Fatalf("ownership %s = %s", test.path, result.Status)
+		}
+	}
+}
