@@ -88,7 +88,7 @@ func init() {
 		steps: []PlanStep{
 			{Action: "enable notification for the owning App in .goforj.yml and declare NOTIFICATION_* resources in .env and its App overlay", Purpose: "keep configured sender membership scoped to its owner while inheriting root resources"},
 			{Action: "{forj} generate --notification", Purpose: "generate the manager and typed sender accessors from the Project snapshot"},
-			{Action: "inject notifications.Manager or its selected Sender into the App service; use App.Notifications() for App access", Purpose: "borrow framework-owned senders without creating hidden queues, retries, fallback, or fanout"},
+			{Action: "register the application provider in {wire}/inject_services_app.go, inject *notifications.Manager, and pass its selected Sender values to the service; leave generated manager construction and cleanup to the framework", Purpose: "borrow framework-owned senders without creating hidden queues, retries, fallback, or fanout"},
 			{Action: "test message data, caller cancellation, sender errors, and explicit primary/fallback acceptance policy using injected senders", Purpose: "avoid duplicate notifications when primary acceptance is uncertain"},
 		},
 		files:    []string{".goforj.yml", ".env", "internal/notifications/manager_gen.go", "internal/notifications/accessors_gen.go", "internal/<domain>/alert_service.go", "internal/<domain>/alert_service_test.go", "{wire}/inject_services_app.go", "{composition}/app.go"},

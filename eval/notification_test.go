@@ -30,7 +30,7 @@ func TestIncidentEvaluationPromotesNaturalAcceptanceTask(t *testing.T) {
 			t.Errorf("prompt leaks %q", leaked)
 		}
 	}
-	for _, term := range []string{"NewAlertService", "NewConfiguredAlertService(manager)", "Primary()", "Secondary()", "Notify(ctx, Incident)", "Unknown acceptance", "dependency installation is outside"} {
+	for _, term := range []string{"NewAlertService", "NewConfiguredAlertService(notifications *notifications.Manager)", "Primary()", "Secondary()", "Notify(ctx, Incident)", "Unknown acceptance", "dependency installation is outside"} {
 		if !strings.Contains(definition.Prompt, term) {
 			t.Errorf("prompt omits %q", term)
 		}
