@@ -54,3 +54,13 @@ func TestBusinessMetricsLocalProviderRegistrationRequiresSameDirectory(t *testin
 		t.Fatal("sibling factory satisfied local registration")
 	}
 }
+
+// TestBusinessMetricsAppRuntimeSources preserves compilable supervisor command and active App coverage.
+func TestBusinessMetricsAppRuntimeSources(t *testing.T) {
+	contract := appResourceRuntimeContract("business-metrics-app-runtime", "checkout", businessMetricsAppRuntimeProbe, businessMetricsAppRuntimeCommand)
+	for path, source := range map[string]string{"probe_test.go": contract.supervisorFiles[0].body, "command.go": businessMetricsAppRuntimeCommand} {
+		if _, err := parser.ParseFile(token.NewFileSet(), path, source, parser.ParseComments); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

@@ -47,7 +47,6 @@ type textExclusion struct {
 type sourceContract struct {
 	kind                 RequirementKind
 	id                   string
-	kind                 RequirementKind
 	paths                []string
 	identifiers          []string
 	identifierChoices    [][]string

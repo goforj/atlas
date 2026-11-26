@@ -52,6 +52,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				{id: "metrics-registry-connection", paths: []string{"app/wire/*.go", "internal/checkout/*.go"}, providerConnection: &providerConnectionContract{accessor: "Registry", managerImportSuffix: "/internal/metrics", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
 			commands: standardSurfaceCommands(
+				appResourceRuntimeContract("business-metrics-app-runtime", "checkout", businessMetricsAppRuntimeProbe, businessMetricsAppRuntimeCommand),
 				commandContract{id: "business-metrics-behavior", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasBusinessMetricsBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_metrics_test.go", body: businessMetricsBehaviorProbe}, {path: "internal/checkout/atlas_eval_prometheus_test.go", body: businessMetricsPrometheusProbe}}},
 				commandContract{id: "business-metrics-app-registry", probe: runBusinessMetricsProviderProbe},
 			),
