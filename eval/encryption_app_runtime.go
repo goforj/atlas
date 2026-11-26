@@ -20,17 +20,22 @@ func TestAtlasResourceApp(t *testing.T) {
  root := atlasAppRoot(t)
  key := func(value byte) string { return "base64:" + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{value},32)) }
  environment := []string{"APP_KEY="+key(0x22),"APP_PREVIOUS_KEYS="+key(0x11)}
+ if output,err := atlasRunResourceTool(t,root,environment,"forj","build"); err != nil { t.Fatalf("build original encryption App: %v\n%s",err,output) }
+ assertInvalidKeys := func(t *testing.T) {
+  for _,environment := range [][]string{
+   {"APP_KEY=", "APP_PREVIOUS_KEYS="},
+   {"APP_KEY=base64:???", "APP_PREVIOUS_KEYS="},
+   {"APP_KEY="+key(0x22), "APP_PREVIOUS_KEYS=base64:???"},
+  } {
+   output,err := atlasRunResourceApp(t,root,environment)
+   if err == nil { t.Fatal("invalid configured App reached readiness") }
+   for _,entry := range environment { value := strings.SplitN(entry,"=",2)[1]; if value != "" && strings.Contains(output,value) { t.Fatal("App key failure exposed configured key material") } }
+  }
+ }
+ t.Run("original-App-readiness",assertInvalidKeys)
  atlasBuildResourceApp(t,root,environment)
  if output,err := atlasRunResourceApp(t,root,environment); err != nil { t.Fatalf("configured encryption App failed: %v\n%s",err,output) }
- for _,environment := range [][]string{
-  {"APP_KEY=", "APP_PREVIOUS_KEYS="},
-  {"APP_KEY=base64:???", "APP_PREVIOUS_KEYS="},
-  {"APP_KEY="+key(0x22), "APP_PREVIOUS_KEYS=base64:???"},
- } {
-  output,err := atlasRunResourceApp(t,root,environment)
-  if err == nil { t.Fatal("invalid configured App reached readiness") }
-  for _,entry := range environment { value := strings.SplitN(entry,"=",2)[1]; if value != "" && strings.Contains(output,value) { t.Fatal("App key failure exposed configured key material") } }
- }
+ t.Run("consumed-App-readiness",assertInvalidKeys)
 }
 `
 
