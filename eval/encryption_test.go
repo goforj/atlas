@@ -15,6 +15,9 @@ func TestPartnerPayloadEncryptionEvaluationResolves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(definition.Prompt, "Already-canceled calls must return that cancellation without invoking the cipher or repository") {
+		t.Fatal("pre-canceled no-work boundary missing from natural task")
+	}
 	registry, err := NewRegistry(PromotedWorkflows(), PromotedVerifiers(&fakeCommandRunner{}))
 	if err != nil {
 		t.Fatal(err)

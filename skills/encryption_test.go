@@ -58,3 +58,10 @@ func TestEncryptionSkillNativeProjections(t *testing.T) {
 		})
 	}
 }
+
+// TestPayloadCancellationGuidanceStatesTheNoWorkBoundary preserves cancellation intent without prescribing service implementation.
+func TestPayloadCancellationGuidanceStatesTheNoWorkBoundary(t *testing.T) {
+	if !strings.Contains(payloadEncryption, "already canceled") || !strings.Contains(payloadEncryption, "before invoking the cipher or repository") {
+		t.Fatal("pre-canceled no-work behavior omitted")
+	}
+}
