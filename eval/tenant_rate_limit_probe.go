@@ -22,13 +22,13 @@ const tenantRateLimitBehaviorProbe = `package requests
 
 import (
  "context"
+ "crypto/rand"
  "errors"
  "encoding/json"
  "io"
  "net/http"
  "net/http/httptest"
  "os"
- "path/filepath"
  "strconv"
  "sync"
  "testing"
@@ -48,7 +48,7 @@ type atlasRequestFailure struct { cachecore.Store }
 // Increment makes failure policy deterministic without depending on network retry timing.
 func (store atlasRequestFailure) Increment(context.Context,string,int64,time.Duration)(int64,error) { return 0,errors.New("counter unavailable") }
 
-// atlasRequestCaches opens independent framework resources against one Redis protocol endpoint.
+// atlasRequestCaches opens independent framework resources in a private namespace on one Redis endpoint.
 func atlasRequestCaches(t *testing.T) (*cache.Cache,*cache.Cache,*miniredis.Miniredis) {
  t.Helper()
  address:=os.Getenv("ATLAS_RATE_LIMIT_REDIS_ADDR")
@@ -57,7 +57,7 @@ func atlasRequestCaches(t *testing.T) (*cache.Cache,*cache.Cache,*miniredis.Mini
  t.Setenv("CACHE_DRIVER","memory")
  t.Setenv("CACHE_REQUESTS_DRIVER","redis")
  t.Setenv("CACHE_REQUESTS_ADDR",address)
- t.Setenv("CACHE_REQUESTS_PREFIX","atlas-"+filepath.Base(t.TempDir()))
+ t.Setenv("CACHE_REQUESTS_PREFIX","atlas-"+rand.Text())
  first,err:=caches.NewManager();if err!=nil{t.Fatal(err)}
  second,err:=caches.NewManager();if err!=nil{t.Fatal(err)}
  return first.Requests(),second.Requests(),server

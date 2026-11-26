@@ -24,6 +24,7 @@ func tenantRateLimitAppRuntimeContract() commandContract {
 const tenantRateLimitAppRuntimeProbe = `package requests
 import (
  "context"
+ "crypto/rand"
  "fmt"
  "io"
  "net"
@@ -87,7 +88,8 @@ func TestAtlasResourceApp(t *testing.T) {
  if err!=nil || !strings.Contains(string(info[:size]),"redis_version:") { t.Fatalf("native Redis INFO server: %v %q",err,info[:size]) }
  proxyAddress,disconnect:=atlasNativeRedisProxy(t)
  root := atlasAppRoot(t)
- environment := []string{"CACHE_DRIVER=memory","CACHE_REQUESTS_DRIVER=redis","CACHE_REQUESTS_ADDR="+proxyAddress,"CACHE_REQUESTS_PREFIX=atlas-app-"+filepath.Base(t.TempDir())}
+ // Concurrent verifier pairs share native Redis but must never share their counters.
+ environment := []string{"CACHE_DRIVER=memory","CACHE_REQUESTS_DRIVER=redis","CACHE_REQUESTS_ADDR="+proxyAddress,"CACHE_REQUESTS_PREFIX=atlas-app-"+rand.Text()}
  atlasBuildResourceApp(t,root,environment)
  binary := filepath.Join(t.TempDir(),"atlas-app")
  if output,err := atlasRunResourceTool(t,root,environment,"go","build","-o",binary,"./cmd/app");err!=nil { t.Fatalf("compile HTTP App: %v\n%s",err,output) }
