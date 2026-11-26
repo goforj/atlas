@@ -13,10 +13,16 @@ import (
  "net"
  "net/http"
  "encoding/json"
+ "io"
  "fmt"
 )
 // TestAtlasResourceApp requires the actual App router to preserve presence and stable field errors.
 func TestAtlasResourceApp(t *testing.T) {
+ t.Run("bounded-http-response",func(t *testing.T) {
+  var got any
+  err:=atlasDecodeSettingsResponse(strings.NewReader(strings.Repeat("x",8193)),&got)
+  if err==nil || !strings.Contains(err.Error(),"response exceeds") {t.Fatalf("oversized response was not rejected: %v",err)}
+ })
  root := atlasAppRoot(t)
  listener,err := net.Listen("tcp","127.0.0.1:0"); if err != nil { t.Fatal(err) }
  port := listener.Addr().(*net.TCPAddr).Port; listener.Close()
@@ -45,11 +51,17 @@ func TestAtlasResourceApp(t *testing.T) {
   request,_ := http.NewRequest(http.MethodPatch,url,strings.NewReader(test.body)); request.Header.Set("Content-Type","application/json")
   response,err := client.Do(request); if err != nil { t.Fatal(err) }
   var body struct { Name string; Limit int; Enabled bool; Note *string; Error string; Fields map[string]string }
-  err = json.NewDecoder(response.Body).Decode(&body); response.Body.Close()
+  err = atlasDecodeSettingsResponse(response.Body,&body); response.Body.Close()
   if err != nil || response.StatusCode != test.status { t.Fatalf("App PATCH status=%d body=%#v error=%v",response.StatusCode,body,err) }
   if test.status==200 && (body.Name!="Existing" || body.Limit!=0 || body.Enabled || body.Note!=nil) { t.Fatalf("App presence/state=%#v",body) }
   if test.status==422 && (body.Error!="validation_failed" || body.Fields["limit"]!=test.code) { t.Fatalf("App field errors=%#v",body) }
  }
+}
+// atlasDecodeSettingsResponse rejects oversized candidate-controlled bodies before JSON decoding can allocate from them.
+func atlasDecodeSettingsResponse(body io.Reader, target any) error {
+ data,err:=io.ReadAll(io.LimitReader(body,8193));if err!=nil {return err}
+ if len(data)>8192 {return fmt.Errorf("settings response exceeds %d bytes",8192)}
+ return json.Unmarshal(data,target)
 }
 `
 
