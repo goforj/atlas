@@ -104,3 +104,13 @@ func TestTaxRateResilienceCompletionMarkerKeepsEveryProbeSelected(t *testing.T) 
 		t.Fatalf("probe tests = %d", checked)
 	}
 }
+
+// TestTaxRateAppRuntimeSourcesParse checks the supervisor's nested programs before rendered calibration.
+func TestTaxRateAppRuntimeSourcesParse(t *testing.T) {
+	contract := appResourceRuntimeContract("tax-rate-app-runtime", "taxrates", taxRateAppRuntimeProbe, taxRateAppRuntimeCommand)
+	for name, source := range map[string]string{"app_test.go": contract.supervisorFiles[0].body, "command.go": taxRateAppRuntimeCommand} {
+		if _, err := parser.ParseFile(token.NewFileSet(), name, source, parser.AllErrors); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

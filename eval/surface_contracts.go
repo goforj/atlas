@@ -54,7 +54,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				id:              "tax-rate-resilience-behavior",
 				arguments:       []string{"go", "test", "./internal/taxrates", "-run", "^TestAtlasTaxRateResilience(Counts|PreCanceled|InFlightCancel|InFlightDeadline)$", "-count=1"},
 				supervisorFiles: []supervisorFile{{path: "internal/taxrates/atlas_eval_resilience_test.go", body: taxRateResilienceBehaviorProbe}},
-			}),
+			}, appResourceRuntimeContract("tax-rate-app-runtime", "taxrates", taxRateAppRuntimeProbe, taxRateAppRuntimeCommand)),
 		},
 		{
 			id:             "add-app-command/v1",
