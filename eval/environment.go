@@ -10,12 +10,15 @@ func dispatchEnvironmentContract() surfaceContract {
 			{id: "dispatch-config-composition", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"LoadConfig", "NewService"}},
 			{id: "dispatch-env-api", kind: RequirementQuality, paths: []string{"internal/dispatch/*.go"}, stringLiterals: []string{"github.com/goforj/env/v2"}, declarations: []declarationContract{{name: "LoadConfig", selectorCalls: []string{"Load", "WithPrefix", "GetInt", "GetDuration", "GetBool"}}}},
 		},
-		commands: append(standardSurfaceCommands(commandContract{
-			id:              "dispatch-startup-behavior",
-			arguments:       []string{"go", "test", "./internal/dispatch", "-run", "^TestAtlasDispatchEnvironmentBehavior$", "-count=1"},
-			supervisorFiles: []supervisorFile{{path: "internal/dispatch/atlas_eval_environment_test.go", body: dispatchEnvironmentProbe}},
-		}), appResourceRuntimeContract("dispatch-app-runtime", "dispatch", dispatchEnvironmentProbe, dispatchAppRuntimeCommand)),
+		commands: append(standardSurfaceCommands(dispatchEnvironmentBehaviorContract()), appResourceRuntimeContract("dispatch-app-runtime", "dispatch", dispatchEnvironmentProbe, dispatchAppRuntimeCommand)),
 	}
+}
+
+// dispatchEnvironmentBehaviorContract shares supervised definitions while selecting only the independent loader cases.
+func dispatchEnvironmentBehaviorContract() commandContract {
+	contract := appResourceRuntimeContract("dispatch-startup-behavior", "dispatch", dispatchEnvironmentProbe, dispatchAppRuntimeCommand)
+	contract.arguments = []string{"go", "test", "./internal/dispatch", "-run", "^TestAtlasDispatchEnvironmentBehavior$", "-count=1"}
+	return contract
 }
 
 const dispatchEnvironmentProbe = `package dispatch_test
