@@ -1,0 +1,12 @@
+schema_version: 1
+id: target-feature-rollout
+summary: Add stable tenant checkout rollout decisions with request consistency.
+suite: core
+task_kind: feature
+project_scenario: tenant-checkout-rollout
+workflow: goforj-target-feature-rollout/v1
+verifier: target-feature-rollout/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off
