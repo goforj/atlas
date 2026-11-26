@@ -467,3 +467,6 @@ The `instrument-checkout-metrics` contract adds business instrumentation to a pr
 
 
 The business metrics App check now consumes the submitted service and framework manager through the generated App's active Wire graph. The former direct factory probe and its manager-only factory signature restriction were removed: those existed solely to call a candidate provider from supervisor code. The domain `NewService` and `Complete` contracts, required counter and histogram behavior, errors, cancellation, bounded labels, and real Prometheus values remain unchanged. A detached registry and a correct factory retained only in an unused Wire set must fail the required App runtime check. Factories may receive ordinary additional injected collaborators.
+
+
+A fresh native metrics attempt exposed an overly narrow ownership boundary: consuming the service through the render-once App lifecycle and extending the existing HTTP metrics regression test are legitimate integration work. Those two exact paths are now accepted. Runtime HTTP implementation edits remain outside this task, generated Wire output must still match regeneration, and detached registries must still fail the App registry check. The original attempt remains retained as a scope failure and is not regraded.

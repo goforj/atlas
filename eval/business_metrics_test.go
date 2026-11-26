@@ -56,3 +56,32 @@ func TestBusinessMetricsAppRuntimeSources(t *testing.T) {
 		}
 	}
 }
+
+// TestBusinessMetricsOwnsAppCompositionAndScrapeTests permits real App integration while protecting runtime implementation.
+func TestBusinessMetricsOwnsAppCompositionAndScrapeTests(t *testing.T) {
+	var contract surfaceContract
+	for _, candidate := range promotedSurfaceContracts() {
+		if candidate.id == "checkout-business-metrics/v1" {
+			contract = candidate
+			break
+		}
+	}
+	patterns := append(append([]string(nil), contract.allowedChanges...), contract.qualityTestPatterns...)
+	for _, test := range []struct {
+		path   string
+		status EndpointStatus
+	}{
+		{"app/lifecycle.go", EndpointPassed},
+		{"internal/http/metrics_test.go", EndpointPassed},
+		{"internal/http/metrics.go", EndpointFailed},
+		{"internal/http/server.go", EndpointFailed},
+		{"app/routes.go", EndpointFailed},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			result := verifySurfaceOwnership([]ProjectChange{{Path: test.path, After: ProjectPathState{Kind: "file"}}}, patterns)
+			if result.Status != test.status {
+				t.Fatalf("ownership %s=%#v, want %s", test.path, result, test.status)
+			}
+		})
+	}
+}
