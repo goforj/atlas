@@ -465,21 +465,39 @@ The supervisor records exact messages and caller context, primary acceptance, de
 The `target-feature-rollout` contract adds a prepared checkout request boundary with feature v0.1.0 installed by the supervisor. It measures integration and execution within that existing boundary, not unconstrained library discovery or candidate dependency installation. Required behavior covers tenant bucket stability, explicit missing-flag fallback, invalid-refresh retention, and captured configuration revision and evaluation time. Separate quality checks record the import, observed library calls, and candidate regression tests. The fixture now supplies a generated Checkout evaluator, and the service must resolve that typed accessor through its registered App provider. A supervisor-only helper binds the generated manager to controlled native sources and clocks after candidate writes are sealed; it does not add a framework constructor API. The framework resource tests separately exercise real file-backed startup, refresh, and shutdown. The GoForj companion scenario calibrates the golden implementation and compiling randomized-target and mixed-revision mutants without live provider sessions. Native API sources are linked from the always-recommended rollout skill while hosted feature documentation is prepared separately.
 ## Presence-aware validation diagnostic
 
-`patch-customer-settings/v1` adds an application-shaped PATCH task without changing
-`add-validated-write-endpoint/v1` or regrading its retained results. GoForj's
-`customer-settings-validation` preparation stages `github.com/goforj/validation`
-v0.2.0 before the candidate starts; dependency installation is outside this
-measurement, and candidate shell networking remains disabled.
+`patch-customer-settings/v1` adds a presence-aware PATCH task without changing
+`add-validated-write-endpoint/v1` or its retained results. The GoForj preparation
+stages validation v0.2.0 before the candidate starts. Probes cover omission,
+explicit null, zero/false, normalization, inclusive bounds, atomic failure,
+stable public codes, reusable policy, cancellation, and operational errors.
+The actual App HTTP gate resolves the submitted controller and service through
+the active Wire route registry. Response and subprocess output are bounded.
 
-Supervisor probes exercise omitted values, explicit null, supplied zero and
-false, normalization, inclusive bounds, atomic failure, stable public field
-codes, reusable service policy, cancellation, and operational rule failures.
-Library adoption has separate quality observations: syntax-bearing call-path
-checks and a runtime probe requiring real library issues from the executed
-application update. Those observations do not gate application behavior. Native
-HTTP projects receive the dedicated `goforj-validation` skill; its choice rules
-also preserve adequate simple checks and explicit existing validators.
+Library source attribution and executed library errors remain separate quality
+observations. Ordinary JSON decoding is accepted alongside framework binding.
+Required injected policy must not become an optional allow-all callback; the
+natural public contract states this, and an executable policy probe accepts
+fail-fast bad wiring while rejecting a compiling optional-policy-skip mutant.
+Calibration also rejects context loss, false-value loss, and a disconnected
+controller retained only in an unused Wire set while standalone behavior passes.
+Owning App Wire regression tests are permitted without allowing unrelated
+production source.
 
-The companion golden calibration rejects compiling context-loss and false-loss
-mutants. This contract has deterministic calibration only. No provider session
-or treatment-effect measurement is implied.
+A fresh native Codex `gpt-6.1-sol` sample with Atlas guidance passed every
+executable acceptance and eligible quality check on 2026-11-26 at Atlas
+`1c5ebb266f23` / GoForj `fd3f141a`. Its authenticated report includes actual App
+HTTP execution, library execution, real Atlas skill/MCP use, actor tests/build,
+and fail-fast required-policy behavior. An earlier sample at `edd897f14e1e` /
+`a13cd476` passed its original executable checks. Its valid standard JSON decoder
+exposed an overstrict Bind attribution proxy, and source review found a silently
+optional name-policy guard. That signed result is retained unchanged; the later
+sample used corrected attribution and clarified policy guidance.
+
+The second sample also retained three existing `custom_marshaler_schema`
+warnings for validation Input types. OpenAPI request fields remain unconstrained
+until explicit App-owned schema documentation is supplied; the presence-aware
+domain API and runtime behavior remain intact.
+
+These `unconfined-local` samples are diagnostic, with unavailable trusted
+isolation and file-read evidence. They do not establish authoritative framework
+outcomes, reliability, or a treatment effect, and do not regrade historical cases.
