@@ -16,7 +16,7 @@ func promotedSurfaceContracts() []surfaceContract {
 				id:              "incident-notification-behavior",
 				arguments:       []string{"go", "test", "./internal/incidents", "-run", "^TestAtlas(Configured)?IncidentNotificationBehavior$", "-count=1"},
 				supervisorFiles: []supervisorFile{{path: "internal/incidents/atlas_eval_notification_test.go", body: incidentNotificationBehaviorProbe}},
-			}),
+			}, appResourceRuntimeContract("notification-app-runtime", "incidents", notificationAppRuntimeProbe, notificationAppRuntimeCommand)),
 		},
 		{
 			id:             "add-app-command/v1",

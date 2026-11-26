@@ -208,6 +208,14 @@ func (runner VerifierCommands) Open(ctx context.Context, project VerifierProject
 	if err != nil {
 		return nil, errors.Join(err, removeVerifierOwnedTree(root), removeVerifierOwnedTree(stateRoot))
 	}
+	protected := environment[:0]
+	for _, entry := range environment {
+		name, _, _ := strings.Cut(entry, "=")
+		if name != "ATLAS_VERIFIER_GO" && name != "ATLAS_VERIFIER_FORJ" {
+			protected = append(protected, entry)
+		}
+	}
+	environment = append(protected, "ATLAS_VERIFIER_GO="+goExecutable, "ATLAS_VERIFIER_FORJ="+forjExecutable)
 	return &verifierCommandSession{
 		root:           root,
 		stateRoot:      stateRoot,
