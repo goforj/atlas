@@ -4,6 +4,9 @@ import (
 	"context"
 	"go/parser"
 	"go/token"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -63,5 +66,51 @@ func TestTenantRateLimitNativeEndpointRequiresLoopback(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// TestTenantNativeAppOutputBounds executes the exact supervisor sink at its boundary and under concurrent overflow.
+func TestTenantNativeAppOutputBounds(t *testing.T) {
+	actualGo, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	source := `package outputprobe
+import ("context";"strings";"sync")
+` + tenantNativeAppOutputSource
+	tests := `package outputprobe
+import ("strings";"sync";"sync/atomic";"testing")
+// TestOutputBoundary distinguishes the permitted ceiling from the first excess byte.
+func TestOutputBoundary(t *testing.T) {
+ var canceled atomic.Int32
+ output:=&atlasNativeAppOutput{cancel:func(){canceled.Add(1)}}
+ if n,err:=output.Write([]byte(strings.Repeat("x",1<<20)));err!=nil || n!=1<<20 {t.Fatal(n,err)}
+ if body,exceeded:=output.snapshot();len(body)!=1<<20 || exceeded || canceled.Load()!=0 {t.Fatal("boundary rejected")}
+ if n,err:=output.Write([]byte("overflow"));err!=nil || n!=8 {t.Fatal(n,err)}
+ if body,exceeded:=output.snapshot();len(body)!=1<<20 || !exceeded || canceled.Load()!=1 {t.Fatal("overflow not bounded and canceled")}
+}
+// TestConcurrentOutputAndSnapshots exercises the shared stdout and stderr ceiling during readiness inspection.
+func TestConcurrentOutputAndSnapshots(t *testing.T) {
+ var canceled atomic.Int32
+ output:=&atlasNativeAppOutput{cancel:func(){canceled.Add(1)}}
+ var workers sync.WaitGroup
+ for index:=0;index<32;index++ {
+  workers.Add(1)
+  go func(){defer workers.Done();output.Write([]byte(strings.Repeat("x",65536)));output.snapshot()}()
+ }
+ workers.Wait()
+ if body,exceeded:=output.snapshot();len(body)!=1<<20 || !exceeded || canceled.Load()==0 {t.Fatal("concurrent output escaped ceiling")}
+}
+`
+	for name, body := range map[string]string{"go.mod": "module example.test/outputprobe\n\ngo 1.26\n", "output.go": source, "output_test.go": tests} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	command := exec.CommandContext(t.Context(), actualGo, "test", "-count=1", ".")
+	command.Dir = root
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("generated output sink: %v\n%s", err, output)
 	}
 }

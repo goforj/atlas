@@ -16,7 +16,7 @@ func tenantRateLimitAppRuntimeContract() commandContract {
 	if err != nil || portErr != nil || number < 1 || number > 65535 || ip == nil || !ip.IsLoopback() {
 		address = ""
 	}
-	source := tenantRateLimitAppRuntimeProbe + "\nconst atlasRedisAddress = " + strconv.Quote(address) + "\n"
+	source := tenantRateLimitAppRuntimeProbe + tenantNativeAppOutputSource + "\nconst atlasRedisAddress = " + strconv.Quote(address) + "\n"
 	return appResourceRuntimeContract("tenant-rate-limit-app-runtime", "requests", source, tenantRateLimitAppRuntimeCommand)
 }
 
@@ -108,10 +108,13 @@ func TestAtlasResourceApp(t *testing.T) {
   command:=exec.CommandContext(ctx,binary,"hello:world")
   command.Dir=root;command.Env=append(append(os.Environ(),environment...),"ATLAS_APP_PORT="+port)
   command.WaitDelay=2*time.Second
-  log,err:=os.CreateTemp(t.TempDir(),"app-log-");if err!=nil {t.Fatal(err)}
-  command.Stdout=log;command.Stderr=log
-  if err:=command.Start();err!=nil {cancel();log.Close();t.Fatal(err)}
-  t.Cleanup(func(){cancel();_ = command.Wait();log.Close()})
+  output:=&atlasNativeAppOutput{cancel:cancel}
+  command.Stdout=output;command.Stderr=output
+  if err:=command.Start();err!=nil {cancel();t.Fatal(err)}
+  t.Cleanup(func(){
+   cancel();_ = command.Wait()
+   if _,exceeded:=output.snapshot();exceeded {t.Error("App output exceeds 1048576 bytes")}
+  })
   base:="http://127.0.0.1:"+port
   ready:=false
   deadline:=time.Now().Add(20*time.Second)
@@ -120,7 +123,7 @@ func TestAtlasResourceApp(t *testing.T) {
    if err==nil {io.Copy(io.Discard,response.Body);response.Body.Close();if response.StatusCode==http.StatusOK {ready=true;break}}
    select {case <-t.Context().Done():t.Fatal(t.Context().Err());case <-time.After(20*time.Millisecond):}
   }
-  if !ready { body,_:=os.ReadFile(log.Name());t.Fatalf("App HTTP not ready: %s",body) }
+  if !ready { body,_:=output.snapshot();t.Fatalf("App HTTP not ready: %s",body) }
   bases=append(bases,base)
  }
  // A native App uses its production clock; begin away from the real minute rollover.
@@ -160,4 +163,34 @@ func (*HelloWorldCmd) Signature() string { return ` + "`name:\"hello:world\" hel
 func NewHelloWorldCmd(server *http.Server) *HelloWorldCmd { return &HelloWorldCmd{server:server} }
 // Run delegates the listener and middleware lifecycle to the actual App server.
 func (command *HelloWorldCmd) Run(ctx context.Context) error { return command.server.Serve(ctx,"127.0.0.1",os.Getenv("ATLAS_APP_PORT")) }
+`
+
+// tenantNativeAppOutputSource applies one shared bounded sink to each App's stdout and stderr.
+const tenantNativeAppOutputSource = `
+// atlasNativeAppOutput bounds candidate output while readiness and child pumps run concurrently.
+type atlasNativeAppOutput struct {
+ mutex sync.Mutex
+ body strings.Builder
+ exceeded bool
+ cancel context.CancelFunc
+}
+// Write cancels the child on aggregate overflow and retains no bytes above the ceiling.
+func (output *atlasNativeAppOutput) Write(body []byte) (int,error) {
+ output.mutex.Lock()
+ defer output.mutex.Unlock()
+ size:=len(body)
+ remaining:=(1<<20)-output.body.Len()
+ if size>remaining {
+  output.body.Write(body[:remaining])
+  output.exceeded=true
+  output.cancel()
+ } else {output.body.Write(body)}
+ return size,nil
+}
+// snapshot returns bounded diagnostics without racing the active child output pump.
+func (output *atlasNativeAppOutput) snapshot() (string,bool) {
+ output.mutex.Lock()
+ defer output.mutex.Unlock()
+ return output.body.String(),output.exceeded
+}
 `
