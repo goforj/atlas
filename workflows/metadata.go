@@ -11,7 +11,12 @@ import (
 
 // WorkflowDocsMap maps workflow ids to the docs sections agents should read first.
 var WorkflowDocsMap = map[string][]DocReference{
-	"goforj-catalog-search": {{Path: "applications/library-resources.md", Heading: "Declare and Provision a Search Index"}, {Path: "libraries/search.md", Heading: "Quick Start {#quick-start}"}},
+	"goforj-catalog-search":        {{Path: "applications/library-resources.md", Heading: "Declare and Provision a Search Index"}, {Path: "libraries/search.md", Heading: "Quick Start {#quick-start}"}},
+	"goforj-notification-delivery": {{Path: "applications/library-resources.md", Heading: "Configure a Notification Sender"}, {Path: "libraries/notification.md", Heading: "Composition {#composition}"}, {Path: "libraries/notification.md", Heading: "Custom senders {#custom-senders}"}, {Path: "async/events-vs-queues.md", Heading: "Default Recommendation"}},
+	"goforj-feature-rollouts": {
+		{Path: "applications/library-resources.md", Heading: "Configure a Feature Evaluator"},
+		{Path: "libraries/feature.md", Heading: "Features.Snapshot {#features.snapshot}"},
+	},
 	"goforj-add-http-route": {
 		{Path: "applications/routes.md", Heading: "Where Routes Live"},
 		{Path: "applications/controllers.md", Heading: "Controller Shape"},
@@ -133,7 +138,10 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 	scope.searchConfirmed = projectHasSearch(p)
 	command := firstCommand(workflowCommands(workflowID, scope))
 	command = strings.ReplaceAll(command, "<name>", resource)
-	reason := "GoForj make commands update generated files, app registration, and Wire surfaces together."
+	reason := "GoForj make commands update generated files, App registration, and Wire surfaces together."
+	if _, ok := applicationWorkflowDefinitions[workflowID]; ok {
+		reason = "Update the application-owned boundary and provider inputs, then build and test the selected App."
+	}
 	if workflowID == "goforj-catalog-search" {
 		reason = "Generate named search accessors from the owning App resource configuration, then provision its Go-defined schemas explicitly."
 		if !scope.searchConfirmed {
@@ -143,6 +151,22 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 	if workflowID == "goforj-read-docs" {
 		command = "Atlas search-docs"
 		reason = "Read the requested documentation without proposing source changes."
+	}
+	if workflowID == "goforj-notification-delivery" {
+		reason = "Declare NOTIFICATION_* sender resources before generating the manager and typed accessors for the owning App."
+		if !projectHasNotificationComponent(p) {
+			command = scope.command("generate --help")
+			reason = "Inspect whether the selected CLI supports --notification before enabling the optional component."
+		}
+	}
+
+	if workflowID == "goforj-feature-rollouts" {
+		if projectHasFeatureComponent(p) {
+			reason = "Declare FEATURE_* evaluator resources before generating their typed accessors for the owning App."
+		} else {
+			command = scope.command("generate --help")
+			reason = "Inspect whether the selected CLI supports --feature before enabling or generating the optional component."
+		}
 	}
 	return CommandAdviceResult{
 		WorkflowID: workflowID,

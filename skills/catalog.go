@@ -23,6 +23,7 @@ type Prompt struct {
 func Catalog() []Skill {
 	return []Skill{
 		skill("goforj-catalog-search", "Choose lexical catalog search, typed filters, indexing visibility, and safe highlights.", catalogSearch),
+		skill("goforj-feature-rollouts", "Stable tenant rollouts, explicit fallback, and request configuration snapshots.", featureRollouts),
 		skill("goforj-app-architecture", "Project, app, runtime, and package layout.", appArchitecture),
 		skill("goforj-app-registration", "App composition and registration points.", appRegistration),
 		skill("goforj-make-commands", "Prefer GoForj make commands for framework scaffolding.", makeCommands),
@@ -37,6 +38,7 @@ func Catalog() []Skill {
 		skill("goforj-testing-and-validation", "Validation commands and render hygiene.", testingValidation),
 		skill("goforj-add-http-route", "Workflow for adding HTTP routes, controllers, services, and route verification.", addHTTPRoute),
 		skill("goforj-add-app-command", "Workflow for adding app-owned CLI commands.", addAppCommand),
+		skill("goforj-notification-delivery", "Choose synchronous notification senders and explicit fallback policies.", notificationDelivery),
 		skill("goforj-add-job", "Workflow for adding durable queued jobs.", addJob),
 		skill("goforj-add-schedule", "Workflow for adding recurring scheduler work.", addSchedule),
 		skill("goforj-add-event-workflow", "Workflow for typed events and subscribers.", addEventWorkflow),

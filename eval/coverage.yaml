@@ -205,6 +205,16 @@ capabilities:
     summary: Execute lexical catalog search with typed category isolation, stable pagination, and confirmed update visibility.
     tier: core
     evaluations: [catalog-search]
+  - id: libraries.feature-rollout
+    area: libraries
+    summary: Stable tenant targeting, fallback, and consistent request snapshots.
+    tier: core
+    evaluations: [target-feature-rollout]
+  - id: libraries.notification-boundaries
+    area: libraries
+    summary: Preserve synchronous acceptance and conservative primary/fallback notification policy.
+    tier: core
+    evaluations: [notify-incident]
   - id: libraries.search-highlights-facets
     area: libraries
     summary: Render untrusted highlight segments safely and preserve facet counts, truncation, and precision.
