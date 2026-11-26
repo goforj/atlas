@@ -5,9 +5,16 @@ const featureRollouts = `
 
 Use github.com/goforj/feature for stable targeted rollouts, typed flags, and explicit fallback policy. Inspect existing imports, go.mod versions, the owning App, and supported generators first. Preserve adequate standard-library configuration and established dependencies when a rollout does not warrant replacement. A feature flag is not authorization; authorize the tenant separately.
 
-For ordinary boolean checks, use manager.Checkout().Enabled(ctx, "checkout-v2"). Bind a target when the flag uses tenant targeting:
+The framework constructs *features.Manager in the generated App Wire manager set and owns its cleanup. Register your application constructor in app/wire/inject_services_app.go (or app/<name>/wire/inject_services_app.go for a named App). Wire supplies the existing manager. For a declared Checkout evaluator, select it once in the constructor:
 
-    flags := manager.Checkout().For(feature.Target{Key: tenantID})
+    // NewService borrows the App-managed checkout evaluator.
+    func NewService(features *features.Manager) *Service {
+        return &Service{flags: features.Checkout()}
+    }
+
+Do not edit generated inject_managers.go or construct another manager in the service. App.Features() is available to callers that already own the App; it is not a service dependency or a service locator. For ordinary boolean checks, use the injected evaluator's Enabled method. Bind a target when the flag uses tenant targeting:
+
+    flags := service.flags.For(feature.Target{Key: tenantID})
     enabled := flags.Enabled(ctx, "checkout-v2")
 
 Enabled returns a boolean with a false fallback. Use Evaluate(ctx, key, fallback) for an explicit boolean fallback or full decision metadata, and the typed decision methods for other values. Use a stable tenant identity as Target.Key and a stable rollout salt. Random per-request decisions defeat stable assignment.

@@ -740,7 +740,7 @@ func workflowSteps(workflowID string, scope appScope) []PlanStep {
 			{WorkflowID: workflowID, Action: "inspect the pinned GoForj version and enable feature for the owning App in .goforj.yml", Purpose: "use supported framework resources without promoting them into unrelated Apps"},
 			{WorkflowID: workflowID, Action: "declare FEATURE_* evaluator resources in .env and the owning App overlay", Purpose: "separate configured evaluators from dynamic flag names"},
 			{WorkflowID: workflowID, Action: scope.command("generate --feature"), Purpose: "generate the manager and typed evaluator accessors"},
-			{WorkflowID: workflowID, Action: "inject the evaluator manager into the owning App service; use Enabled for ordinary checks or Snapshot() for related decisions requiring consistency", Purpose: "match the task's targeting and consistency requirements"},
+			{WorkflowID: workflowID, Action: "register the service constructor in the owning App service Wire set (inject_services_app.go), inject *features.Manager, and select its configured named evaluator once; leave generated manager construction and cleanup to the framework; use Enabled for ordinary checks or Snapshot() for related decisions requiring consistency", Purpose: "match the task's targeting and consistency requirements"},
 		}
 	}
 	if workflowID == "goforj-add-data-resource" {
