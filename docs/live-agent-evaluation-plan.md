@@ -466,14 +466,29 @@ The `target-feature-rollout` contract adds a prepared checkout request boundary 
 ## Typed startup configuration diagnostic
 
 `configure-dispatch-startup/v1` uses an application-owned dispatch Config and the
-Project's installed env/v2 dependency. The provider rejects missing or invalid
-required values before Wire composition completes, while optional duration and
-boolean parse failures deliberately use the installed getter fallbacks.
-Supervisor-owned fresh-process cases verify process/file precedence, explicit
-empty process values, bounded parsing, safe String/GoString diagnostics, and
-immutable service snapshots through the real InitializeApplication path.
-Source API attribution is a separate quality observation and does not gate
-application behavior. Dependency installation is outside the candidate task;
-preparation stages the existing module graph and candidate shell networking is
-disabled. Golden calibration rejects compiling missing-token and changed-default
-mutants. This contract has no retained provider measurements.
+Project's installed env/v2 dependency. Required values fail before composition
+completes; optional duration and boolean parse failures use documented fallbacks.
+Fresh-process probes verify process/file precedence, explicit empty overrides,
+safe diagnostics, and frozen service snapshots. The App gate executes the
+original native entrypoint and resolves the submitted service through active
+Wire providers. Output is bounded, including a noisy-child regression.
+
+Golden calibration rejects compiling missing-token, changed-default, and
+disconnected active-provider mutants. The disconnected provider remains in an
+unused Wire set while standalone loader behavior passes. Owning App and Wire
+regression tests are permitted without allowing unrelated production files.
+Library API attribution remains a separate quality observation.
+
+On 2026-11-26, a fresh native Codex `gpt-6.1-sol` sample with Atlas guidance passed
+all executable acceptance and eligible quality checks at Atlas `a7b24d5ce877`
+and GoForj `8fa6755b`. Its authenticated evidence records real skill reads,
+Atlas MCP use, actor tests/build, original App startup, and service snapshots.
+An earlier completed sample at `c34b6dccb7b8` / `a28ce562` was rejected before
+behavior checks because its legitimate App Wire regression test was outside the
+old ownership rules. That signed attempt is retained separately; the corrected
+sample is a fresh run, not a regrade.
+
+These are `unconfined-local` diagnostics, not authoritative framework outcomes,
+reliability estimates, or treatment-effect measurements. Missing isolation and
+trusted file-read evidence remain ineligible. The historical scorecard is
+unchanged, and dependency installation remains outside the candidate task.
