@@ -173,6 +173,7 @@ func Plan(ctx Context, req PlanRequest) (PlanResult, bool) {
 		Warnings:    mergeWorkflowWarnings(workflowIDs),
 	}
 	result.Segments, result.Steps = workflowSegments(workflowIDs, scope, layout)
+	constrainNotificationPlan(&result, p, scope)
 	constrainFeaturePlan(&result, p, scope)
 	result.Ownership = FilePolicies(FilePolicyRequest{Project: p, Task: req.Task, WorkflowIDs: workflowIDs}, result.Files)
 	result.Verification = ValidationPlan(ctx, PlanRequest{Task: req.Task, App: app.Name}).Steps
@@ -197,7 +198,7 @@ func ClassifyAll(task string) []string {
 	if !focused {
 		add("goforj-wire-repair", containsAny(lower, "wire", "missing dependency", "duplicate provider") || featureTask && containsAny(lower, "missing provider", "no provider"))
 		add("goforj-add-data-resource", containsAny(lower, "database", "repository", "migration", "model", "persistence", "schema") || hasTaskWord(lower, "table", "tables"))
-		add("goforj-add-http-route", featureTask && featureHTTPConcern(lower) || !featureTask && containsAny(lower, "route", "controller", "http", "api", "json response", "upload"))
+		add("goforj-add-http-route", featureTask && featureHTTPConcern(lower) || isNotificationTask(lower) && notificationHTTPConcern(lower) || !featureTask && !isNotificationTask(lower) && containsAny(lower, "route", "controller", "http", "api", "json response", "upload"))
 		add("goforj-add-job", containsAny(lower, "job", "queue", "worker", "background"))
 		add("goforj-add-event-workflow", containsAny(lower, "event", "subscriber", "publish"))
 		add("goforj-add-schedule", containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily") && (!featureTask || containsAny(lower, "cron", "scheduler", "scheduled job", "recurring job", "daily job")))
@@ -206,6 +207,7 @@ func ClassifyAll(task string) []string {
 		add("goforj-debug-runtime", containsAny(lower, "debug", "diagnose", "runtime failure", "investigate logs", "troubleshoot"))
 		add("goforj-multi-app-change", containsAny(lower, "named app", "multi-app", "additional app"))
 	}
+	add("goforj-notification-delivery", isNotificationTask(lower))
 	if len(ids) == 0 {
 		return []string{Classify(task)}
 	}
@@ -233,6 +235,19 @@ func Classify(task string) string {
 	if ids := applicationWorkflowIDs(lower, true); len(ids) != 0 {
 		return ids[0]
 	}
+	if isNotificationTask(lower) {
+		switch {
+		case containsAny(lower, "missing provider", "duplicate provider", "no provider", "missing dependency", "wire error", "wire repair"):
+			return "goforj-wire-repair"
+		case containsAny(lower, "debug", "diagnose", "troubleshoot"):
+			return "goforj-debug-runtime"
+		case notificationHTTPConcern(lower):
+			return "goforj-add-http-route"
+		default:
+			return "goforj-notification-delivery"
+		}
+	}
+
 	switch {
 	case containsAny(lower, "wire", "provider", "missing dependency", "duplicate provider"):
 		return "goforj-wire-repair"
@@ -246,6 +261,8 @@ func Classify(task string) string {
 		return "goforj-add-http-route"
 	case containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily"):
 		return "goforj-add-schedule"
+	case isNotificationTask(lower):
+		return "goforj-notification-delivery"
 	case containsAny(lower, "job", "queue", "worker", "background"):
 		return "goforj-add-job"
 	case containsAny(lower, "event", "subscriber", "publish"):
@@ -304,7 +321,7 @@ func ValidationPlan(ctx Context, req PlanRequest) ValidationResult {
 		{Command: "test -z \"$(gofmt -l $(find . -type f -name '*.go' -not -path './vendor/*'))\"", Purpose: "reject unformatted Go source before accepting the change", Required: true},
 		{Command: scope.build, Purpose: "refresh generated code, Wire, API index, and binary", Required: true},
 	}
-	if _, owned := applicationWorkflowDefinitions[workflowID]; owned {
+	if _, applicationOwned := applicationWorkflowDefinitions[workflowID]; applicationOwned {
 		steps = []ValidationStep{steps[1], steps[2], steps[0]}
 	}
 	switch workflowID {
@@ -514,7 +531,7 @@ func workflowFiles(workflowID string, layout layout) []string {
 func workflowTools(workflowID string) []string {
 	tools := []string{"application-info", "project-layout", "workflow-plan", "registration-points", "docs-section-pack", "generated-file-policy", "validation-plan"}
 	switch workflowID {
-	case "goforj-feature-rollouts":
+	case "goforj-feature-rollouts", "goforj-notification-delivery":
 		return append(tools, "resource-inventory", "scenario-guide", "version-alignment")
 	case "goforj-add-http-route":
 		return append(tools, "route-list", "resource-inventory")

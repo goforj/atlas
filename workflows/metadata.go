@@ -11,6 +11,7 @@ import (
 
 // WorkflowDocsMap maps workflow ids to the docs sections agents should read first.
 var WorkflowDocsMap = map[string][]DocReference{
+	"goforj-notification-delivery": {{Path: "applications/library-resources.md", Heading: "Configure a Notification Sender"}, {Path: "libraries/notification.md", Heading: "Composition {#composition}"}, {Path: "libraries/notification.md", Heading: "Custom senders {#custom-senders}"}, {Path: "async/events-vs-queues.md", Heading: "Default Recommendation"}},
 	"goforj-feature-rollouts": {
 		{Path: "applications/library-resources.md", Heading: "Configure a Feature Evaluator"},
 		{Path: "libraries/feature.md", Heading: "Features.Snapshot {#features.snapshot}"},
@@ -135,7 +136,7 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 	scope := makeScope(app)
 	command := firstCommand(workflowCommands(workflowID, scope))
 	command = strings.ReplaceAll(command, "<name>", resource)
-	reason := "GoForj make commands update generated files, app registration, and Wire surfaces together."
+	reason := "GoForj make commands update generated files, App registration, and Wire surfaces together."
 	if _, ok := applicationWorkflowDefinitions[workflowID]; ok {
 		reason = "Update the application-owned boundary and provider inputs, then build and test the selected App."
 	}
@@ -143,6 +144,14 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 		command = "Atlas search-docs"
 		reason = "Read the requested documentation without proposing source changes."
 	}
+	if workflowID == "goforj-notification-delivery" {
+		reason = "Declare NOTIFICATION_* sender resources before generating the manager and typed accessors for the owning App."
+		if !projectHasNotificationComponent(p) {
+			command = scope.command("generate --help")
+			reason = "Inspect whether the selected CLI supports --notification before enabling the optional component."
+		}
+	}
+
 	if workflowID == "goforj-feature-rollouts" {
 		if projectHasFeatureComponent(p) {
 			reason = "Declare FEATURE_* evaluator resources before generating their typed accessors for the owning App."
