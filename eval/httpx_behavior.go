@@ -129,4 +129,28 @@ func atlasAssertTaxClientCancellation(t *testing.T, deadline bool) {
     }
     if calls.Load() != 1 { t.Fatalf("canceled request retried %d times", calls.Load()) }
 }
+
+// TestAtlasTaxRateResilienceCancelAfterTransient bounds cancellation after a retryable response, including retry waits.
+func TestAtlasTaxRateResilienceCancelAfterTransient(t *testing.T) {
+ firstResponse,release := make(chan struct{}),make(chan struct{})
+ var calls atomic.Int64
+ server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter,request *http.Request) {
+  if calls.Add(1) == 1 { defer close(firstResponse); response.WriteHeader(http.StatusServiceUnavailable); return }
+  select { case <-request.Context().Done(): case <-release: }
+ }))
+ defer server.Close()
+ defer close(release)
+ ctx,cancel := context.WithCancel(context.Background())
+ defer cancel()
+ result := make(chan error,1)
+ go func() { _,err := NewClient(server.URL).Find(ctx,"US"); result <- err }()
+ select { case <-firstResponse: case <-time.After(3*time.Second): t.Fatal("transient response never completed") }
+ time.Sleep(100*time.Millisecond)
+ cancel()
+ select {
+ case err := <-result:
+  if !errors.Is(err,context.Canceled) { t.Fatalf("post-transient cancellation cause = %v",err) }
+ case <-time.After(300*time.Millisecond): t.Fatal("retry policy delayed caller cancellation after a transient response")
+ }
+}
 `
