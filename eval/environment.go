@@ -119,6 +119,9 @@ func TestAtlasDispatchEnvironmentChild(t *testing.T) {
 // TestAtlasResourceApp executes each startup policy through the submitted active App graph.
 func TestAtlasResourceApp(t *testing.T) {
  root := atlasAppRoot(t)
+ originalApp := filepath.Join(t.TempDir(),"original-app")
+ if output,err := atlasRunResourceTool(t,root,nil,"forj","build"); err!=nil { t.Fatalf("build original App: %v\n%s",err,output) }
+ if output,err := atlasRunResourceTool(t,root,nil,"go","build","-o",originalApp,"./cmd/app"); err!=nil { t.Fatalf("compile original App: %v\n%s",err,output) }
  atlasBuildResourceApp(t,root,nil)
  for name,test := range atlasDispatchCases() { t.Run(name,func(t *testing.T) {
   // The process environment wins over the fixture file while required missing keys stay explicit.
@@ -129,6 +132,9 @@ func TestAtlasResourceApp(t *testing.T) {
   defer os.WriteFile(path,original,0600)
   if err := os.WriteFile(path,[]byte("APP_ENV=local\n"+test.file),0600); err != nil { t.Fatal(err) }
   if test.file != "" && len(test.process)==0 { env=nil }
+  originalOutput,originalErr := atlasRunResourceTool(t,root,env,originalApp,"hello:world")
+  if test.wantError != "" && originalErr==nil { t.Fatalf("original App startup accepted invalid configuration: %s",originalOutput) }
+  if test.wantError == "" && originalErr!=nil { t.Fatalf("original App rejected valid configuration: %v\n%s",originalErr,originalOutput) }
   output,runErr := atlasRunResourceApp(t,root,env)
   if test.wantError != "" {
    if runErr==nil { t.Fatalf("App accepted invalid startup: %s",output) }
