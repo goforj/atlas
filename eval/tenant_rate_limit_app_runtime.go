@@ -33,9 +33,47 @@ import (
  "path/filepath"
  "strconv"
  "strings"
+ "sync"
  "testing"
  "time"
 )
+// atlasNativeRedisProxy isolates a connection outage to this verifier's App replicas.
+func atlasNativeRedisProxy(t *testing.T) (string,func()) {
+ t.Helper()
+ listener,err:=net.Listen("tcp","127.0.0.1:0");if err!=nil {t.Fatal(err)}
+ var mutex sync.Mutex
+ var once sync.Once
+ connections:=map[net.Conn]struct{}{}
+ closed:=false
+ disconnect:=func(){once.Do(func(){
+  listener.Close()
+  mutex.Lock();defer mutex.Unlock()
+  closed=true
+  for connection:=range connections {connection.Close()}
+ })}
+ t.Cleanup(disconnect)
+ go func(){
+  for {
+   downstream,err:=listener.Accept();if err!=nil {return}
+   go func(){
+    upstream,err:=net.DialTimeout("tcp",atlasRedisAddress,2*time.Second)
+    if err!=nil {downstream.Close();return}
+    mutex.Lock()
+    if closed {mutex.Unlock();downstream.Close();upstream.Close();return}
+    connections[downstream]=struct{}{};connections[upstream]=struct{}{}
+    mutex.Unlock()
+    defer func(){
+     downstream.Close();upstream.Close()
+     mutex.Lock();delete(connections,downstream);delete(connections,upstream);mutex.Unlock()
+    }()
+    go func(){io.Copy(upstream,downstream);upstream.Close()}()
+    io.Copy(downstream,upstream)
+   }()
+  }
+ }()
+ return listener.Addr().String(),disconnect
+}
+
 // TestAtlasResourceApp requires a native shared backend and the App-owned route and resource graph.
 func TestAtlasResourceApp(t *testing.T) {
  if atlasRedisAddress == "" { t.Fatal("native App check requires supervisor ATLAS_EVAL_REDIS_ADDR as a loopback Redis host:port") }
@@ -47,12 +85,13 @@ func TestAtlasResourceApp(t *testing.T) {
  size,err := connection.Read(info)
  connection.Close()
  if err!=nil || !strings.Contains(string(info[:size]),"redis_version:") { t.Fatalf("native Redis INFO server: %v %q",err,info[:size]) }
+ proxyAddress,disconnect:=atlasNativeRedisProxy(t)
  root := atlasAppRoot(t)
- environment := []string{"CACHE_DRIVER=memory","CACHE_REQUESTS_DRIVER=redis","CACHE_REQUESTS_ADDR="+atlasRedisAddress,"CACHE_REQUESTS_PREFIX=atlas-app-"+filepath.Base(t.TempDir())}
+ environment := []string{"CACHE_DRIVER=memory","CACHE_REQUESTS_DRIVER=redis","CACHE_REQUESTS_ADDR="+proxyAddress,"CACHE_REQUESTS_PREFIX=atlas-app-"+filepath.Base(t.TempDir())}
  atlasBuildResourceApp(t,root,environment)
  binary := filepath.Join(t.TempDir(),"atlas-app")
  if output,err := atlasRunResourceTool(t,root,environment,"go","build","-o",binary,"./cmd/app");err!=nil { t.Fatalf("compile HTTP App: %v\n%s",err,output) }
- client := &http.Client{Timeout:2*time.Second}
+ client := &http.Client{Timeout:10*time.Second}
  request := func(base,path,token,asserted string) (int,string,string) {
   t.Helper()
   req,err := http.NewRequestWithContext(t.Context(),http.MethodGet,base+path,nil);if err!=nil { t.Fatal(err) }
@@ -84,6 +123,10 @@ func TestAtlasResourceApp(t *testing.T) {
   if !ready { body,_:=os.ReadFile(log.Name());t.Fatalf("App HTTP not ready: %s",body) }
   bases=append(bases,base)
  }
+ // A native App uses its production clock; begin away from the real minute rollover.
+ if remaining:=time.Until(time.Now().Truncate(time.Minute).Add(time.Minute));remaining<5*time.Second {
+  select {case <-t.Context().Done():t.Fatal(t.Context().Err());case <-time.After(remaining):}
+ }
  for _,base:=range bases {
   if status,_,body:=request(base,"/api/v1/exports","Bearer tenant-a-token","tenant-b");status!=http.StatusOK {t.Fatalf("allowed export=%d %s",status,body)}
  }
@@ -95,6 +138,9 @@ func TestAtlasResourceApp(t *testing.T) {
   if status,_,body:=request(bases[0],"/api/v1/exports",token,"tenant-a");status!=http.StatusUnauthorized {t.Fatalf("unverified export=%d %s",status,body)}
  }
  if status,_,body:=request(bases[0],"/api/v1/health","","");status!=http.StatusOK {t.Fatalf("public health=%d %s",status,body)}
+ disconnect()
+ if status,_,body:=request(bases[1],"/api/v1/exports","Bearer tenant-b-token","");status!=http.StatusServiceUnavailable || !strings.Contains(body,"rate limit unavailable") {t.Fatalf("native counter outage=%d %s",status,body)}
+ if status,_,body:=request(bases[0],"/api/v1/health","","");status!=http.StatusOK {t.Fatalf("health during outage=%d %s",status,body)}
  fmt.Println("atlas-tenant-app-ok")
 }
 `
