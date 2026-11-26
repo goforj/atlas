@@ -18,6 +18,9 @@ func TestTaxRateResilienceEvaluationPreservesOriginalContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(definition.Prompt, "existing acceptance of a nil caller context") {
+		t.Fatal("existing input compatibility omitted from natural task")
+	}
 	registry, err := NewRegistry(PromotedWorkflows(), PromotedVerifiers(VerifierCommands{}))
 	if err != nil {
 		t.Fatal(err)

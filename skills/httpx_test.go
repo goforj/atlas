@@ -16,7 +16,7 @@ func TestHTTPClientResilienceGuidancePreservesProjectPins(t *testing.T) {
 	if !slices.Contains(RecommendedNames(project.Project{Name: "billing"}), "goforj-http-client-resilience") {
 		t.Fatal("client guidance is not discoverable")
 	}
-	for _, term := range []string{"v1.1.0", "v2.0.1", "Do not blindly upgrade", "standard-library", "two retries", "non-idempotent", "errors.As", "errors.Is"} {
+	for _, term := range []string{"v1.1.0", "v2.0.1", "Do not blindly upgrade", "standard-library", "two retries", "non-idempotent", "errors.As", "errors.Is", "nil context", "nonnil caller"} {
 		if !strings.Contains(strings.ToLower(httpClientResilience), strings.ToLower(term)) {
 			t.Errorf("guidance omits %q", term)
 		}
