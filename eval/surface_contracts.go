@@ -5,6 +5,7 @@ func promotedSurfaceContracts() []surfaceContract {
 	return []surfaceContract{
 		settingsValidationContract(),
 		dispatchEnvironmentContract(),
+		partnerPayloadEncryptionContract(),
 		{
 			id:                  "catalog-search/v1",
 			allowedChanges:      []string{"internal/catalog/*.go", "app/wire/inject_services_app.go"},

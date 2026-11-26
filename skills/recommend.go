@@ -29,6 +29,7 @@ func Recommended(p project.Project) []Skill {
 		"goforj-notification-delivery":  true,
 	}
 	enabled["goforj-environment-configuration"] = true
+	enabled["goforj-payload-encryption"] = true
 	if hasComponent(p, "web-api") || hasComponent(p, "web-ui") {
 		enabled["goforj-add-http-route"] = true
 		enabled["goforj-validation"] = true
