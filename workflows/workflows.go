@@ -629,7 +629,7 @@ func workflowDocs(workflowID string) []DocReference {
 	if refs := WorkflowDocsMap[workflowID]; len(refs) > 0 {
 		return append([]DocReference(nil), refs...)
 	}
-	return []DocReference{{Path: "core/make-commands.md", Heading: "Command Map"}}
+	return []DocReference{{Path: "reference/make-commands.md", Heading: "Choose a Command or Workflow"}}
 }
 
 func workflowWarnings(workflowID string) []string {
@@ -693,7 +693,7 @@ func workflowScenarioRefs(workflowIDs []string) []DocReference {
 		case "goforj-feature-rollouts":
 			candidates = []DocReference{{Path: "scenarios/tenant-checkout-rollout.md", Heading: "Starting State"}}
 		case "goforj-add-data-resource":
-			candidates = []DocReference{{Path: "scenarios/create-user-model.md", Heading: "What You Will Build"}, {Path: "scenarios/create-photo-data-resource.md", Heading: "Starting State"}, {Path: "scenarios/user-post-relationships.md", Heading: "What You Will Build"}}
+			candidates = []DocReference{{Path: "scenarios/create-photo-data-resource.md", Heading: "Starting State"}}
 		case "goforj-add-http-route":
 			candidates = []DocReference{{Path: "scenarios/json-api-route.md", Heading: "What You Will Build"}}
 		case "goforj-add-job":

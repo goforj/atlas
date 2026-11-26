@@ -389,13 +389,13 @@ Application route composition lives in app routes.
 					Title: "Controllers",
 					Content: `# Controllers
 
-## Controller Shape
+## Responsibilities
 
 Controllers translate HTTP into service calls.
 `,
 				},
 				{
-					Path:  "core/wiring-recipes.md",
+					Path:  "developer-tools/wiring-recipes.md",
 					Title: "Wiring Recipes",
 					Content: `# Wiring Recipes
 
