@@ -114,3 +114,33 @@ func TestConcurrentOutputAndSnapshots(t *testing.T) {
 		t.Fatalf("generated output sink: %v\n%s", err, output)
 	}
 }
+
+// TestTenantRateLimitOwnsAppProvidersAndTheirTests keeps route policy composition valid without permitting unrelated runtime changes.
+func TestTenantRateLimitOwnsAppProvidersAndTheirTests(t *testing.T) {
+	var contract surfaceContract
+	for _, candidate := range promotedSurfaceContracts() {
+		if candidate.id == "tenant-request-rate-limits/v1" {
+			contract = candidate
+			break
+		}
+	}
+	patterns := append(append([]string(nil), contract.allowedChanges...), contract.qualityTestPatterns...)
+	for _, test := range []struct {
+		path   string
+		status EndpointStatus
+	}{
+		{"app/wire/inject_http_controllers_app.go", EndpointPassed},
+		{"app/wire/requests_test.go", EndpointPassed},
+		{"internal/requests/limiter_test.go", EndpointPassed},
+		{"app/routes.go", EndpointFailed},
+		{".env", EndpointFailed},
+		{"internal/caches/manager.go", EndpointFailed},
+	} {
+		t.Run(test.path, func(t *testing.T) {
+			result := verifySurfaceOwnership([]ProjectChange{{Path: test.path, After: ProjectPathState{Kind: "file"}}}, patterns)
+			if result.Status != test.status {
+				t.Fatalf("ownership %s=%#v, want %s", test.path, result, test.status)
+			}
+		})
+	}
+}
