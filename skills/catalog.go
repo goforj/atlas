@@ -27,6 +27,7 @@ func Catalog() []Skill {
 		skill("goforj-validation", "Presence-aware request validation, reusable typed rules, and stable field errors.", validationLibrary),
 		skill("goforj-environment-configuration", "Typed startup settings, process precedence, fallbacks, and safe diagnostics.", environmentConfiguration),
 		skill("goforj-payload-encryption", "Authenticated payload storage, immutable cipher composition, and key rotation.", payloadEncryption),
+		skill("goforj-business-metrics", "Business counters and duration histograms in the existing App registry.", businessMetrics),
 		skill("goforj-app-architecture", "Project, app, runtime, and package layout.", appArchitecture),
 		skill("goforj-app-registration", "App composition and registration points.", appRegistration),
 		skill("goforj-make-commands", "Prefer GoForj make commands for framework scaffolding.", makeCommands),

@@ -116,6 +116,7 @@ func PromotedWorkflows() []WorkflowExpectation {
 			Requirements: []WorkflowRequirement{qualityInspection("inspect-catalog-boundary", "Inspect the projection schema, independently pinned modules, and App composition before adding search behavior.", "go.mod", "internal/catalog/**", "internal/searches/**", "app/search.go", "app/wire/**")},
 		},
 		{ID: "goforj-target-feature-rollout/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-rollout-boundary", "Inspect the checkout request boundary and existing configuration before adding a stable rollout.", "internal/checkout/**", "app/wire/**", "go.mod")}},
+		{ID: "goforj-business-metrics/v1", Requirements: []WorkflowRequirement{qualityInspection("inspect-existing-registry", "Inspect the App registry and existing checkout operation before adding business metrics.", "internal/checkout/**", "internal/metrics/**", "app/wire/**")}},
 	}
 }
 

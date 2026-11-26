@@ -14,6 +14,7 @@ func Recommended(p project.Project) []Skill {
 	enabled := map[string]bool{
 		"goforj-catalog-search":         true,
 		"goforj-feature-rollouts":       true,
+		"goforj-business-metrics":       true,
 		"goforj-app-architecture":       true,
 		"goforj-app-registration":       true,
 		"goforj-make-commands":          true,

@@ -60,6 +60,19 @@ func promotedSurfaceContracts() []surfaceContract {
 			}, appResourceRuntimeContract("tax-rate-app-runtime", "taxrates", taxRateAppRuntimeProbe, taxRateAppRuntimeCommand)),
 		},
 		{
+			id:                  "checkout-business-metrics/v1",
+			allowedChanges:      []string{"internal/checkout/*.go", "app/wire/inject_services_app.go", "app/lifecycle.go"},
+			qualityTestPatterns: []string{"internal/checkout/*_test.go", "internal/http/metrics_test.go", "app/wire/*_test.go", "app/lifecycle_test.go"},
+			sources: []sourceContract{
+				{id: "metrics-library-adoption", kind: RequirementQuality, paths: []string{"internal/checkout/*.go"}, stringLiterals: []string{"github.com/goforj/metrics"}},
+				{id: "metrics-registry-connection", paths: []string{"app/wire/*.go", "internal/checkout/*.go"}, providerConnection: &providerConnectionContract{accessor: "Registry", managerImportSuffix: "/internal/metrics", wirePaths: []string{"app/wire/inject_services_app.go"}}},
+			},
+			commands: standardSurfaceCommands(
+				appResourceRuntimeContract("business-metrics-app-runtime", "checkout", businessMetricsAppRuntimeProbe, businessMetricsAppRuntimeCommand),
+				commandContract{id: "business-metrics-behavior", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasBusinessMetricsBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_metrics_test.go", body: businessMetricsBehaviorProbe}, {path: "internal/checkout/atlas_eval_prometheus_test.go", body: businessMetricsPrometheusProbe}}},
+			),
+		},
+		{
 			id:             "add-app-command/v1",
 			allowedChanges: []string{"internal/invoices/*_cmd.go", "internal/invoices/*_cmd_test.go", "app/commands.go", "app/wire/inject_cmd_app.go"},
 			sources: []sourceContract{

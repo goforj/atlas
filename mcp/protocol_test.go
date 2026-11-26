@@ -39,6 +39,8 @@ func TestStdioProtocolToolDiscoveryAndCriticalCalls(t *testing.T) {
 		want      string
 	}{
 		{name: "workflow-plan", arguments: map[string]any{"task": "add checkout route", "app": "marketplace"}, want: "goforj-add-http-route"},
+		{name: "workflow-plan", arguments: map[string]any{"task": "instrument checkout with business metrics", "app": "marketplace"}, want: "goforj-business-metrics"},
+		{name: "docs-section-pack", arguments: map[string]any{"workflow_id": "goforj-business-metrics"}, want: "operations/metrics.md"},
 		{name: "docs-section-pack", arguments: map[string]any{"workflow_id": "goforj-add-http-route"}, want: "applications/routes.md"},
 		{name: "workflow-plan", arguments: map[string]any{"task": "stable tenant checkout rollout", "app": "marketplace"}, want: "forj marketplace generate --help"},
 		{name: "docs-section-pack", arguments: map[string]any{"task": "stable tenant checkout rollout"}, want: "applications/library-resources.md"},

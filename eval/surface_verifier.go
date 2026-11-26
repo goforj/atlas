@@ -980,7 +980,11 @@ func connectedNamedResourceProvider(root string, sourcePaths []string, contract 
 			if parseErr != nil {
 				return namedResourceProvider{}, fmt.Sprintf("parse %s: %v", filepath.ToSlash(path), parseErr)
 			}
-			if wireSetReferencesProvider(file, []namedResourceProvider{provider}) {
+			wireDirectory, relativeErr := filepath.Rel(root, filepath.Dir(path))
+			if relativeErr != nil {
+				return namedResourceProvider{}, relativeErr.Error()
+			}
+			if wireSetReferencesProvider(file, filepath.ToSlash(wireDirectory), []namedResourceProvider{provider}) {
 				key := provider.directory + ":" + provider.name
 				if !seen[key] {
 					connected = append(connected, provider)
@@ -1100,7 +1104,7 @@ func functionCallsAccessor(function *ast.FuncDecl, accessor string) bool {
 }
 
 // wireSetReferencesProvider proves that a provider discovered from resource use is an argument to an App services wire.NewSet call.
-func wireSetReferencesProvider(file *ast.File, providers []namedResourceProvider) bool {
+func wireSetReferencesProvider(file *ast.File, directory string, providers []namedResourceProvider) bool {
 	imports := wireImportPaths(file)
 	found := false
 	ast.Inspect(file, func(node ast.Node) bool {
@@ -1109,6 +1113,14 @@ func wireSetReferencesProvider(file *ast.File, providers []namedResourceProvider
 			return true
 		}
 		for _, argument := range call.Args {
+			if identifier, ok := argument.(*ast.Ident); ok {
+				for _, provider := range providers {
+					if provider.directory == directory && provider.name == identifier.Name {
+						found = true
+						return false
+					}
+				}
+			}
 			if wireArgumentReferencesProvider(argument, imports, providers) {
 				found = true
 				return false

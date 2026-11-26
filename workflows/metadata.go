@@ -17,6 +17,7 @@ var WorkflowDocsMap = map[string][]DocReference{
 		{Path: "applications/library-resources.md", Heading: "Configure a Feature Evaluator"},
 		{Path: "libraries/feature.md", Heading: "Features.Snapshot {#features.snapshot}"},
 	},
+	"goforj-business-metrics": {{Path: "operations/metrics.md", Heading: "Labels"}},
 	"goforj-add-http-route": {
 		{Path: "applications/routes.md", Heading: "Where Routes Live"},
 		{Path: "applications/controllers.md", Heading: "Responsibilities"},

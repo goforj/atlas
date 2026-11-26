@@ -220,6 +220,11 @@ capabilities:
     summary: Stable tenant targeting, fallback, and consistent request snapshots.
     tier: core
     evaluations: [target-feature-rollout]
+  - id: libraries.metrics-business
+    area: libraries
+    summary: Update bounded business counters and duration histograms in the existing App registry.
+    tier: core
+    evaluations: [instrument-checkout-metrics]
   - id: libraries.notification-boundaries
     area: libraries
     summary: Preserve synchronous acceptance and conservative primary/fallback notification policy.
