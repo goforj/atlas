@@ -49,6 +49,7 @@ func promotedSurfaceContracts() []surfaceContract {
 			requiredChanges:     []string{"internal/requests/limiter.go"},
 			qualityTestPatterns: []string{"internal/requests/*_test.go"},
 			commands: standardSurfaceCommands(
+				tenantRateLimitAppRuntimeContract(),
 				commandContract{id: "tenant-rate-limit-behavior", arguments: []string{"go", "test", "./internal/requests", "-run", "^TestAtlasTenantRateLimit(Behavior|Concurrency|TTL)$", "-count=1"}, supervisorFiles: tenantRateLimitSupervisorFiles()},
 				commandContract{id: "tenant-rate-limit-library-use", probe: runTenantRateLimitLibraryProbe},
 			),
