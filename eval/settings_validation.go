@@ -6,7 +6,7 @@ import "context"
 func settingsValidationContract() surfaceContract {
 	return surfaceContract{
 		id:                  "patch-customer-settings/v1",
-		allowedChanges:      []string{"internal/settings/*.go"},
+		allowedChanges:      []string{"internal/settings/*.go", "app/routes.go", "app/wire/inject_http_controllers_app.go"},
 		qualityTestPatterns: []string{"internal/settings/*_test.go"},
 		sources: []sourceContract{
 			{id: "settings-library-path", kind: RequirementQuality, paths: []string{"internal/settings/*.go"}, stringLiterals: []string{"github.com/goforj/validation"}, declarations: []declarationContract{
