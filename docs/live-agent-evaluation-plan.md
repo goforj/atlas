@@ -463,3 +463,23 @@ The supervisor records exact messages and caller context, primary acceptance, de
 ## Targeted checkout rollout calibration
 
 The `target-feature-rollout` contract adds a prepared checkout request boundary with feature v0.1.0 installed by the supervisor. It measures integration and execution within that existing boundary, not unconstrained library discovery or candidate dependency installation. Required behavior covers tenant bucket stability, explicit missing-flag fallback, invalid-refresh retention, and captured configuration revision and evaluation time. Separate quality checks record the import, observed library calls, and candidate regression tests. The fixture now supplies a generated Checkout evaluator, and the service must resolve that typed accessor through its registered App provider. A supervisor-only helper binds the generated manager to controlled native sources and clocks after candidate writes are sealed; it does not add a framework constructor API. The framework resource tests separately exercise real file-backed startup, refresh, and shutdown. The GoForj companion scenario calibrates the golden implementation and compiling randomized-target and mixed-revision mutants without live provider sessions. Native API sources are linked from the always-recommended rollout skill while hosted feature documentation is prepared separately.
+## Presence-aware validation diagnostic
+
+`patch-customer-settings/v1` adds an application-shaped PATCH task without changing
+`add-validated-write-endpoint/v1` or regrading its retained results. GoForj's
+`customer-settings-validation` preparation stages `github.com/goforj/validation`
+v0.2.0 before the candidate starts; dependency installation is outside this
+measurement, and candidate shell networking remains disabled.
+
+Supervisor probes exercise omitted values, explicit null, supplied zero and
+false, normalization, inclusive bounds, atomic failure, stable public field
+codes, reusable service policy, cancellation, and operational rule failures.
+Library adoption has separate quality observations: syntax-bearing call-path
+checks and a runtime probe requiring real library issues from the executed
+application update. Those observations do not gate application behavior. Native
+HTTP projects receive the dedicated `goforj-validation` skill; its choice rules
+also preserve adequate simple checks and explicit existing validators.
+
+The companion golden calibration rejects compiling context-loss and false-loss
+mutants. This contract has deterministic calibration only. No provider session
+or treatment-effect measurement is implied.

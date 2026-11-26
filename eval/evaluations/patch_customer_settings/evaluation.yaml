@@ -1,0 +1,12 @@
+schema_version: 1
+id: patch-customer-settings
+summary: Update customer preferences with reusable presence-aware validation.
+suite: core
+task_kind: feature
+project_scenario: customer-settings-validation
+workflow: goforj-patch-customer-settings/v1
+verifier: patch-customer-settings/v1
+limits:
+  wall_time: 8m
+  commands: 50
+  shell_network: off
