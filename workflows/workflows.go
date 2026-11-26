@@ -792,7 +792,7 @@ func workflowSteps(workflowID string, scope appScope) []PlanStep {
 			{WorkflowID: workflowID, Action: "declare SearchDefinitions() and named SEARCH_<NAME> backend settings", Purpose: "keep domain schema in Go and deployment configuration in the environment"},
 			{WorkflowID: workflowID, Action: scope.command("generate --search"), Purpose: "generate named portable index accessors"},
 			{WorkflowID: workflowID, Action: "provision schemas through an App-owned standalone bootstrap", Purpose: "prepare existing schema before the App graph validates it"},
-			{WorkflowID: workflowID, Action: "inject the generated named index into the domain service", Purpose: "keep backend construction outside application behavior"},
+			{WorkflowID: workflowID, Action: "register the service constructor in the owning App service Wire set (inject_services_app.go), inject *searches.Manager, and select its configured named index once; leave generated manager construction and cleanup to the framework", Purpose: "keep backend construction outside application behavior"},
 		}
 	}
 

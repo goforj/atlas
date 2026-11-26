@@ -576,7 +576,14 @@ Highlight fragments contain untrusted Segment.Text even when Matched is true. Es
 
 If the Project does not declare Search, inspect local CLI generate --help to confirm resource support before proposing component or generated-file changes. Do not guess a minimum version; preserve application-owned standalone package composition when the installed CLI lacks this resource. When adding lexical search to a GoForj Project with confirmed resource support, first enable the optional Search component for the owning App in .goforj.yml and use the resource generation path. For a GoForj Project with Search enabled, prefer the generated 'searches.Manager' and purpose-named accessor such as 'Catalog()' over opening a driver in application services. Declare the owning App's schema in 'SearchDefinitions()' under 'app/search.go' or 'app/<name>/search.go'; environment settings choose backend/path/endpoint/auth. Run 'forj generate --search' after named resource declarations. Empty App definitions are inert. Provision explicitly with 'searches.Provision(ctx, app.SearchDefinitions())' from a standalone bootstrap before App initialization; startup validates schemas and rejects drift. Keep rebuilds application-owned and stop the single Bleve owner before provisioning its path.
 
-Compose an injected manager or named index in the selected App and register its owning service through App Wire sources. Keep backend provisioning and closing at the lifecycle/composition boundary. Bleve persistent indexes have a single process owner. Inspect supported make commands; do not invent 'make:search' or edit wire_gen.go.
+The generated inject_managers.go constructs *searches.Manager from the owning App's SearchDefinitions() and owns backend cleanup. Register your application constructor in app/wire/inject_services_app.go (or app/<name>/wire/inject_services_app.go for a named App). Wire supplies the existing manager. For a declared Catalog index, select it once:
+
+    // NewService borrows the App-managed catalog index.
+    func NewService(searches *searches.Manager) *Service {
+        return &Service{index: searches.Catalog()}
+    }
+
+Do not edit generated inject_managers.go, open another manager in the service, or pass the App into the service to reach Searches(). App.Searches() is for callers that already own the App, not the service injection path. Keep explicit provisioning in the standalone bootstrap and closing in framework cleanup. Bleve persistent indexes have a single process owner. Inspect supported make commands; do not invent 'make:search' or edit wire_gen.go.
 
 Verify exact inclusions and exclusions, totals across multiple pages, category isolation, cancellation, and visible replacements after successful Wait using a real local backend. Test unsafe highlight input if rendering is added. A recording fake alone cannot prove backend matching or visibility.
 `
