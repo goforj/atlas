@@ -189,7 +189,7 @@ capabilities:
     area: http
     summary: Rate-limit a route with explicit identity, policy, and response behavior.
     tier: core
-    evaluations: []
+    evaluations: [tenant-request-rate-limits]
   - id: http.retry-policy
     area: http
     summary: Bound explicitly transient outbound retries and preserve typed errors and caller cancellation.

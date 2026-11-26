@@ -32,6 +32,7 @@ func Recommended(p project.Project) []Skill {
 	}
 	enabled["goforj-environment-configuration"] = true
 	enabled["goforj-payload-encryption"] = true
+	enabled["goforj-tenant-request-rate-limits"] = true
 	if hasComponent(p, "web-api") || hasComponent(p, "web-ui") {
 		enabled["goforj-add-http-route"] = true
 		enabled["goforj-validation"] = true

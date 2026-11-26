@@ -527,3 +527,7 @@ The business metrics App check now consumes the submitted service and framework 
 
 
 A fresh native metrics attempt exposed an overly narrow ownership boundary: consuming the service through the render-once App lifecycle and extending the existing HTTP metrics regression test are legitimate integration work. Those two exact paths are now accepted. Runtime HTTP implementation edits remain outside this task, generated Wire output must still match regeneration, and detached registries must still fail the App registry check. The original attempt remains retained as a scope failure and is not regraded.
+
+
+
+The required tenant App runtime check uses a supervisor-selected native Redis service. Set `ATLAS_EVAL_REDIS_ADDR` to an owned loopback Redis `host:port` before constructing the verifier. The evaluator captures and validates that endpoint in sealed supervisor source, without forwarding arbitrary host environment variables to the actor. Missing or non-loopback endpoints fail the required check. Two generated App processes consume their actual registered authentication, route middleware, and named cache resource over HTTP. Deterministic policy probes separately cover controlled minute boundaries, time zones, expiry, concurrency, and counter failure.
