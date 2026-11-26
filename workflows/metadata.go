@@ -11,6 +11,7 @@ import (
 
 // WorkflowDocsMap maps workflow ids to the docs sections agents should read first.
 var WorkflowDocsMap = map[string][]DocReference{
+	"goforj-catalog-search":        {{Path: "applications/library-resources.md", Heading: "Declare and Provision a Search Index"}, {Path: "libraries/search.md", Heading: "Quick Start {#quick-start}"}},
 	"goforj-notification-delivery": {{Path: "applications/library-resources.md", Heading: "Configure a Notification Sender"}, {Path: "libraries/notification.md", Heading: "Composition {#composition}"}, {Path: "libraries/notification.md", Heading: "Custom senders {#custom-senders}"}, {Path: "async/events-vs-queues.md", Heading: "Default Recommendation"}},
 	"goforj-feature-rollouts": {
 		{Path: "applications/library-resources.md", Heading: "Configure a Feature Evaluator"},
@@ -134,11 +135,18 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 		resource = "<name>"
 	}
 	scope := makeScope(app)
+	scope.searchConfirmed = projectHasSearch(p)
 	command := firstCommand(workflowCommands(workflowID, scope))
 	command = strings.ReplaceAll(command, "<name>", resource)
 	reason := "GoForj make commands update generated files, App registration, and Wire surfaces together."
 	if _, ok := applicationWorkflowDefinitions[workflowID]; ok {
 		reason = "Update the application-owned boundary and provider inputs, then build and test the selected App."
+	}
+	if workflowID == "goforj-catalog-search" {
+		reason = "Generate named search accessors from the owning App resource configuration, then provision its Go-defined schemas explicitly."
+		if !scope.searchConfirmed {
+			reason = searchCapabilityWarning
+		}
 	}
 	if workflowID == "goforj-read-docs" {
 		command = "Atlas search-docs"

@@ -69,6 +69,10 @@ func FilePolicy(req FilePolicyRequest) FilePolicyResult {
 	namedApp := appName != "" && appName != project.DefaultAppName
 	frontendKit := strings.TrimSpace(req.Project.FrontendKit)
 	switch {
+	case clean == "internal/searches/manager_gen.go" || clean == "internal/searches/accessors_gen.go":
+		return FilePolicyResult{Path: clean, Classification: "generated", Editable: false, PreferredAction: "regenerate", ChangeThrough: "forj generate --search", Owner: "framework-generator", Reason: "Search managers and named accessors are derived from App resource configuration."}
+	case appScoped && strings.HasSuffix(clean, "/search.go"):
+		return FilePolicyResult{Path: clean, Classification: appScopedClassification(namedApp, "schema"), Editable: true, PreferredAction: "direct edit schema declarations", ChangeThrough: "SearchDefinitions() and explicit provisioning", App: appName, Owner: "app", Reason: "The owning App declares domain search schemas in Go; schema changes require an explicit rebuild policy."}
 	case strings.HasPrefix(clean, "internal/notifications/") && strings.HasSuffix(clean, "_gen.go"):
 		return FilePolicyResult{Path: clean, Classification: "generated", Editable: false, PreferredAction: "regenerate", ChangeThrough: "NOTIFICATION_* configuration and forj generate --notification", Owner: "framework-generator", Reason: "Sender managers and typed accessors are generated from the configured resource contract."}
 	case strings.HasPrefix(clean, "internal/features/") && strings.HasSuffix(clean, "_gen.go"):

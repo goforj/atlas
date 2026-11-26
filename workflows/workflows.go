@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"strings"
+	"unicode"
 
 	"github.com/goforj/atlas/diagnostics"
 	atlasdocs "github.com/goforj/atlas/docs"
@@ -159,7 +160,9 @@ func Plan(ctx Context, req PlanRequest) (PlanResult, bool) {
 	workflowID := Classify(req.Task)
 	workflowIDs := ClassifyAll(req.Task)
 	scope := makeScope(app)
+	scope.searchConfirmed = projectHasSearch(p)
 	layout := appLayout(app)
+	layout.searchConfirmed = scope.searchConfirmed
 
 	result := PlanResult{
 		WorkflowID:  workflowID,
@@ -171,6 +174,9 @@ func Plan(ctx Context, req PlanRequest) (PlanResult, bool) {
 		Overlays:    mergeOverlays(productOverlays(p, req.Task), matchingOverlays(ctx.Overlays, req.Task)),
 		Commands:    mergeWorkflowCommands(workflowIDs, scope),
 		Warnings:    mergeWorkflowWarnings(workflowIDs),
+	}
+	if stringSliceContains(workflowIDs, "goforj-catalog-search") && !scope.searchConfirmed {
+		result.Warnings = append([]string{searchCapabilityWarning}, result.Warnings...)
 	}
 	result.Segments, result.Steps = workflowSegments(workflowIDs, scope, layout)
 	constrainNotificationPlan(&result, p, scope)
@@ -197,7 +203,7 @@ func ClassifyAll(task string) []string {
 	add("goforj-feature-rollouts", featureTask)
 	if !focused {
 		add("goforj-wire-repair", containsAny(lower, "wire", "missing dependency", "duplicate provider") || featureTask && containsAny(lower, "missing provider", "no provider"))
-		add("goforj-add-data-resource", containsAny(lower, "database", "repository", "migration", "model", "persistence", "schema") || hasTaskWord(lower, "table", "tables"))
+		add("goforj-add-data-resource", (containsAny(lower, "database", "repository", "migration", "model", "persistence", "schema") || hasTaskWord(lower, "table", "tables")) && (!catalogSearchTask(lower) || catalogPersistentDataTask(lower)))
 		add("goforj-add-http-route", featureTask && featureHTTPConcern(lower) || isNotificationTask(lower) && notificationHTTPConcern(lower) || !featureTask && !isNotificationTask(lower) && containsAny(lower, "route", "controller", "http", "api", "json response", "upload"))
 		add("goforj-add-job", containsAny(lower, "job", "queue", "worker", "background"))
 		add("goforj-add-event-workflow", containsAny(lower, "event", "subscriber", "publish"))
@@ -207,6 +213,8 @@ func ClassifyAll(task string) []string {
 		add("goforj-debug-runtime", containsAny(lower, "debug", "diagnose", "runtime failure", "investigate logs", "troubleshoot"))
 		add("goforj-multi-app-change", containsAny(lower, "named app", "multi-app", "additional app"))
 	}
+	add("goforj-catalog-search", catalogSearchTask(lower))
+	add("goforj-add-http-route", catalogSearchEndpoint(lower))
 	add("goforj-notification-delivery", isNotificationTask(lower))
 	if len(ids) == 0 {
 		return []string{Classify(task)}
@@ -219,6 +227,9 @@ func Classify(task string) string {
 	lower := strings.ToLower(task)
 	if id := nonImplementationWorkflow(lower); id != "" {
 		return id
+	}
+	if catalogSearchEndpoint(lower) {
+		return "goforj-add-http-route"
 	}
 	if isFeatureRolloutTask(lower) {
 		switch {
@@ -257,8 +268,10 @@ func Classify(task string) string {
 		return "goforj-debug-runtime"
 	case containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily") && containsAny(lower, "job", "queue", "worker", "background"):
 		return "goforj-add-job-schedule"
-	case containsAny(lower, "route", "controller", "http endpoint", "api endpoint", "json response"):
+	case containsAny(lower, "route", "controller", "http endpoint", "api endpoint", "json response") || catalogSearchEndpoint(lower):
 		return "goforj-add-http-route"
+	case catalogSearchTask(lower):
+		return "goforj-catalog-search"
 	case containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily"):
 		return "goforj-add-schedule"
 	case isNotificationTask(lower):
@@ -276,6 +289,48 @@ func Classify(task string) string {
 	default:
 		return "goforj-add-http-route"
 	}
+}
+
+// catalogSearchTask separates application indexing needs from ordinary source or documentation lookup.
+func catalogSearchTask(task string) bool {
+	lower := strings.ToLower(task)
+	if containsAny(lower, "search docs", "search the docs", "search documentation", "search source", "search code", "search files", "search logs", "search for wire") {
+		return false
+	}
+	if containsAny(lower, "lexical search", "full-text search", "full text search", "catalog search", "product search", "search index", "search resource", "searchable catalog", "searchable product") {
+		return true
+	}
+	hasSearch := strings.HasPrefix(lower, "search ") || containsAny(lower, " search ", "searchable", "searching", "text matching", "category filter", "facet", "highlight")
+	return hasSearch && containsAny(lower, "catalog", "products", "product descriptions")
+}
+
+// catalogPersistentDataTask prevents stable pagination or index schema wording from inventing a SQL migration.
+func catalogPersistentDataTask(task string) bool {
+	for _, word := range strings.FieldsFunc(task, func(value rune) bool { return !unicode.IsLetter(value) && !unicode.IsDigit(value) }) {
+		switch word {
+		case "database", "repository", "repositories", "migration", "migrations", "table", "tables":
+			return true
+		}
+	}
+	return false
+}
+
+// projectHasSearch confirms framework capability only from explicit discovered component metadata.
+func projectHasSearch(p project.Project) bool {
+	for _, component := range p.Components {
+		if strings.EqualFold(strings.TrimSpace(component), "search") {
+			return true
+		}
+	}
+	return false
+}
+
+// searchCapabilityWarning keeps unreleased or unavailable resource support conditional on local CLI evidence.
+const searchCapabilityWarning = "Search support is not established by this Project's component metadata. Inspect local CLI generate --help before enabling Search or generating resource files; use existing application-owned package composition if the CLI lacks this capability."
+
+// catalogSearchEndpoint composes HTTP work only when the task exposes application search behavior.
+func catalogSearchEndpoint(task string) bool {
+	return catalogSearchTask(task) && strings.Contains(task, "endpoint") && !containsAny(task, "backend endpoint", "meilisearch endpoint", "search server endpoint")
 }
 
 // RegistrationPoints returns app-owned registration surfaces for one app.
@@ -437,14 +492,16 @@ func Resources(ctx Context) ResourceInventory {
 }
 
 type appScope struct {
-	make   string
-	build  string
-	prefix string
+	searchConfirmed bool
+	make            string
+	build           string
+	prefix          string
 }
 
 type layout struct {
-	composition string
-	wire        string
+	searchConfirmed bool
+	composition     string
+	wire            string
 }
 
 func makeScope(app project.App) appScope {
@@ -472,8 +529,12 @@ func workflowCommands(workflowID string, scope appScope) []string {
 	if commands, ok := applicationWorkflowCommands(workflowID, scope); ok {
 		return commands
 	}
-
 	switch workflowID {
+	case "goforj-catalog-search":
+		if !scope.searchConfirmed {
+			return []string{scope.command("generate --help"), scope.build}
+		}
+		return []string{scope.command("generate --search"), scope.build}
 	case "goforj-feature-rollouts":
 		return []string{scope.command("generate --feature"), scope.build}
 	case "goforj-add-http-route":
@@ -501,8 +562,12 @@ func workflowFiles(workflowID string, layout layout) []string {
 	if files, ok := applicationWorkflowFiles(workflowID, layout); ok {
 		return files
 	}
-
 	switch workflowID {
+	case "goforj-catalog-search":
+		if !layout.searchConfirmed {
+			return []string{"internal/<domain>/service.go", "internal/<domain>/service_test.go"}
+		}
+		return []string{".goforj.yml", ".env", layout.composition + "/search.go", "internal/searches/manager_gen.go", "internal/searches/accessors_gen.go", "internal/<domain>/service.go", "internal/<domain>/service_test.go", layout.wire + "/inject_services_app.go"}
 	case "goforj-feature-rollouts":
 		return []string{".goforj.yml", ".env", "internal/features/manager_gen.go", "internal/features/accessors_gen.go", "internal/<domain>/service.go", "internal/<domain>/service_test.go", layout.wire + "/inject_services_app.go"}
 	case "goforj-add-http-route":
@@ -531,6 +596,8 @@ func workflowFiles(workflowID string, layout layout) []string {
 func workflowTools(workflowID string) []string {
 	tools := []string{"application-info", "project-layout", "workflow-plan", "registration-points", "docs-section-pack", "generated-file-policy", "validation-plan"}
 	switch workflowID {
+	case "goforj-catalog-search":
+		return append(tools, "resource-inventory", "scenario-guide")
 	case "goforj-feature-rollouts", "goforj-notification-delivery":
 		return append(tools, "resource-inventory", "scenario-guide", "version-alignment")
 	case "goforj-add-http-route":
@@ -569,8 +636,9 @@ func workflowWarnings(workflowID string) []string {
 	if definition, ok := applicationWorkflowDefinitions[workflowID]; ok && len(definition.warnings) != 0 {
 		return append([]string(nil), definition.warnings...)
 	}
-
 	switch workflowID {
+	case "goforj-catalog-search":
+		return []string{"Read goforj-catalog-search before choosing lexical search; preserve the database as durable truth.", "Declare App-owned schemas, provision explicitly before initialization, and reuse generated named accessors; do not invent make:search.", "Wait for mutation visibility and inspect terminal outcomes; highlights remain untrusted text."}
 	case "goforj-feature-rollouts":
 		return []string{"Read goforj-feature-rollouts and verify the pinned GoForj version supports the optional feature component before enabling or generating it.", "Configure evaluator resources with FEATURE_* settings; flag names remain dynamic source definitions, and App lifecycle owns initial loading and refresh.", "Use Enabled for ordinary boolean checks. Capture Snapshot() before targeting when related decisions must share one configuration revision and evaluation time; For(target) alone does not freeze configuration, and flags do not replace authorization."}
 	case "goforj-add-job":
@@ -597,6 +665,8 @@ func workflowWarnings(workflowID string) []string {
 func defaultScenarioRefs(query string) []DocReference {
 	workflowID := Classify(query)
 	switch workflowID {
+	case "goforj-catalog-search":
+		return []DocReference{{Path: "scenarios/catalog-search.md", Heading: "Starting State"}}
 	case "goforj-feature-rollouts":
 		return []DocReference{{Path: "scenarios/tenant-checkout-rollout.md", Heading: "Starting State"}}
 	case "goforj-add-job":
@@ -618,6 +688,8 @@ func workflowScenarioRefs(workflowIDs []string) []DocReference {
 	for _, workflowID := range workflowIDs {
 		var candidates []DocReference
 		switch workflowID {
+		case "goforj-catalog-search":
+			candidates = []DocReference{{Path: "scenarios/catalog-search.md", Heading: "Starting State"}}
 		case "goforj-feature-rollouts":
 			candidates = []DocReference{{Path: "scenarios/tenant-checkout-rollout.md", Heading: "Starting State"}}
 		case "goforj-add-data-resource":
@@ -729,12 +801,16 @@ func workflowSegments(workflowIDs []string, scope appScope, layout layout) ([]Wo
 			segmentSteps[index].Order = len(steps) + index + 1
 		}
 		steps = append(steps, segmentSteps...)
+		warnings := workflowWarnings(workflowID)
+		if workflowID == "goforj-catalog-search" && !scope.searchConfirmed {
+			warnings = append([]string{searchCapabilityWarning}, warnings...)
+		}
 		segments = append(segments, WorkflowSegment{
 			WorkflowID: workflowID,
 			Commands:   workflowCommands(workflowID, scope),
 			Files:      workflowFiles(workflowID, layout),
 			Docs:       workflowDocs(workflowID),
-			Warnings:   workflowWarnings(workflowID),
+			Warnings:   warnings,
 			Steps:      segmentSteps,
 		})
 	}
@@ -750,6 +826,18 @@ func workflowSegments(workflowIDs []string, scope appScope, layout layout) ([]Wo
 func workflowSteps(workflowID string, scope appScope) []PlanStep {
 	if steps, ok := applicationWorkflowSteps(workflowID, scope); ok {
 		return steps
+	}
+	if workflowID == "goforj-catalog-search" {
+		if !scope.searchConfirmed {
+			return []PlanStep{{WorkflowID: workflowID, Action: scope.command("generate --help"), Purpose: searchCapabilityWarning}}
+		}
+		return []PlanStep{
+			{WorkflowID: workflowID, Action: "enable Search for the owning App in .goforj.yml", Purpose: "keep optional resource ownership explicit"},
+			{WorkflowID: workflowID, Action: "declare SearchDefinitions() and named SEARCH_<NAME> backend settings", Purpose: "keep domain schema in Go and deployment configuration in the environment"},
+			{WorkflowID: workflowID, Action: scope.command("generate --search"), Purpose: "generate named portable index accessors"},
+			{WorkflowID: workflowID, Action: "provision schemas through an App-owned standalone bootstrap", Purpose: "prepare existing schema before the App graph validates it"},
+			{WorkflowID: workflowID, Action: "register the service constructor in the owning App service Wire set (inject_services_app.go), inject *searches.Manager, and select its configured named index once; leave generated manager construction and cleanup to the framework", Purpose: "keep backend construction outside application behavior"},
+		}
 	}
 
 	if workflowID == "goforj-feature-rollouts" {

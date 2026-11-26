@@ -200,6 +200,11 @@ capabilities:
     summary: Validate writes and return stable public errors without leaking domain internals.
     tier: smoke
     evaluations: [add-validated-write-endpoint]
+  - id: libraries.catalog-search
+    area: libraries
+    summary: Execute lexical catalog search with typed category isolation, stable pagination, and confirmed update visibility.
+    tier: core
+    evaluations: [catalog-search]
   - id: libraries.feature-rollout
     area: libraries
     summary: Stable tenant targeting, fallback, and consistent request snapshots.
@@ -210,6 +215,12 @@ capabilities:
     summary: Preserve synchronous acceptance and conservative primary/fallback notification policy.
     tier: core
     evaluations: [notify-incident]
+  - id: libraries.search-highlights-facets
+    area: libraries
+    summary: Render untrusted highlight segments safely and preserve facet counts, truncation, and precision.
+    tier: extended
+    evaluations: []
+
   - id: operations.backups
     area: operations
     summary: Configure and verify a recoverable application backup workflow.
