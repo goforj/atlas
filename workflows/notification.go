@@ -21,7 +21,14 @@ func isNotificationTask(lower string) bool {
 	if containsAny(lower, "incident alert", "fallback sender", "notification sender", "notification resource", "multi-channel notification", "webhook notification", "notifications.manager") {
 		return true
 	}
-	return hasTaskWord(lower, "notification", "notifications") && !hasTaskWord(lower, "email", "mailer", "mail")
+	return hasTaskWord(lower, "notification", "notifications") &&
+		(!hasTaskWord(lower, "email", "mailer", "mail") || hasTaskWord(lower, "webhook", "slack", "sms", "push", "discord", "pagerduty"))
+}
+
+// isEmailNotificationTask keeps email-only delivery on the existing App mailer.
+func isEmailNotificationTask(lower string) bool {
+	return hasTaskWord(lower, "notification", "notifications") &&
+		hasTaskWord(lower, "email", "mailer", "mail") && !isNotificationTask(lower)
 }
 
 // notificationHTTPConcern requires an explicit inbound transport request rather than outbound webhook terminology.
@@ -31,6 +38,18 @@ func notificationHTTPConcern(lower string) bool {
 
 // init registers sender resource work independently from broad transport and persistence keywords.
 func init() {
+	registerApplicationWorkflow(applicationWorkflowDefinition{
+		id: "goforj-email-notifications", matches: isEmailNotificationTask, docsTopic: isEmailNotificationTask,
+		commands: []string{"{build}", "go test ./..."},
+		docs: []DocReference{
+			{Path: "applications/mail.md", Heading: "Send a Message"},
+			{Path: "applications/mail.md", Heading: "Testing"},
+		},
+		steps: []PlanStep{
+			{Action: "find the existing mailer and delivery service in the owning App", Purpose: "preserve the App's configured sender and delivery policy"},
+			{Action: "send the email from the existing application boundary and verify it with a local mailer", Purpose: "exercise recipient, subject and body without contacting real recipients"},
+		},
+	})
 	registerApplicationWorkflow(applicationWorkflowDefinition{
 		id: "goforj-notification-delivery", matches: isNotificationTask, docsTopic: isNotificationTask,
 		commands: []string{"{forj} generate --notification", "{build}", "go test ./..."},

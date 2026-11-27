@@ -665,7 +665,7 @@ func workflowWarnings(workflowID string) []string {
 func defaultScenarioRefs(query string) []DocReference {
 	workflowID := Classify(query)
 	switch workflowID {
-	case "goforj-catalog-search", "goforj-feature-rollouts", "goforj-notification-delivery":
+	case "goforj-catalog-search", "goforj-feature-rollouts", "goforj-notification-delivery", "goforj-email-notifications":
 		return nil
 	case "goforj-add-job":
 		return []DocReference{{Path: "scenarios/reports-generate-job.md", Heading: "What You Will Build"}}
