@@ -1,10 +1,10 @@
 # GoForj Atlas
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="Atlas guides coding agents through GoForj scaffolding and App wiring, version-aware docs search, and read-only runtime inspection.">
+  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="Atlas guides AI coding agents through GoForj scaffolding and App wiring, version-aware docs search, and read-only runtime inspection.">
 </p>
 
-Atlas guides coding agents through GoForj conventions, libraries, and best
+Atlas guides AI coding agents through GoForj conventions, libraries, and best
 practices. It shows agents how to put business behavior in domain packages
 under `internal/<domain>` and register and wire changes in the App that owns
 them.
