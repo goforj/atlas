@@ -20,11 +20,11 @@ type applicationWorkflowDefinition struct {
 
 var applicationWorkflowDefinitions = map[string]applicationWorkflowDefinition{}
 var applicationChangePattern = regexp.MustCompile(`\b(add|create|implement|update|change|configure|bind|wire|inject|use|validate|normalize|preserve|distinguish|encrypt|decrypt|rotate|read|resolve|fetch|load|protect|reject|require|introduce|integrate|fix|repair|support|ensure|make|set up|look up|declare|harden|build|improve|send|notify|search|index|target|evaluate|enable|disable|roll out|instrument|increment|record|observe|measure)\b`)
-var applicationSurfacePattern = regexp.MustCompile(`\b(add|create|generate|introduce|expose)\s+(?:[a-z0-9_-]+\s+){0,4}(route|endpoint|controller|job|schedule|command)\b`)
+var applicationSurfacePattern = regexp.MustCompile(`\b(add|create|generate|introduce|expose)\s+(?:[a-z0-9_-]+\s+){0,4}(routes?|endpoints?|controllers?|jobs?|schedules?|commands?)\b`)
 
 // init makes explicit docs requests addressable without turning them into source work.
 func init() {
-	WorkflowDocsMap["goforj-read-docs"] = []DocReference{{Path: "applications/library-selection.md", Heading: "Match the Application Requirement"}}
+	WorkflowDocsMap["goforj-read-docs"] = []DocReference{{Path: "developer-tools/wiring-recipes.md", Heading: "Quick Map"}}
 }
 
 // registerApplicationWorkflow installs immutable package-owned definitions before planning starts.
@@ -93,7 +93,7 @@ func applicationWorkflows(task string) []string {
 			continue
 		}
 		id := ""
-		switch match[2] {
+		switch strings.TrimSuffix(match[2], "s") {
 		case "route", "endpoint", "controller":
 			id = "goforj-add-http-route"
 		case "job":
@@ -189,6 +189,59 @@ func applicationDocsPlan(app, task string) PlanResult {
 		WorkflowID: "goforj-read-docs", WorkflowIDs: []string{"goforj-read-docs"}, App: app,
 		Tools: []string{"search-docs", "read-doc-section", "docs-section-pack"}, Docs: applicationWorkflowDocs("goforj-read-docs", task),
 		Steps: []PlanStep{{Order: 1, WorkflowID: "goforj-read-docs", Action: "Atlas search-docs and read-doc-section", Purpose: "read the requested documentation before proposing implementation work"}},
+	}
+}
+
+// constrainOptionalResourcePlan requests CLI capability evidence before proposing an unreleased component to an older Project.
+func constrainOptionalResourcePlan(result *PlanResult, scope appScope, workflowID, component string, supported bool) {
+	if !stringSliceContains(result.WorkflowIDs, workflowID) || supported {
+		return
+	}
+	generate := scope.command("generate --" + component)
+	inspect := scope.command("generate --help")
+	for i, command := range result.Commands {
+		if command == generate {
+			result.Commands[i] = inspect
+		}
+	}
+	result.Warnings = append(result.Warnings, "Project metadata does not declare the "+component+" component. Inspect generate --help for --"+component+" support before enabling it; use application-owned native composition if the CLI lacks that capability.")
+	conditional := []PlanStep{
+		{WorkflowID: workflowID, Action: inspect, Purpose: "verify support for the optional component in the selected CLI"},
+		{WorkflowID: workflowID, Action: "after confirming support, enable " + component + " for the selected App in .goforj.yml, run forj render from the Project root, then request a new workflow plan", Purpose: "keep unsupported component keys and commands out of older Projects"},
+	}
+	steps := make([]PlanStep, 0, len(result.Steps))
+	inserted := false
+	for _, step := range result.Steps {
+		if step.WorkflowID == workflowID {
+			if !inserted {
+				steps = append(steps, conditional...)
+				inserted = true
+			}
+			continue
+		}
+		steps = append(steps, step)
+	}
+	for i := range steps {
+		steps[i].Order = i + 1
+	}
+	result.Steps = steps
+	for i := range result.Segments {
+		segment := &result.Segments[i]
+		if segment.WorkflowID != workflowID {
+			continue
+		}
+		for index, command := range segment.Commands {
+			if command == generate {
+				segment.Commands[index] = inspect
+			}
+		}
+		segment.Steps = nil
+		for _, step := range steps {
+			if step.WorkflowID == segment.WorkflowID {
+				segment.Steps = append(segment.Steps, step)
+			}
+		}
+		segment.Warnings = append(segment.Warnings, "Inspect CLI support before enabling the optional "+component+" component.")
 	}
 }
 

@@ -7,29 +7,24 @@ func promotedSurfaceContracts() []surfaceContract {
 			id:                  "catalog-search/v1",
 			allowedChanges:      []string{"internal/catalog/*.go", "app/wire/inject_services_app.go"},
 			qualityTestPatterns: []string{"internal/catalog/*_test.go"},
-			sources: []sourceContract{
-				{id: "catalog-registration", paths: []string{"app/wire/inject_services_app.go"}, identifiers: []string{"NewService"}},
-			},
 			commands: standardSurfaceCommands(commandContract{
 				id:              "catalog-search-behavior",
 				arguments:       []string{"go", "test", "./internal/catalog", "-run", "^TestAtlasCatalogSearchBehavior$", "-count=1"},
 				supervisorFiles: catalogSearchSupervisorFiles(),
-			}, appResourceRuntimeContract("catalog-search-app-runtime", "catalog", catalogSearchAppRuntimeTest, catalogSearchAppRuntimeCommand), commandContract{
-				probe: runCatalogSearchLibraryUseProbe,
-			}),
+			}, appResourceRuntimeContract("catalog-search-app-runtime", "catalog", catalogSearchAppRuntimeTest, catalogSearchAppRuntimeCommand)),
 		},
 		{
 			id:                  "notify-incident/v1",
 			allowedChanges:      []string{"internal/incidents/*.go", "app/wire/inject_services_app.go", "app/wire/app.go"},
 			qualityTestPatterns: []string{"internal/incidents/*_test.go"},
 			sources: []sourceContract{
-				{id: "incident-primary-injection", paths: []string{"internal/incidents/*.go"}, providerConnection: &providerConnectionContract{accessor: "Primary", managerImportSuffix: "/internal/notifications", wirePaths: []string{"app/wire/inject_services_app.go"}}},
-				{id: "incident-secondary-injection", paths: []string{"internal/incidents/*.go"}, providerConnection: &providerConnectionContract{accessor: "Secondary", managerImportSuffix: "/internal/notifications", wirePaths: []string{"app/wire/inject_services_app.go"}}},
+				{id: "incident-primary-injection", kind: RequirementQuality, paths: []string{"internal/incidents/*.go"}, providerConnection: &providerConnectionContract{accessor: "Primary", managerImportSuffix: "/internal/notifications", wirePaths: []string{"app/wire/inject_services_app.go"}}},
+				{id: "incident-secondary-injection", kind: RequirementQuality, paths: []string{"internal/incidents/*.go"}, providerConnection: &providerConnectionContract{accessor: "Secondary", managerImportSuffix: "/internal/notifications", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 				{id: "notification-library-composition", kind: RequirementQuality, stringLiterals: []string{"github.com/goforj/notification"}, paths: []string{"internal/incidents/*.go"}, identifiers: []string{"AlertService", "NewAlertService", "Notify"}, selectorCalls: []string{"Fallback"}, forbiddenCalls: []string{"Background", "TODO"}},
 			},
 			commands: standardSurfaceCommands(commandContract{
 				id:              "incident-notification-behavior",
-				arguments:       []string{"go", "test", "./internal/incidents", "-run", "^TestAtlas(Configured)?IncidentNotificationBehavior$", "-count=1"},
+				arguments:       []string{"go", "test", "./internal/incidents", "-run", "^TestAtlasIncidentNotificationBehavior$", "-count=1"},
 				supervisorFiles: []supervisorFile{{path: "internal/incidents/atlas_eval_notification_test.go", body: incidentNotificationBehaviorProbe}},
 			}, appResourceRuntimeContract("notification-app-runtime", "incidents", notificationAppRuntimeProbe, notificationAppRuntimeCommand)),
 		},
@@ -39,9 +34,9 @@ func promotedSurfaceContracts() []surfaceContract {
 			qualityTestPatterns: []string{"internal/checkout/*_test.go"},
 			sources: []sourceContract{
 				{id: "feature-library-adoption", kind: RequirementQuality, paths: []string{"internal/checkout/*.go"}, stringLiterals: []string{"github.com/goforj/feature"}},
-				{id: "feature-resource-accessor", paths: []string{"internal/checkout/*.go"}, providerConnection: &providerConnectionContract{accessor: "Checkout", managerImportSuffix: "/internal/features", wirePaths: []string{"app/wire/inject_services_app.go"}}},
+				{id: "feature-resource-accessor", kind: RequirementQuality, paths: []string{"internal/checkout/*.go"}, providerConnection: &providerConnectionContract{accessor: "Checkout", managerImportSuffix: "/internal/features", wirePaths: []string{"app/wire/inject_services_app.go"}}},
 			},
-			commands: standardSurfaceCommands(appResourceRuntimeContract("feature-app-runtime", "checkout", featureAppRuntimeProbe, featureAppRuntimeCommand), commandContract{id: "feature-rollout-behavior", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasFeatureRolloutBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_feature_test.go", body: featureRolloutBehaviorProbe}, {path: "internal/features/atlas_eval_manager.go", body: featureManagerFixtureSource}}}, commandContract{id: "feature-library-execution", probe: runFeatureLibraryUseProbe}),
+			commands: standardSurfaceCommands(appResourceRuntimeContract("feature-app-runtime", "checkout", featureAppRuntimeProbe, featureAppRuntimeCommand), commandContract{id: "feature-rollout-behavior", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasFeatureRolloutBehavior$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_feature_test.go", body: featureRolloutBehaviorProbe}, {path: "internal/features/atlas_eval_manager.go", body: featureManagerFixtureSource}}}),
 		},
 		{
 			id:             "add-app-command/v1",

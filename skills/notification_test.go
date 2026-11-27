@@ -16,7 +16,7 @@ func TestNotificationGuidanceIsDiscoverableBeforeInstallation(t *testing.T) {
 	if !slices.Contains(RecommendedNames(project.Project{Name: "incident-app"}), "goforj-notification-delivery") {
 		t.Fatal("notification guidance requires an installed component")
 	}
-	for _, term := range []string{"mail", "events", "queue", "standard-library", "ErrOutcomeUnknown", "Fallback(primary, secondary)", "never proof", "no make:notification"} {
+	for _, term := range []string{"mail", "events", "queue", "standard-library", "ErrOutcomeUnknown", "Fallback(primary, secondary)", "never proof", "no make:notification", "forj render"} {
 		if !strings.Contains(notificationDelivery, term) {
 			t.Errorf("missing guidance %q", term)
 		}

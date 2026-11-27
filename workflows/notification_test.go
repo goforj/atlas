@@ -91,7 +91,7 @@ func TestNotificationPlansRequireCLICapability(t *testing.T) {
 
 // TestNotificationDocsAndOwnershipUseResourceSources protects generated sender outputs and bounded documentation retrieval.
 func TestNotificationDocsAndOwnershipUseResourceSources(t *testing.T) {
-	provider := docs.StaticProvider{Docs: []docs.Document{{Path: "applications/library-resources.md", Content: "# Library Resources\n\n## Configure a Notification Sender\n\nDeclare resources and generate sender accessors.\n"}}}
+	provider := docs.StaticProvider{Docs: []docs.Document{{Path: "developer-tools/wiring-recipes.md", Content: "# Library Resources\n\n## Named Resource\n\nDeclare resources and generate sender accessors.\n"}}}
 	pack, err := DocsSectionPack(context.Background(), provider, "", "configure notification sender", 100)
 	if err != nil || len(pack.Sections) == 0 || !pack.Sections[0].Found {
 		t.Fatalf("docs pack = %#v, %v", pack, err)
@@ -112,7 +112,7 @@ func TestNotificationDocsRequestsRemainReadOnly(t *testing.T) {
 		if !ok || result.WorkflowID != "goforj-read-docs" || len(result.Commands) != 0 || len(result.Files) != 0 {
 			t.Fatalf("docs plan = %#v", result)
 		}
-		if !docsContain(result.Docs, "applications/library-resources.md") {
+		if !docsContain(result.Docs, "developer-tools/wiring-recipes.md") {
 			t.Fatalf("missing resource docs: %#v", result.Docs)
 		}
 		if steps := ValidationPlan(ctx, PlanRequest{Task: task, App: "marketplace"}).Steps; len(steps) != 0 {
@@ -121,6 +121,44 @@ func TestNotificationDocsRequestsRemainReadOnly(t *testing.T) {
 		advice, ok := CommandAdvice(ctx, CommandAdviceRequest{Task: task, App: "marketplace"})
 		if !ok || advice.Command != "Atlas search-docs" {
 			t.Fatalf("docs advice = %#v", advice)
+		}
+	}
+}
+
+// TestNotificationPlanningKeepsEmailOnExistingMailer covers the distinction between mail and sender composition.
+func TestNotificationPlanningKeepsEmailOnExistingMailer(t *testing.T) {
+	ctx := fixtureContext()
+	for _, task := range []string{
+		"add order email notifications using the existing mailer",
+		"send email notification after checkout",
+		"send email notifications for incident alerts using the existing mailer",
+		"configure a fallback sender for email notifications",
+		"send email-only incident alerts without a webhook",
+		"send email notifications to support teams using the existing mailer",
+	} {
+		plan, ok := Plan(ctx, PlanRequest{Task: task})
+		if !ok || plan.WorkflowID != "goforj-email-notifications" || !docsContain(plan.Docs, "applications/mail.md") {
+			t.Fatalf("email-only plan for %q = %#v", task, plan)
+		}
+		if slices.Contains(plan.WorkflowIDs, "goforj-notification-delivery") || slices.Contains(plan.WorkflowIDs, "goforj-add-http-route") {
+			t.Fatalf("email-only request selected unrelated workflows for %q: %v", task, plan.WorkflowIDs)
+		}
+	}
+	for _, task := range []string{
+		"configure a fallback sender for email and webhook notifications",
+		"add notifications through email and webhook",
+		"send Slack and email notifications",
+		"add notifications through email and push",
+		"configure notifications for email and mobile push",
+		"add multi-channel email and Teams notifications",
+		"send notifications through email and Microsoft Teams",
+		"enable the notification component for email notifications",
+		"configure NOTIFICATION_DRIVER for email notifications",
+		"use the Notification library for email incident alerts",
+		"use notifications.Manager for incident email alerts",
+	} {
+		if !slices.Contains(ClassifyAll(task), "goforj-notification-delivery") {
+			t.Fatalf("multichannel task %q lost notification guidance", task)
 		}
 	}
 }

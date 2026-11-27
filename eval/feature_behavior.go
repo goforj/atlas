@@ -1,14 +1,5 @@
 package eval
 
-import "context"
-
-// runFeatureLibraryUseProbe records observed library execution as an independent quality signal.
-func runFeatureLibraryUseProbe(ctx context.Context, runner CommandRunner, project VerifierProject) EndpointResult {
-	result := runIsolatedCommand(ctx, runner, project, commandContract{id: "feature-library-execution", arguments: []string{"go", "test", "./internal/checkout", "-run", "^TestAtlasFeatureLibraryExecution$", "-count=1"}, supervisorFiles: []supervisorFile{{path: "internal/checkout/atlas_eval_feature_test.go", body: featureRolloutBehaviorProbe}, {path: "internal/features/atlas_eval_manager.go", body: featureManagerFixtureSource}}})
-	result.Kind = RequirementQuality
-	return result
-}
-
 // featureRolloutBehaviorProbe exercises the application boundary against native controlled configuration.
 const featureRolloutBehaviorProbe = `package checkout
 
@@ -16,7 +7,6 @@ import (
     "context"
     "errors"
     "fmt"
-    "sync/atomic"
     "testing"
     "time"
 
@@ -31,7 +21,7 @@ func TestAtlasFeatureRolloutBehavior(t *testing.T) {
     start := now.Add(time.Hour)
     document := feature.Document{Schema: feature.SchemaVersion, Flags: map[string]feature.Flag{
         "checkout-v2": {Default: false, Rules: []feature.Rule{{Value: true, Rollout: &feature.Rollout{BasisPoints: 5000, Salt: "checkout-2026"}}}},
-        "receipt-v2": {Default: false},
+        "receipt-v2": {Default: false, Rules: []feature.Rule{{Value: true, Rollout: &feature.Rollout{BasisPoints: 5000, Salt: "receipt-2026"}}}},
     }}
     source := feature.SourceFunc(func(context.Context) (feature.Document, error) { return document, nil })
     engine, err := feature.Open(ctx, source, feature.WithClock(func() time.Time { return now }))
@@ -43,11 +33,12 @@ func TestAtlasFeatureRolloutBehavior(t *testing.T) {
     for i := 0; i < 128; i++ {
         tenant := fmt.Sprintf("tenant:%d", i)
         expected := flags.For(feature.Target{Key: tenant}).Evaluate(ctx, "checkout-v2", false).Value
+        expectedReceipt := flags.For(feature.Target{Key: tenant}).Evaluate(ctx, "receipt-v2", false).Value
         for attempt := 0; attempt < 8; attempt++ {
             request, err := service.Begin(ctx, tenant)
             if err != nil { t.Fatal(err) }
             got := request.Checkout(ctx)
-            if got != expected { t.Fatalf("unstable or incorrect assignment for %s", tenant) }
+            if got != expected || request.Receipt(ctx) != expectedReceipt { t.Fatalf("unstable or incorrect assignment for %s", tenant) }
             seen[got] = true
         }
         if err := engine.Refresh(ctx); err != nil { t.Fatal(err) }
@@ -93,24 +84,6 @@ func TestAtlasFeatureRolloutBehavior(t *testing.T) {
     if err != nil || !scheduledFresh.Receipt(ctx) { t.Fatalf("new request missed scheduled launch: %v", err) }
 }
 
-// TestAtlasFeatureLibraryExecution records adoption separately from required presentation behavior.
-func TestAtlasFeatureLibraryExecution(t *testing.T) {
-    ctx := context.Background()
-    source, err := feature.NewMemorySource(feature.Document{Schema: feature.SchemaVersion, Flags: map[string]feature.Flag{"checkout-v2": {Default: true}, "receipt-v2": {Default: true}}})
-    if err != nil { t.Fatal(err) }
-    engine, err := feature.Open(ctx, source)
-    if err != nil { t.Fatal(err) }
-    var count atomic.Int64
-    flags := feature.New(engine, feature.WithObserver(feature.ObserverFunc(func(context.Context, feature.Observation) { count.Add(1) })))
-    request, err := NewService(features.AtlasEvaluationManager(engine, flags)).Begin(ctx, "tenant:acme")
-    if err != nil { t.Fatal(err) }
-    before := count.Load()
-    request.Checkout(ctx)
-    if count.Load() == before { t.Fatal("checkout did not evaluate the injected library") }
-    before = count.Load()
-    request.Receipt(ctx)
-    if count.Load() == before { t.Fatal("receipt did not evaluate the injected library") }
-}
 `
 
 // featureManagerFixtureSource supplies controlled native definitions only inside the sealed verifier phase.

@@ -41,7 +41,7 @@ func TestFeaturePlansUseEvaluatorResources(t *testing.T) {
 					t.Fatalf("unrelated generator for %q: %s", task, command)
 				}
 			}
-			if !docsContain(result.Docs, "applications/library-resources.md") {
+			if !docsContain(result.Docs, "developer-tools/wiring-recipes.md") {
 				t.Fatalf("docs = %#v", result.Docs)
 			}
 			advice, ok := CommandAdvice(ctx, CommandAdviceRequest{Task: task, App: app})
@@ -104,11 +104,10 @@ func TestFeaturePlansComposeHTTPAndPreserveFrontendMeaning(t *testing.T) {
 // TestFeatureDocsPackAndGeneratedOwnership exercises bounded hosted guidance and source-of-truth policy.
 func TestFeatureDocsPackAndGeneratedOwnership(t *testing.T) {
 	provider := docs.StaticProvider{Docs: []docs.Document{
-		{Path: "applications/library-resources.md", Content: "# Library Resources\n\n## Configure a Feature Evaluator\n\nDeclare FEATURE_* resources before generation.\n"},
-		{Path: "libraries/feature.md", Content: "# Feature\n\n### Features.Snapshot {#features.snapshot}\n\nCapture definitions and evaluation time.\n"},
+		{Path: "developer-tools/wiring-recipes.md", Content: "# Library Resources\n\n## Named Resource\n\nDeclare FEATURE_* resources before generation.\n"},
 	}}
 	pack, err := DocsSectionPack(context.Background(), provider, "", "stable tenant checkout rollout", 120)
-	if err != nil || pack.WorkflowID != "goforj-feature-rollouts" || len(pack.Sections) != 2 {
+	if err != nil || pack.WorkflowID != "goforj-feature-rollouts" || len(pack.Sections) != 1 {
 		t.Fatalf("pack = %#v, err = %v", pack, err)
 	}
 	for _, section := range pack.Sections {
@@ -129,7 +128,7 @@ func TestFeatureDocumentationPlansRemainReadOnly(t *testing.T) {
 	for _, task := range []string{"explain tenant feature rollouts", "read docs for feature flag resources", "search documentation for stable tenant rollout snapshots"} {
 		for _, app := range []string{"app", "marketplace"} {
 			plan, ok := Plan(fixtureContext(), PlanRequest{Task: task, App: app})
-			if !ok || plan.WorkflowID != "goforj-read-docs" || len(plan.Commands) != 0 || len(plan.Files) != 0 || len(plan.Verification) != 0 || !docsContain(plan.Docs, "applications/library-resources.md") || !docsContain(plan.Docs, "libraries/feature.md") {
+			if !ok || plan.WorkflowID != "goforj-read-docs" || len(plan.Commands) != 0 || len(plan.Files) != 0 || len(plan.Verification) != 0 || !docsContain(plan.Docs, "developer-tools/wiring-recipes.md") {
 				t.Fatalf("docs plan=%#v", plan)
 			}
 			advice, ok := CommandAdvice(fixtureContext(), CommandAdviceRequest{Task: task, App: app})

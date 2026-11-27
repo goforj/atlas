@@ -179,8 +179,8 @@ func Plan(ctx Context, req PlanRequest) (PlanResult, bool) {
 		result.Warnings = append([]string{searchCapabilityWarning}, result.Warnings...)
 	}
 	result.Segments, result.Steps = workflowSegments(workflowIDs, scope, layout)
-	constrainNotificationPlan(&result, p, scope)
-	constrainFeaturePlan(&result, p, scope)
+	constrainOptionalResourcePlan(&result, scope, "goforj-notification-delivery", "notification", projectHasNotificationComponent(p))
+	constrainOptionalResourcePlan(&result, scope, "goforj-feature-rollouts", "feature", projectHasFeatureComponent(p))
 	result.Ownership = FilePolicies(FilePolicyRequest{Project: p, Task: req.Task, WorkflowIDs: workflowIDs}, result.Files)
 	result.Verification = ValidationPlan(ctx, PlanRequest{Task: req.Task, App: app.Name}).Steps
 	return result, true
@@ -209,7 +209,7 @@ func ClassifyAll(task string) []string {
 		add("goforj-add-event-workflow", containsAny(lower, "event", "subscriber", "publish"))
 		add("goforj-add-schedule", containsAny(lower, "schedule", "scheduler", "cron", "recurring", "daily") && (!featureTask || containsAny(lower, "cron", "scheduler", "scheduled job", "recurring job", "daily job")))
 		add("goforj-add-app-command", containsAny(lower, "command", "cli", "operator"))
-		add("goforj-frontend-change", containsAny(lower, "frontend", "ui", "view", "page", "react", "vue", "templ", "htmx"))
+		add("goforj-frontend-change", hasTaskWord(lower, "frontend", "ui", "view", "views", "page", "pages", "react", "vue", "templ", "htmx"))
 		add("goforj-debug-runtime", containsAny(lower, "debug", "diagnose", "runtime failure", "investigate logs", "troubleshoot"))
 		add("goforj-multi-app-change", containsAny(lower, "named app", "multi-app", "additional app"))
 	}
@@ -300,8 +300,8 @@ func catalogSearchTask(task string) bool {
 	if containsAny(lower, "lexical search", "full-text search", "full text search", "catalog search", "product search", "search index", "search resource", "searchable catalog", "searchable product") {
 		return true
 	}
-	hasSearch := strings.HasPrefix(lower, "search ") || containsAny(lower, " search ", "searchable", "searching", "text matching", "category filter", "facet", "highlight")
-	return hasSearch && containsAny(lower, "catalog", "products", "product descriptions")
+	hasSearch := strings.HasPrefix(lower, "search ") || containsAny(lower, " search ", "searchable", "searching", "full text", "full-text", "text matching", "category filter", "facet", "highlight")
+	return hasSearch && containsAny(lower, "catalog", "products", "product descriptions", "knowledge base", "support articles")
 }
 
 // catalogPersistentDataTask prevents stable pagination or index schema wording from inventing a SQL migration.
@@ -665,10 +665,8 @@ func workflowWarnings(workflowID string) []string {
 func defaultScenarioRefs(query string) []DocReference {
 	workflowID := Classify(query)
 	switch workflowID {
-	case "goforj-catalog-search":
-		return []DocReference{{Path: "scenarios/catalog-search.md", Heading: "Starting State"}}
-	case "goforj-feature-rollouts":
-		return []DocReference{{Path: "scenarios/tenant-checkout-rollout.md", Heading: "Starting State"}}
+	case "goforj-catalog-search", "goforj-feature-rollouts", "goforj-notification-delivery", "goforj-email-notifications":
+		return nil
 	case "goforj-add-job":
 		return []DocReference{{Path: "scenarios/reports-generate-job.md", Heading: "What You Will Build"}}
 	case "goforj-add-schedule":
@@ -688,10 +686,6 @@ func workflowScenarioRefs(workflowIDs []string) []DocReference {
 	for _, workflowID := range workflowIDs {
 		var candidates []DocReference
 		switch workflowID {
-		case "goforj-catalog-search":
-			candidates = []DocReference{{Path: "scenarios/catalog-search.md", Heading: "Starting State"}}
-		case "goforj-feature-rollouts":
-			candidates = []DocReference{{Path: "scenarios/tenant-checkout-rollout.md", Heading: "Starting State"}}
 		case "goforj-add-data-resource":
 			candidates = []DocReference{{Path: "scenarios/create-user-model.md", Heading: "What You Will Build"}, {Path: "scenarios/create-photo-data-resource.md", Heading: "Starting State"}, {Path: "scenarios/user-post-relationships.md", Heading: "What You Will Build"}}
 		case "goforj-add-http-route":
@@ -829,10 +823,13 @@ func workflowSteps(workflowID string, scope appScope) []PlanStep {
 	}
 	if workflowID == "goforj-catalog-search" {
 		if !scope.searchConfirmed {
-			return []PlanStep{{WorkflowID: workflowID, Action: scope.command("generate --help"), Purpose: searchCapabilityWarning}}
+			return []PlanStep{
+				{WorkflowID: workflowID, Action: scope.command("generate --help"), Purpose: searchCapabilityWarning},
+				{WorkflowID: workflowID, Action: "after confirming support, enable Search for the selected App in .goforj.yml, run forj render from the Project root, then request a new workflow plan", Purpose: "render App composition before generating accessors"},
+			}
 		}
 		return []PlanStep{
-			{WorkflowID: workflowID, Action: "enable Search for the owning App in .goforj.yml", Purpose: "keep optional resource ownership explicit"},
+			{WorkflowID: workflowID, Action: "if Search is disabled for the selected App, enable it in .goforj.yml and run forj render from the Project root", Purpose: "render the App schema entrypoint and Wire providers before generating accessors"},
 			{WorkflowID: workflowID, Action: "declare SearchDefinitions() and named SEARCH_<NAME> backend settings", Purpose: "keep domain schema in Go and deployment configuration in the environment"},
 			{WorkflowID: workflowID, Action: scope.command("generate --search"), Purpose: "generate named portable index accessors"},
 			{WorkflowID: workflowID, Action: "provision schemas through an App-owned standalone bootstrap", Purpose: "prepare existing schema before the App graph validates it"},
@@ -842,7 +839,7 @@ func workflowSteps(workflowID string, scope appScope) []PlanStep {
 
 	if workflowID == "goforj-feature-rollouts" {
 		return []PlanStep{
-			{WorkflowID: workflowID, Action: "inspect the pinned GoForj version and enable feature for the owning App in .goforj.yml", Purpose: "use supported framework resources without promoting them into unrelated Apps"},
+			{WorkflowID: workflowID, Action: "if feature is disabled for the selected App, enable it in .goforj.yml and run forj render from the Project root", Purpose: "render the App Wire providers before generating accessors"},
 			{WorkflowID: workflowID, Action: "declare FEATURE_* evaluator resources in .env and the owning App overlay", Purpose: "separate configured evaluators from dynamic flag names"},
 			{WorkflowID: workflowID, Action: scope.command("generate --feature"), Purpose: "generate the manager and typed evaluator accessors"},
 			{WorkflowID: workflowID, Action: "register the service constructor in the owning App service Wire set (inject_services_app.go), inject *features.Manager, and select its configured named evaluator once; leave generated manager construction and cleanup to the framework; use Enabled for ordinary checks or Snapshot() for related decisions requiring consistency", Purpose: "match the task's targeting and consistency requirements"},
