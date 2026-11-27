@@ -128,7 +128,13 @@ func TestNotificationDocsRequestsRemainReadOnly(t *testing.T) {
 // TestNotificationPlanningKeepsEmailOnExistingMailer covers the distinction between mail and sender composition.
 func TestNotificationPlanningKeepsEmailOnExistingMailer(t *testing.T) {
 	ctx := fixtureContext()
-	for _, task := range []string{"add order email notifications using the existing mailer", "send email notification after checkout"} {
+	for _, task := range []string{
+		"add order email notifications using the existing mailer",
+		"send email notification after checkout",
+		"send email notifications for incident alerts using the existing mailer",
+		"configure a fallback sender for email notifications",
+		"send email-only incident alerts without a webhook",
+	} {
 		plan, ok := Plan(ctx, PlanRequest{Task: task})
 		if !ok || plan.WorkflowID != "goforj-email-notifications" || !docsContain(plan.Docs, "applications/mail.md") {
 			t.Fatalf("email-only plan for %q = %#v", task, plan)
@@ -137,7 +143,12 @@ func TestNotificationPlanningKeepsEmailOnExistingMailer(t *testing.T) {
 			t.Fatalf("email-only request selected unrelated workflows for %q: %v", task, plan.WorkflowIDs)
 		}
 	}
-	for _, task := range []string{"configure a fallback sender for email and webhook notifications", "add notifications through email and webhook", "send Slack and email notifications"} {
+	for _, task := range []string{
+		"configure a fallback sender for email and webhook notifications",
+		"add notifications through email and webhook",
+		"send Slack and email notifications",
+		"use notifications.Manager for incident email alerts",
+	} {
 		if !slices.Contains(ClassifyAll(task), "goforj-notification-delivery") {
 			t.Fatalf("multichannel task %q lost notification guidance", task)
 		}

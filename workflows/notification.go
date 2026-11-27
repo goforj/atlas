@@ -16,19 +16,31 @@ func projectHasNotificationComponent(p project.Project) bool {
 	return false
 }
 
-// isNotificationTask recognizes sender configuration without using generic message vocabulary.
+// isNotificationTask selects sender composition when the request calls for a notification resource or a non-email channel.
 func isNotificationTask(lower string) bool {
-	if containsAny(lower, "incident alert", "fallback sender", "notification sender", "notification resource", "multi-channel notification", "webhook notification", "notifications.manager") {
+	if containsAny(lower, "notification resource", "multi-channel notification", "multichannel notification", "notifications.manager", "github.com/goforj/notification") {
 		return true
 	}
-	return hasTaskWord(lower, "notification", "notifications") &&
-		(!hasTaskWord(lower, "email", "mailer", "mail") || hasTaskWord(lower, "webhook", "slack", "sms", "push", "discord", "pagerduty"))
+	if !mentionsAlertDelivery(lower) {
+		return false
+	}
+	if !hasTaskWord(lower, "email", "mailer", "mail") {
+		return true
+	}
+	if containsAny(lower, "email-only", "email only", "only email", "only by email") {
+		return false
+	}
+	return hasTaskWord(lower, "webhook", "slack", "sms", "discord", "pagerduty") || strings.Contains(lower, "push notification")
 }
 
 // isEmailNotificationTask keeps email-only delivery on the existing App mailer.
 func isEmailNotificationTask(lower string) bool {
-	return hasTaskWord(lower, "notification", "notifications") &&
-		hasTaskWord(lower, "email", "mailer", "mail") && !isNotificationTask(lower)
+	return mentionsAlertDelivery(lower) && hasTaskWord(lower, "email", "mailer", "mail") && !isNotificationTask(lower)
+}
+
+// mentionsAlertDelivery recognizes incident and sender terminology shared by mail and notification.
+func mentionsAlertDelivery(lower string) bool {
+	return hasTaskWord(lower, "notification", "notifications") || containsAny(lower, "incident alert", "fallback sender")
 }
 
 // notificationHTTPConcern requires an explicit inbound transport request rather than outbound webhook terminology.
