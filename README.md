@@ -1,7 +1,7 @@
 # GoForj Atlas
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="GoForj Atlas gives coding agents project context through MCP. Get started with forj atlas:install.">
+  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="GoForj Atlas maps App structure, framework docs, and runtime inspection for coding agents.">
 </p>
 
 Agent-native project navigation and MCP tooling for GoForj.

@@ -7,165 +7,192 @@
 <title>GoForj Atlas banner</title>
 <!-- Capture .banner at 1200 by 456 CSS pixels with device scale factor 2. -->
 <link rel="stylesheet" href="https://goforj.dev/design-system.css">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
 <style>
 * { box-sizing: border-box; }
 
-body {
-  margin: 0;
-  background: var(--gf-ground-deep);
-}
+body { margin: 0; }
 
 .banner {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
   width: 1200px;
   height: 456px;
-  display: grid;
-  grid-template-columns: 1fr 450px;
-  align-items: center;
-  gap: 55px;
-  padding: 44px 64px 46px;
+  padding: 0 66px;
+  overflow: hidden;
   border: 1px solid var(--gf-line-strong);
-  background: radial-gradient(ellipse at 85% 50%, var(--gf-ground) 0%, var(--gf-ground-deep) 72%);
+  background: var(--gf-ground-deep);
   color: var(--gf-ink);
   font-family: var(--gf-font-body);
+}
+
+.identification {
+  position: relative;
+  z-index: 1;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  font: 600 25px/1 var(--gf-font-display);
+  font: 600 23px/1 var(--gf-font-display);
 }
 
 .brand img {
-  width: 32px;
-  height: 32px;
+  width: 33px;
+  height: 33px;
 }
 
 h1 {
-  margin: 12px 0 7px;
-  font: 700 112px/.99 var(--gf-font-display);
-  letter-spacing: -.074em;
+  margin: 13px 0 0;
+  font: 700 136px/.98 var(--gf-font-display);
+  letter-spacing: -.058em;
 }
 
 .summary {
-  margin: 0;
-  max-width: 440px;
+  margin: 18px 0 0;
   color: var(--gf-ink-2);
   font-size: 34px;
-  line-height: 1.15;
-  letter-spacing: -.035em;
+  line-height: 1.18;
+  letter-spacing: -.034em;
 }
 
-.command {
-  display: inline-flex;
-  gap: 13px;
-  align-items: center;
-  margin-top: 29px;
-  padding: 10px 15px;
-  border: 1px solid var(--gf-line-strong);
-  border-radius: 6px;
-  background: var(--gf-code-well);
-  color: var(--gf-reference);
-  font: 500 22px/1.2 var(--gf-font-mono);
-}
-
-.command span { color: var(--gf-ink-2); }
-
-.context {
-  margin: 0;
-  padding: 26px 29px 28px;
-  border: 1px solid var(--gf-line-strong);
-  border-radius: 12px;
-  background: var(--gf-ground-alt);
-}
-
-.context-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 17px;
-  border-bottom: 1px solid var(--gf-line-strong);
-}
-
-.context h2 {
-  margin: 0;
-  font: 600 33px/1.1 var(--gf-font-display);
-  letter-spacing: -.035em;
-}
-
-.protocol {
-  color: var(--gf-nav);
-  font: 500 19px/1 var(--gf-font-mono);
-}
-
-.context ul {
-  margin: 0;
-  padding: 16px 0 0;
-  list-style: none;
-}
-
-.context li {
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-height: 54px;
-  padding-left: 38px;
-  color: color-mix(in srgb, var(--gf-ink) 25%, var(--gf-ink-2));
-  font-size: 27px;
-  font-weight: 500;
-}
-
-.context li::before {
+.map {
   position: absolute;
-  inset: 0 auto 0 5px;
-  border-left: 1px solid var(--gf-accent-line);
+  inset: 0 0 0 auto;
+  width: 694px;
+  margin: 0;
+}
+
+.map::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 68% 50%, var(--gf-ground-alt), transparent 72%),
+    radial-gradient(ellipse at 70% 20%, var(--gf-accent-soft), transparent 47%);
   content: "";
 }
 
-.context li:first-child::before { top: 50%; }
-.context li:last-child::before { bottom: 50%; }
-
-.context li::after {
+.map canvas {
   position: absolute;
-  left: 5px;
-  width: 20px;
-  height: 1px;
-  background: var(--gf-accent);
-  content: "";
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
-.context li span {
-  padding: 6px 12px;
-  border: 1px solid var(--gf-line-strong);
-  border-radius: 5px;
-  background: var(--gf-ground);
+.place {
+  position: absolute;
+  color: var(--gf-ink);
+  font: 500 26px/1.1 var(--gf-font-display);
+  letter-spacing: -.022em;
+  text-shadow: 0 1px 5px var(--gf-ground-deep), 0 0 12px var(--gf-ground-deep);
+  white-space: nowrap;
 }
+
+.project { left: 90px; top: 369px; color: var(--gf-reference); }
+.structure { left: 410px; top: 75px; }
+.docs { left: 471px; top: 183px; }
+.runtime { left: 398px; top: 369px; }
 </style>
 </head>
 <body>
 <main class="banner">
-  <div>
+  <div class="identification">
     <div class="brand">
       <img src="https://goforj.dev/favicon-seam-dark.svg" alt="">
       <span>GoForj</span>
     </div>
     <h1>Atlas</h1>
     <p class="summary">Project navigation<br>for coding agents</p>
-    <code class="command"><span aria-hidden="true">$</span> forj atlas:install</code>
   </div>
-  <section class="context">
-    <div class="context-heading">
-      <h2>Project context</h2>
-      <span class="protocol">MCP</span>
-    </div>
-    <ul>
-      <li><span>App structure</span></li>
-      <li><span>GoForj docs</span></li>
-      <li><span>Runtime inspection</span></li>
-    </ul>
-  </section>
+  <figure class="map" role="img" aria-label="Paths through a GoForj project lead to App structure, framework docs, and runtime inspection.">
+    <canvas width="1388" height="908" aria-hidden="true"></canvas>
+    <span class="place project" aria-hidden="true">GoForj project</span>
+    <span class="place structure" aria-hidden="true">App structure</span>
+    <span class="place docs" aria-hidden="true">Framework docs</span>
+    <span class="place runtime" aria-hidden="true">Runtime inspection</span>
+  </figure>
 </main>
+<script>
+// Keep the illustration tied to the site palette when the tokens change.
+const map = document.querySelector(".map")
+const canvas = map.querySelector("canvas")
+const context = canvas.getContext("2d")
+const theme = getComputedStyle(map)
+const token = name => theme.getPropertyValue(name).trim()
+context.scale(2, 2)
+
+// Broad, irregular contours frame the routes without competing with their labels.
+context.strokeStyle = token("--gf-line-strong")
+context.lineWidth = 1
+for (const [centerX, centerY, stretch, rotation, count] of [
+  [495, 49, 0.66, -0.4, 11],
+  [553, 438, 0.54, -0.45, 10],
+  [118, 112, 0.78, 0.45, 6],
+]) {
+  for (let index = 0; index < count; index++) {
+    const distance = 25 + index * 19
+    context.globalAlpha = 0.58 - index * 0.032
+    context.beginPath()
+    for (let step = 0; step <= 144; step++) {
+      const angle = step / 144 * Math.PI * 2
+      const variation = 1 + 0.13 * Math.sin(3 * angle + rotation) + 0.06 * Math.cos(5 * angle - rotation)
+      const x = distance * Math.cos(angle) * variation
+      const y = distance * Math.sin(angle) * variation * stretch
+      const px = centerX + x * Math.cos(rotation) - y * Math.sin(rotation)
+      const py = centerY + x * Math.sin(rotation) + y * Math.cos(rotation)
+      if (step === 0) context.moveTo(px, py)
+      else context.lineTo(px, py)
+    }
+    context.closePath()
+    context.stroke()
+  }
+}
+
+context.globalAlpha = 1
+context.lineCap = "round"
+context.lineJoin = "round"
+const routes = new Path2D(
+  "M101 345H170Q186 345 198 333L275 256Q284 247 297 247H356" +
+  "M356 247L477 126Q485 118 499 118H547" +
+  "M356 247H409Q426 247 437 236L451 222Q457 216 471 216H589" +
+  "M356 247L441 332Q454 345 473 345H547"
+)
+
+context.strokeStyle = token("--gf-ground-deep")
+context.lineWidth = 7
+context.stroke(routes)
+context.strokeStyle = token("--gf-accent")
+context.lineWidth = 2
+context.stroke(routes)
+
+for (const [x, y, radius, filled] of [
+  [101, 345, 7, true],
+  [547, 118, 6, false],
+  [589, 216, 6, false],
+  [547, 345, 6, false],
+]) {
+  context.beginPath()
+  context.arc(x, y, radius, 0, Math.PI * 2)
+  context.fillStyle = token(filled ? "--gf-accent" : "--gf-ground-deep")
+  context.fill()
+  context.stroke()
+}
+
+// The shared waypoint stays visually distinct where the three routes branch.
+context.beginPath()
+context.arc(356, 247, 11, 0, Math.PI * 2)
+context.fillStyle = token("--gf-ground-deep")
+context.fill()
+context.stroke()
+
+context.beginPath()
+context.arc(356, 247, 4, 0, Math.PI * 2)
+context.fillStyle = token("--gf-accent")
+context.fill()
+</script>
 </body>
 </html>
