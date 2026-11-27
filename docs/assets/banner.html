@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>GoForj Atlas banner</title>
+<!-- Capture .banner at 1200 by 456 CSS pixels with device scale factor 2. -->
+<link rel="stylesheet" href="https://goforj.dev/design-system.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--gf-ground-deep);
+}
+
+.banner {
+  width: 1200px;
+  height: 456px;
+  display: grid;
+  grid-template-columns: 1fr 450px;
+  align-items: center;
+  gap: 55px;
+  padding: 44px 64px 46px;
+  border: 1px solid var(--gf-line-strong);
+  background: radial-gradient(ellipse at 85% 50%, var(--gf-ground) 0%, var(--gf-ground-deep) 72%);
+  color: var(--gf-ink);
+  font-family: var(--gf-font-body);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 25px/1 var(--gf-font-display);
+}
+
+.brand img {
+  width: 32px;
+  height: 32px;
+}
+
+h1 {
+  margin: 12px 0 7px;
+  font: 700 112px/.99 var(--gf-font-display);
+  letter-spacing: -.074em;
+}
+
+.summary {
+  margin: 0;
+  max-width: 440px;
+  color: var(--gf-ink-2);
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: -.035em;
+}
+
+.command {
+  display: inline-flex;
+  gap: 13px;
+  align-items: center;
+  margin-top: 29px;
+  padding: 10px 15px;
+  border: 1px solid var(--gf-line-strong);
+  border-radius: 6px;
+  background: var(--gf-code-well);
+  color: var(--gf-reference);
+  font: 500 22px/1.2 var(--gf-font-mono);
+}
+
+.command span { color: var(--gf-ink-2); }
+
+.context {
+  margin: 0;
+  padding: 26px 29px 28px;
+  border: 1px solid var(--gf-line-strong);
+  border-radius: 12px;
+  background: var(--gf-ground-alt);
+}
+
+.context-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 17px;
+  border-bottom: 1px solid var(--gf-line-strong);
+}
+
+.context h2 {
+  margin: 0;
+  font: 600 33px/1.1 var(--gf-font-display);
+  letter-spacing: -.035em;
+}
+
+.protocol {
+  color: var(--gf-nav);
+  font: 500 19px/1 var(--gf-font-mono);
+}
+
+.context ul {
+  margin: 0;
+  padding: 16px 0 0;
+  list-style: none;
+}
+
+.context li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 54px;
+  padding-left: 38px;
+  color: color-mix(in srgb, var(--gf-ink) 25%, var(--gf-ink-2));
+  font-size: 27px;
+  font-weight: 500;
+}
+
+.context li::before {
+  position: absolute;
+  inset: 0 auto 0 5px;
+  border-left: 1px solid var(--gf-accent-line);
+  content: "";
+}
+
+.context li:first-child::before { top: 50%; }
+.context li:last-child::before { bottom: 50%; }
+
+.context li::after {
+  position: absolute;
+  left: 5px;
+  width: 20px;
+  height: 1px;
+  background: var(--gf-accent);
+  content: "";
+}
+
+.context li span {
+  padding: 6px 12px;
+  border: 1px solid var(--gf-line-strong);
+  border-radius: 5px;
+  background: var(--gf-ground);
+}
+</style>
+</head>
+<body>
+<main class="banner">
+  <div>
+    <div class="brand">
+      <img src="https://goforj.dev/favicon-seam-dark.svg" alt="">
+      <span>GoForj</span>
+    </div>
+    <h1>Atlas</h1>
+    <p class="summary">Project navigation<br>for coding agents</p>
+    <code class="command"><span aria-hidden="true">$</span> forj atlas:install</code>
+  </div>
+  <section class="context">
+    <div class="context-heading">
+      <h2>Project context</h2>
+      <span class="protocol">MCP</span>
+    </div>
+    <ul>
+      <li><span>App structure</span></li>
+      <li><span>GoForj docs</span></li>
+      <li><span>Runtime inspection</span></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
