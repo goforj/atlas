@@ -147,6 +147,8 @@ func TestNotificationPlanningKeepsEmailOnExistingMailer(t *testing.T) {
 		"configure a fallback sender for email and webhook notifications",
 		"add notifications through email and webhook",
 		"send Slack and email notifications",
+		"add notifications through email and push",
+		"configure notifications for email and mobile push",
 		"use notifications.Manager for incident email alerts",
 	} {
 		if !slices.Contains(ClassifyAll(task), "goforj-notification-delivery") {

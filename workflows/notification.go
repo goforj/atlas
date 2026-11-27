@@ -30,7 +30,7 @@ func isNotificationTask(lower string) bool {
 	if containsAny(lower, "email-only", "email only", "only email", "only by email") {
 		return false
 	}
-	return hasTaskWord(lower, "webhook", "slack", "sms", "discord", "pagerduty") || strings.Contains(lower, "push notification")
+	return hasTaskWord(lower, "webhook", "slack", "sms", "push", "discord", "pagerduty")
 }
 
 // isEmailNotificationTask keeps email-only delivery on the existing App mailer.
