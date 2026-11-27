@@ -22,6 +22,7 @@ func TestAtlasResourceApp(t *testing.T) {
     root := atlasAppRoot(t)
     var primaryCalls, secondaryCalls atomic.Int32
     var primaryStatus atomic.Int32
+    var dropPrimaryResponse atomic.Bool
     primaryStatus.Store(http.StatusNoContent)
     record := func(calls *atomic.Int32, primary bool) http.HandlerFunc {
         return func(response http.ResponseWriter, request *http.Request) {
@@ -30,6 +31,12 @@ func TestAtlasResourceApp(t *testing.T) {
             if err := json.NewDecoder(request.Body).Decode(&payload); err != nil { t.Error(err) }
             if payload.Title != "Incident inc-app-29" || payload.Body != "critical: App checkout unavailable" {
                 t.Errorf("App webhook payload = %#v", payload)
+            }
+            if primary && dropPrimaryResponse.Load() {
+                connection, _, err := response.(http.Hijacker).Hijack()
+                if err != nil { t.Error(err); return }
+                _ = connection.Close()
+                return
             }
             status := http.StatusNoContent
             if primary { status = int(primaryStatus.Load()) }
@@ -69,6 +76,13 @@ func TestAtlasResourceApp(t *testing.T) {
     }
     if primaryCalls.Load() != 3 || secondaryCalls.Load() != 1 {
         t.Fatalf("retryable App calls = %d/%d, want 3/1", primaryCalls.Load(), secondaryCalls.Load())
+    }
+    dropPrimaryResponse.Store(true)
+    if output, err := atlasRunResourceApp(t, root, environment); err == nil {
+        t.Fatalf("uncertain primary acceptance must remain an App error: %s", output)
+    }
+    if primaryCalls.Load() != 4 || secondaryCalls.Load() != 1 {
+        t.Fatalf("uncertain App calls = %d/%d, want 4/1", primaryCalls.Load(), secondaryCalls.Load())
     }
 }
 `

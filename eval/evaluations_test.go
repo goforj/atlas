@@ -247,7 +247,11 @@ func TestPromotedEvaluationIDsReturnsStableSuiteCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PromotedEvaluationIDs(): %v", err)
 	}
-	if len(ids) < 32 || !slices.IsSorted(ids) || ids[0] != "add-app-command" || slices.Contains(ids, "unknown-framework-shape") {
+	if len(ids) < 32 || !slices.IsSorted(ids) || ids[0] != "add-app-command" || slices.Contains(ids, "unknown-framework-shape") || slices.Contains(ids, "catalog-search") {
 		t.Fatalf("ids = %v", ids)
+	}
+	calibrations, err := PromotedEvaluationIDs("calibration")
+	if err != nil || !slices.Contains(calibrations, "catalog-search") {
+		t.Fatalf("calibration suite = %v, %v", calibrations, err)
 	}
 }

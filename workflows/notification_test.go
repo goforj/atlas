@@ -91,7 +91,7 @@ func TestNotificationPlansRequireCLICapability(t *testing.T) {
 
 // TestNotificationDocsAndOwnershipUseResourceSources protects generated sender outputs and bounded documentation retrieval.
 func TestNotificationDocsAndOwnershipUseResourceSources(t *testing.T) {
-	provider := docs.StaticProvider{Docs: []docs.Document{{Path: "applications/library-resources.md", Content: "# Library Resources\n\n## Configure a Notification Sender\n\nDeclare resources and generate sender accessors.\n"}}}
+	provider := docs.StaticProvider{Docs: []docs.Document{{Path: "developer-tools/wiring-recipes.md", Content: "# Library Resources\n\n## Named Resource\n\nDeclare resources and generate sender accessors.\n"}}}
 	pack, err := DocsSectionPack(context.Background(), provider, "", "configure notification sender", 100)
 	if err != nil || len(pack.Sections) == 0 || !pack.Sections[0].Found {
 		t.Fatalf("docs pack = %#v, %v", pack, err)
@@ -112,7 +112,7 @@ func TestNotificationDocsRequestsRemainReadOnly(t *testing.T) {
 		if !ok || result.WorkflowID != "goforj-read-docs" || len(result.Commands) != 0 || len(result.Files) != 0 {
 			t.Fatalf("docs plan = %#v", result)
 		}
-		if !docsContain(result.Docs, "applications/library-resources.md") {
+		if !docsContain(result.Docs, "developer-tools/wiring-recipes.md") {
 			t.Fatalf("missing resource docs: %#v", result.Docs)
 		}
 		if steps := ValidationPlan(ctx, PlanRequest{Task: task, App: "marketplace"}).Steps; len(steps) != 0 {
@@ -122,5 +122,17 @@ func TestNotificationDocsRequestsRemainReadOnly(t *testing.T) {
 		if !ok || advice.Command != "Atlas search-docs" {
 			t.Fatalf("docs advice = %#v", advice)
 		}
+	}
+}
+
+// TestNotificationPlanningKeepsEmailOnExistingMailer covers the distinction between mail and sender composition.
+func TestNotificationPlanningKeepsEmailOnExistingMailer(t *testing.T) {
+	for _, task := range []string{"add order email notifications using the existing mailer", "send email notification after checkout"} {
+		if slices.Contains(ClassifyAll(task), "goforj-notification-delivery") {
+			t.Fatalf("email-only request selected notification for %q", task)
+		}
+	}
+	if !slices.Contains(ClassifyAll("configure a fallback sender for email and webhook notifications"), "goforj-notification-delivery") {
+		t.Fatal("explicit fallback composition lost notification guidance")
 	}
 }

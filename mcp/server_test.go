@@ -374,6 +374,7 @@ Use forj marketplace make:controller checkout.
 Dispatch durable reports:generate work from a users.created subscriber and process it with a queue worker.
 `,
 				},
+				{Path: "developer-tools/wiring-recipes.md", Content: "# Wiring\n\n## Named Resource\n\nSelect the named dependency from the injected manager."},
 				{
 					Path:  "applications/routes.md",
 					Title: "Routes",

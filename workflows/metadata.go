@@ -11,11 +11,10 @@ import (
 
 // WorkflowDocsMap maps workflow ids to the docs sections agents should read first.
 var WorkflowDocsMap = map[string][]DocReference{
-	"goforj-catalog-search":        {{Path: "applications/library-resources.md", Heading: "Declare and Provision a Search Index"}, {Path: "libraries/search.md", Heading: "Quick Start {#quick-start}"}},
-	"goforj-notification-delivery": {{Path: "applications/library-resources.md", Heading: "Configure a Notification Sender"}, {Path: "libraries/notification.md", Heading: "Composition {#composition}"}, {Path: "libraries/notification.md", Heading: "Custom senders {#custom-senders}"}, {Path: "async/events-vs-queues.md", Heading: "Default Recommendation"}},
+	"goforj-catalog-search":        {{Path: "libraries/search.md", Heading: "Quick Start {#quick-start}"}, {Path: "developer-tools/wiring-recipes.md", Heading: "Named Resource"}},
+	"goforj-notification-delivery": {{Path: "developer-tools/wiring-recipes.md", Heading: "Named Resource"}, {Path: "libraries/notification.md", Heading: "Composition {#composition}"}, {Path: "libraries/notification.md", Heading: "Custom senders {#custom-senders}"}, {Path: "async/events-vs-queues.md", Heading: "Default Recommendation"}},
 	"goforj-feature-rollouts": {
-		{Path: "applications/library-resources.md", Heading: "Configure a Feature Evaluator"},
-		{Path: "libraries/feature.md", Heading: "Features.Snapshot {#features.snapshot}"},
+		{Path: "developer-tools/wiring-recipes.md", Heading: "Named Resource"},
 	},
 	"goforj-add-http-route": {
 		{Path: "applications/routes.md", Heading: "Where Routes Live"},
@@ -143,7 +142,7 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 		reason = "Update the application-owned boundary and provider inputs, then build and test the selected App."
 	}
 	if workflowID == "goforj-catalog-search" {
-		reason = "Generate named search accessors from the owning App resource configuration, then provision its Go-defined schemas explicitly."
+		reason = "Check Search in the selected App configuration. Render the Project when enabling it, then generate named accessors and provision its Go-defined schemas."
 		if !scope.searchConfirmed {
 			reason = searchCapabilityWarning
 		}
@@ -153,7 +152,7 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 		reason = "Read the requested documentation without proposing source changes."
 	}
 	if workflowID == "goforj-notification-delivery" {
-		reason = "Declare NOTIFICATION_* sender resources before generating the manager and typed accessors for the owning App."
+		reason = "Check notification in the selected App configuration. Render the Project when enabling it, then declare NOTIFICATION_* resources and generate the typed accessors."
 		if !projectHasNotificationComponent(p) {
 			command = scope.command("generate --help")
 			reason = "Inspect whether the selected CLI supports --notification before enabling the optional component."
@@ -162,7 +161,7 @@ func CommandAdvice(ctx Context, req CommandAdviceRequest) (CommandAdviceResult, 
 
 	if workflowID == "goforj-feature-rollouts" {
 		if projectHasFeatureComponent(p) {
-			reason = "Declare FEATURE_* evaluator resources before generating their typed accessors for the owning App."
+			reason = "Check feature in the selected App configuration. Render the Project when enabling it, then declare FEATURE_* resources and generate the typed accessors."
 		} else {
 			command = scope.command("generate --help")
 			reason = "Inspect whether the selected CLI supports --feature before enabling or generating the optional component."

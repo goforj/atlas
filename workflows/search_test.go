@@ -32,7 +32,7 @@ func TestCatalogSearchPlanUsesAppResources(t *testing.T) {
 				t.Fatalf("invented generator: %s", cmd)
 			}
 		}
-		if !docsContain(result.Docs, "applications/library-resources.md") {
+		if !docsContain(result.Docs, "developer-tools/wiring-recipes.md") {
 			t.Fatal("missing resource composition docs")
 		}
 		advice, ok := CommandAdvice(ctx, CommandAdviceRequest{Task: "add a lexical search resource", App: app})
@@ -66,7 +66,7 @@ func TestCatalogSearchRoutingComposesHTTPAndRejectsLookupCues(t *testing.T) {
 // TestCatalogSearchDocsPackUsesResourceGuide verifies the MCP docs-pack surface chooses the new workflow sections.
 func TestCatalogSearchDocsPackUsesResourceGuide(t *testing.T) {
 	provider := docs.StaticProvider{Docs: []docs.Document{
-		{Path: "applications/library-resources.md", Content: "# Resources\n\n## Declare and Provision a Search Index\n\nDeclare an App schema and provision explicitly.\n"},
+		{Path: "developer-tools/wiring-recipes.md", Content: "# Resources\n\n## Named Resource\n\nDeclare an App schema and provision explicitly.\n"},
 		{Path: "libraries/search.md", Content: "# Search\n\n## Quick Start {#quick-start}\n\nLexical search uses typed filters.\n"},
 	}}
 	pack, err := DocsSectionPack(context.Background(), provider, "", "add lexical search for a product catalog", 300)
@@ -134,7 +134,20 @@ func TestCatalogSearchComposesRegisteredConfiguration(t *testing.T) {
 		t.Fatalf("incidental generator workflow: %v", result.WorkflowIDs)
 	}
 	readOnly, ok := Plan(ctx, PlanRequest{Task: "search docs for catalog search"})
-	if !ok || readOnly.WorkflowID != "goforj-read-docs" || len(readOnly.Commands) != 0 || len(readOnly.Files) != 0 || !docsContain(readOnly.Docs, "applications/library-resources.md") {
+	if !ok || readOnly.WorkflowID != "goforj-read-docs" || len(readOnly.Commands) != 0 || len(readOnly.Files) != 0 || !docsContain(readOnly.Docs, "developer-tools/wiring-recipes.md") {
 		t.Fatalf("search documentation became index creation: %#v", readOnly)
+	}
+}
+
+// TestSearchPlanningCoversSupportArticles exercises Search outside the prepared catalog.
+func TestSearchPlanningCoversSupportArticles(t *testing.T) {
+	plan, ok := Plan(fixtureContext(), PlanRequest{Task: "Add commands for a full text knowledge base from Markdown files"})
+	if !ok || !slices.Contains(plan.WorkflowIDs, "goforj-catalog-search") || !slices.Contains(plan.WorkflowIDs, "goforj-add-app-command") {
+		t.Fatalf("support article plan = %#v", plan)
+	}
+	if slices.Contains(plan.WorkflowIDs, "goforj-frontend-change") || !slices.ContainsFunc(plan.Steps, func(step PlanStep) bool {
+		return strings.Contains(step.Action, "forj render from the Project root")
+	}) {
+		t.Fatalf("support article plan = %#v", plan)
 	}
 }

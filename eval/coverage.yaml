@@ -203,8 +203,8 @@ capabilities:
   - id: libraries.catalog-search
     area: libraries
     summary: Execute lexical catalog search with typed category isolation, stable pagination, and confirmed update visibility.
-    tier: core
-    evaluations: [catalog-search]
+    tier: extended
+    evaluations: []
   - id: libraries.feature-rollout
     area: libraries
     summary: Stable tenant targeting, fallback, and consistent request snapshots.

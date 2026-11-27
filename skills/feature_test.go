@@ -17,7 +17,7 @@ func TestFeatureRolloutGuidancePrecedesInstallation(t *testing.T) {
 	if !ok {
 		t.Fatal("missing rollout skill")
 	}
-	for _, phrase := range []string{"not authorization", "ordinary targeting Scope", "Features.Snapshot()", "fallback", "no make:feature", "Preserve adequate standard-library"} {
+	for _, phrase := range []string{"Authorize the tenant separately", "Ordinary For scopes", "flags.Snapshot()", "fallback", "forj render", "Plain configuration"} {
 		if !strings.Contains(skill.Content, phrase) {
 			t.Fatalf("missing %q", phrase)
 		}

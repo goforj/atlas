@@ -147,7 +147,7 @@ func TestCatalogSearchIsDiscoverableBeforeInstallation(t *testing.T) {
 			continue
 		}
 		found = true
-		for _, phrase := range []string{"lexical", "durable truth", "Index.Wait", "Outcome.State", "KeywordField", "Segment.Text", "make:search", "independently versioned", "SearchDefinitions", "generate --search", "searches.Manager"} {
+		for _, phrase := range []string{"lexical", "authoritative source", "forj render", "tools/search-provision/main.go", "ProvisionForApp", "Index.Wait", "Outcome.State", "KeywordField", "Segment.Text", "make:search", "independently versioned", "SearchDefinitions", "generate --search", "searches.Manager"} {
 			if !strings.Contains(skill.Content, phrase) {
 				t.Errorf("search skill missing %q", phrase)
 			}

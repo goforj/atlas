@@ -26,7 +26,7 @@ func applicationPlanningDocs() docs.StaticProvider {
 		{Path: "reference/configuration.md", Content: "# Configuration Reference\n\n## Environment File Resolution\n\nProcess configuration overrides files before typed startup validation."},
 		{Path: "libraries/crypt.md", Content: "# Crypt Library for Go {#crypt-library-for-go}\n\n## Key format & rotation {#key-format-&-rotation}\n\nCurrent keys encrypt while previous keys retain authenticated reads."},
 		{Path: "libraries/secret.md", Content: "# Secret Library for Go {#secret-library-for-go}\n\n## Quick Start {#quick-start}\n\nInject a bound Reader and preserve classified lookup failures."},
-		{Path: "applications/library-selection.md", Content: "# Choosing Libraries\n\n## Match the Application Requirement\n\nChoose the supported library for application policy.\n\n## Preserve Input Meaning\n\nKeep presence and field errors separate from operational failure."},
+		{Path: "developer-tools/wiring-recipes.md", Content: "# Choosing Libraries\n\n## Quick Map\n\nChoose the supported library for application policy.\n\n## Preserve Input Meaning\n\nKeep presence and field errors separate from operational failure."},
 		{Path: "developer-tools/wiring-recipes.md", Content: "# Wiring Recipes\n\n## Quick Map\n\nRegister application constructors in the selected service provider set."},
 		{Path: "developer-tools/reading-wire-errors.md", Content: "# Reading Wire Errors\n\n## Fast Checklist\n\nInspect the provider chain before repairing required dependencies."},
 	}}
@@ -184,7 +184,7 @@ func TestPlanningInspectionRequestsRemainReadOnly(t *testing.T) {
 		t.Fatalf("noun-only query became implementation: %v", ids)
 	}
 	plan, _ := Plan(fixtureContext(), PlanRequest{Task: "search docs for an unknown topic"})
-	if !docsContain(plan.Docs, "applications/library-selection.md") || strings.Contains(strings.Join(plan.Commands, " "), "make:") {
+	if !docsContain(plan.Docs, "developer-tools/wiring-recipes.md") || strings.Contains(strings.Join(plan.Commands, " "), "make:") {
 		t.Fatal("unknown docs topic invented a generator")
 	}
 }
