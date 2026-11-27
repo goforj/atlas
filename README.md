@@ -1,17 +1,18 @@
 # GoForj Atlas
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="GoForj Atlas gives coding agents access to App routes, schedules, and commands, reusable skills and version-aware docs, and read-only runtime diagnostics.">
+  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="Atlas guides coding agents through GoForj domain packages and App wiring. Examples show an invoice endpoint, scheduled reconciliation, and a typed event with a subscriber.">
 </p>
 
-Atlas gives coding agents the framework context to build and debug GoForj
-Apps. Agents can find the App that owns a route, schedule, or command, follow
-project conventions with reusable skills and version-aware docs, and inspect
-the running App through read-only diagnostics. That context helps keep App
-boundaries clear as projects grow.
+Atlas helps coding agents build GoForj Apps that stay maintainable as projects
+grow. Its guidance keeps business behavior in domain packages under
+`internal/<domain>` and directs registration and wiring to the App that owns
+the change.
 
-Atlas installs project guidance, synchronizes skills or agent-native
-instruction files, and configures one project-level MCP server.
+Atlas installs reusable skills or agent-native instructions and configures one
+project-level MCP server. Agents can look up version-aware docs, inspect the
+project's App and resource boundaries, and use read-only diagnostics to check
+runtime behavior.
 
 Users should normally reach Atlas through the GoForj CLI:
 
@@ -64,9 +65,14 @@ write-capable MCP tools in the MVP.
 When source scaffolding is needed, agents should use normal GoForj commands:
 
 ```bash
-forj make:controller users
+forj billing make:controller billing:invoices
 forj marketplace make:job sync-catalog
 ```
+
+For a Project with a `billing` App and Web API enabled, the controller command
+creates `internal/billing/invoices/controller.go`, registers its routes in
+`app/billing/routes.go`, and adds its constructor to the App's Wire set in
+`app/billing/wire/inject_http_controllers_app.go`.
 
 ## Live Agent Evaluation
 
