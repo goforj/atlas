@@ -134,6 +134,7 @@ func TestNotificationPlanningKeepsEmailOnExistingMailer(t *testing.T) {
 		"send email notifications for incident alerts using the existing mailer",
 		"configure a fallback sender for email notifications",
 		"send email-only incident alerts without a webhook",
+		"send email notifications to support teams using the existing mailer",
 	} {
 		plan, ok := Plan(ctx, PlanRequest{Task: task})
 		if !ok || plan.WorkflowID != "goforj-email-notifications" || !docsContain(plan.Docs, "applications/mail.md") {
@@ -150,6 +151,7 @@ func TestNotificationPlanningKeepsEmailOnExistingMailer(t *testing.T) {
 		"add notifications through email and push",
 		"configure notifications for email and mobile push",
 		"add multi-channel email and Teams notifications",
+		"send notifications through email and Microsoft Teams",
 		"enable the notification component for email notifications",
 		"configure NOTIFICATION_DRIVER for email notifications",
 		"use the Notification library for email incident alerts",
