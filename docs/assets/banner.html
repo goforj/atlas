@@ -116,9 +116,9 @@ h1 {
 }
 
 .project { left: 90px; top: 369px; }
-.endpoint { left: 333px; top: 25px; }
-.scheduled { left: 400px; top: 124px; }
-.event { left: 350px; top: 347px; }
+.scaffold { left: 234px; top: 24px; }
+.docs { left: 383px; top: 165px; }
+.runtime { left: 350px; top: 347px; }
 </style>
 </head>
 <body>
@@ -132,26 +132,26 @@ h1 {
     <p class="summary">Build GoForj Apps<br>that stay maintainable.</p>
     <p class="growth">Atlas guides coding agents through GoForj<br>conventions, libraries, and best practices.</p>
   </div>
-  <figure class="map" role="img" aria-label="Three examples in a Billing App. An invoice controller lives in its domain package and connects to routes and Wire. Reconciliation uses a registered job and schedule. An invoice-paid event uses a typed event and a wired subscriber.">
+  <figure class="map" role="img" aria-label="From a GoForj project, Atlas guides agents to scaffold and wire controllers, jobs, schedules, events, and subscribers, search version-aware framework docs, and inspect running Apps through read-only diagnostics.">
     <canvas width="1388" height="908" aria-hidden="true"></canvas>
     <span class="place project" aria-hidden="true">
-      Billing App
-      <code class="artifact">internal/billing/</code>
+      GoForj project
+      <code class="artifact">.goforj.yml</code>
     </span>
-    <span class="place endpoint" aria-hidden="true">
-      Invoice endpoint
-      <code class="artifact">make:controller billing:invoices</code>
-      <span class="detail">Domain package, routes &amp; Wire</span>
+    <span class="place scaffold" aria-hidden="true">
+      Scaffold and wire
+      <code class="artifact">make:controller · make:job · make:schedule<br>make:event · make:subscriber</code>
+      <span class="detail">Domain packages &amp; App wiring</span>
     </span>
-    <span class="place scheduled" aria-hidden="true">
-      Scheduled job
-      <code class="artifact">make:job + make:schedule</code>
-      <span class="detail">Job &amp; schedule registration</span>
+    <span class="place docs" aria-hidden="true">
+      Search framework docs
+      <code class="artifact">search-docs</code>
+      <span class="detail">Version-aware section reads</span>
     </span>
-    <span class="place event" aria-hidden="true">
-      Invoice-paid event
-      <code class="artifact">make:event + make:subscriber</code>
-      <span class="detail">Typed event &amp; wired subscriber</span>
+    <span class="place runtime" aria-hidden="true">
+      Inspect running Apps
+      <code class="artifact">runtime-snapshot</code>
+      <span class="detail">Read-only logs &amp; runtime state</span>
     </span>
   </figure>
 </main>
@@ -196,8 +196,8 @@ context.lineCap = "round"
 context.lineJoin = "round"
 const routes = new Path2D(
   "M101 345H170Q186 345 198 333L275 256Q284 247 297 247H356" +
-  "M356 247V162Q356 147 364 138L376 126Q384 118 398 118H547" +
-  "M356 247H409Q426 247 437 236L451 222Q457 216 471 216H589" +
+  "M356 247V181Q356 165 368 154Q376 147 391 147H547" +
+  "M356 247Q372 247 383 258Q390 265 405 265H589" +
   "M356 247L429 321Q442 334 461 334H547"
 )
 
@@ -210,8 +210,8 @@ context.stroke(routes)
 
 for (const [x, y, radius, filled] of [
   [101, 345, 7, true],
-  [547, 118, 6, false],
-  [589, 216, 6, false],
+  [547, 147, 6, false],
+  [589, 265, 6, false],
   [547, 334, 6, false],
 ]) {
   context.beginPath()

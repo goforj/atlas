@@ -1,7 +1,7 @@
 # GoForj Atlas
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="Atlas guides coding agents through GoForj domain packages and App wiring. Examples show an invoice endpoint, scheduled reconciliation, and a typed event with a subscriber.">
+  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="Atlas guides coding agents through GoForj scaffolding and App wiring, version-aware docs search, and read-only runtime inspection.">
 </p>
 
 Atlas guides coding agents through GoForj conventions, libraries, and best
