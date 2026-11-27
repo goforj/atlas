@@ -115,18 +115,13 @@ h1 {
   letter-spacing: -.035em;
 }
 
-.more {
-  color: var(--gf-ink-2);
-  font: 500 18px var(--gf-font-body);
-}
-
 .command-family {
   color: var(--gf-reference);
   font: 500 .86em var(--gf-font-mono);
 }
 
 .project { left: 90px; top: 369px; }
-.scaffold { left: 234px; top: 24px; }
+.scaffold { left: 300px; top: 64px; }
 .docs { left: 383px; top: 165px; }
 .runtime { left: 350px; top: 347px; }
 </style>
@@ -150,8 +145,7 @@ h1 {
     </span>
     <span class="place scaffold" aria-hidden="true">
       Scaffold and wire with <code class="command-family">make:*</code>
-      <code class="artifact">make:controller · make:job · make:schedule<br>make:event · make:subscriber <span class="more">and more</span></code>
-      <span class="detail">Domain packages &amp; App wiring</span>
+      <span class="detail">Controllers, jobs, events &amp; more</span>
     </span>
     <span class="place docs" aria-hidden="true">
       Search framework docs
@@ -177,14 +171,14 @@ context.scale(2, 2)
 // Broad, irregular contours frame the routes without competing with their labels.
 context.strokeStyle = token("--gf-line-strong")
 context.lineWidth = 1
-for (const [centerX, centerY, stretch, rotation, count] of [
-  [495, 49, 0.66, -0.4, 11],
-  [553, 438, 0.54, -0.45, 10],
-  [118, 112, 0.78, 0.45, 6],
+for (const [centerX, centerY, stretch, rotation, count, opacity] of [
+  [495, 49, 0.66, -0.4, 11, 0.42],
+  [553, 438, 0.54, -0.45, 10, 0.58],
+  [118, 112, 0.78, 0.45, 6, 0.58],
 ]) {
   for (let index = 0; index < count; index++) {
     const distance = 25 + index * 19
-    context.globalAlpha = 0.58 - index * 0.032
+    context.globalAlpha = opacity - index * 0.032
     context.beginPath()
     for (let step = 0; step <= 144; step++) {
       const angle = step / 144 * Math.PI * 2
