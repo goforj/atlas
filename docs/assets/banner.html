@@ -46,18 +46,24 @@ body { margin: 0; }
 }
 
 h1 {
-  margin: 13px 0 0;
-  font: 700 136px/.98 var(--gf-font-display);
+  margin: 11px 0 0;
+  font: 700 124px/.98 var(--gf-font-display);
   letter-spacing: -.058em;
 }
 
 .summary {
   margin: 18px 0 0;
+  color: var(--gf-ink);
+  font: 600 36px/1.12 var(--gf-font-display);
+  letter-spacing: -.035em;
+}
+
+.growth {
+  margin: 13px 0 0;
   color: var(--gf-ink-2);
-  font-size: 34px;
-  max-width: 435px;
-  line-height: 1.18;
-  letter-spacing: -.034em;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -.02em;
 }
 
 .map {
@@ -104,7 +110,7 @@ h1 {
 .project { left: 90px; top: 369px; color: var(--gf-reference); }
 .structure { left: 333px; top: 47px; }
 .guidance { left: 385px; top: 145px; }
-.runtime { left: 398px; top: 366px; }
+.runtime { left: 365px; top: 366px; }
 </style>
 </head>
 <body>
@@ -115,22 +121,23 @@ h1 {
       <span>GoForj</span>
     </div>
     <h1>Atlas</h1>
-    <p class="summary">Help coding agents keep<br>GoForj projects structured<br>as they grow.</p>
+    <p class="summary">Build and debug GoForj Apps<br>with framework-aware agents.</p>
+    <p class="growth">Keep App boundaries clear as projects grow.</p>
   </div>
-  <figure class="map" role="img" aria-label="A GoForj project branches into App boundaries with routes, schedules, and commands, framework guidance with skills and version-aware docs, and runtime inspection with logs and runtime state.">
+  <figure class="map" role="img" aria-label="Atlas helps agents find the owning App through routes, schedules, and commands, follow conventions with skills and version-aware docs, and diagnose live Apps with read-only logs and runtime state.">
     <canvas width="1388" height="908" aria-hidden="true"></canvas>
     <span class="place project" aria-hidden="true">GoForj project</span>
     <span class="place structure" aria-hidden="true">
-      App boundaries
+      Find the owning App
       <span class="detail">Routes, schedules &amp; commands</span>
     </span>
     <span class="place guidance" aria-hidden="true">
-      Framework guidance
+      Follow conventions
       <span class="detail">Skills &amp; version-aware docs</span>
     </span>
     <span class="place runtime" aria-hidden="true">
-      Runtime inspection
-      <span class="detail">Logs &amp; runtime state</span>
+      Diagnose live Apps
+      <span class="detail">Read-only logs &amp; runtime state</span>
     </span>
   </figure>
 </main>
