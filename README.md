@@ -4,10 +4,10 @@
   <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="Atlas guides coding agents through GoForj domain packages and App wiring. Examples show an invoice endpoint, scheduled reconciliation, and a typed event with a subscriber.">
 </p>
 
-Atlas helps coding agents build GoForj Apps that stay maintainable as projects
-grow. Its guidance keeps business behavior in domain packages under
-`internal/<domain>` and directs registration and wiring to the App that owns
-the change.
+Atlas guides coding agents through GoForj conventions, libraries, and best
+practices. It shows agents how to put business behavior in domain packages
+under `internal/<domain>` and register and wire changes in the App that owns
+them.
 
 Atlas installs reusable skills or agent-native instructions and configures one
 project-level MCP server. Agents can look up version-aware docs, inspect the
