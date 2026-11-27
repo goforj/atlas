@@ -55,6 +55,7 @@ h1 {
   margin: 18px 0 0;
   color: var(--gf-ink-2);
   font-size: 34px;
+  max-width: 435px;
   line-height: 1.18;
   letter-spacing: -.034em;
 }
@@ -92,10 +93,18 @@ h1 {
   white-space: nowrap;
 }
 
+.detail {
+  display: block;
+  margin-top: 4px;
+  color: var(--gf-ink-2);
+  font: 500 22px/1.15 var(--gf-font-body);
+  letter-spacing: -.035em;
+}
+
 .project { left: 90px; top: 369px; color: var(--gf-reference); }
-.structure { left: 410px; top: 75px; }
-.docs { left: 471px; top: 183px; }
-.runtime { left: 398px; top: 369px; }
+.structure { left: 333px; top: 47px; }
+.guidance { left: 385px; top: 145px; }
+.runtime { left: 398px; top: 366px; }
 </style>
 </head>
 <body>
@@ -106,14 +115,23 @@ h1 {
       <span>GoForj</span>
     </div>
     <h1>Atlas</h1>
-    <p class="summary">Project navigation<br>for coding agents</p>
+    <p class="summary">Help coding agents keep<br>GoForj projects structured<br>as they grow.</p>
   </div>
-  <figure class="map" role="img" aria-label="Paths through a GoForj project lead to App structure, framework docs, and runtime inspection.">
+  <figure class="map" role="img" aria-label="A GoForj project branches into App boundaries with routes, schedules, and commands, framework guidance with skills and version-aware docs, and runtime inspection with logs and runtime state.">
     <canvas width="1388" height="908" aria-hidden="true"></canvas>
     <span class="place project" aria-hidden="true">GoForj project</span>
-    <span class="place structure" aria-hidden="true">App structure</span>
-    <span class="place docs" aria-hidden="true">Framework docs</span>
-    <span class="place runtime" aria-hidden="true">Runtime inspection</span>
+    <span class="place structure" aria-hidden="true">
+      App boundaries
+      <span class="detail">Routes, schedules &amp; commands</span>
+    </span>
+    <span class="place guidance" aria-hidden="true">
+      Framework guidance
+      <span class="detail">Skills &amp; version-aware docs</span>
+    </span>
+    <span class="place runtime" aria-hidden="true">
+      Runtime inspection
+      <span class="detail">Logs &amp; runtime state</span>
+    </span>
   </figure>
 </main>
 <script>
@@ -157,7 +175,7 @@ context.lineCap = "round"
 context.lineJoin = "round"
 const routes = new Path2D(
   "M101 345H170Q186 345 198 333L275 256Q284 247 297 247H356" +
-  "M356 247L477 126Q485 118 499 118H547" +
+  "M356 247V181Q356 166 367 155L396 126Q404 118 420 118H547" +
   "M356 247H409Q426 247 437 236L451 222Q457 216 471 216H589" +
   "M356 247L441 332Q454 345 473 345H547"
 )

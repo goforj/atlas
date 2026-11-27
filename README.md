@@ -1,15 +1,13 @@
 # GoForj Atlas
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="GoForj Atlas maps App structure, framework docs, and runtime inspection for coding agents.">
+  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="GoForj Atlas gives coding agents access to App routes, schedules, and commands, reusable skills and version-aware docs, and read-only runtime diagnostics.">
 </p>
 
-Agent-native project navigation and MCP tooling for GoForj.
-
-Atlas helps local coding agents understand GoForj projects without guessing
-framework conventions. It installs concise project guidance, synchronizes
-skills or agent-native instruction files, configures one project-level MCP
-server, and exposes safe read-only project inspection tools.
+Atlas helps coding agents keep GoForj projects structured as they grow.
+It installs project guidance, synchronizes skills or agent-native instruction
+files, and configures one project-level MCP server for App-aware inspection,
+version-aware docs, and read-only diagnostics.
 
 Users should normally reach Atlas through the GoForj CLI:
 
