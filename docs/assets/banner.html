@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>GoForj Atlas banner</title>
+<!-- Capture .banner at 1200 by 456 CSS pixels with device scale factor 2. -->
+<link rel="stylesheet" href="https://goforj.dev/design-system.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+* { box-sizing: border-box; }
+
+body { margin: 0; }
+
+.banner {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  width: 1200px;
+  height: 456px;
+  padding: 0 66px;
+  overflow: hidden;
+  border: 1px solid var(--gf-line-strong);
+  background: var(--gf-ground-deep);
+  color: var(--gf-ink);
+  font-family: var(--gf-font-body);
+}
+
+.identification {
+  position: relative;
+  z-index: 1;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 23px/1 var(--gf-font-display);
+}
+
+.brand img {
+  width: 33px;
+  height: 33px;
+}
+
+h1 {
+  margin: 11px 0 0;
+  font: 700 124px/.98 var(--gf-font-display);
+  letter-spacing: -.058em;
+}
+
+.summary {
+  margin: 18px 0 0;
+  color: var(--gf-ink);
+  font: 600 36px/1.12 var(--gf-font-display);
+  letter-spacing: -.035em;
+}
+
+.growth {
+  margin: 13px 0 0;
+  color: var(--gf-ink-2);
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -.02em;
+}
+
+.map {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 694px;
+  margin: 0;
+}
+
+.map::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 68% 50%, var(--gf-ground-alt), transparent 72%),
+    radial-gradient(ellipse at 70% 20%, var(--gf-accent-soft), transparent 47%);
+  content: "";
+}
+
+.map::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(to right, var(--gf-line-strong) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--gf-line-strong) 1px, transparent 1px);
+  background-size: 38px 38px;
+  mask-image: radial-gradient(ellipse at 48% 53%, black 6%, transparent 69%);
+  opacity: .24;
+  content: "";
+}
+
+.map canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.place {
+  position: absolute;
+  color: var(--gf-ink);
+  font: 500 26px/1.1 var(--gf-font-display);
+  letter-spacing: -.022em;
+  text-shadow: 0 1px 5px var(--gf-ground-deep), 0 0 12px var(--gf-ground-deep);
+  white-space: nowrap;
+}
+
+.detail {
+  display: block;
+  margin-top: 4px;
+  color: var(--gf-ink-2);
+  font: 500 22px/1.15 var(--gf-font-body);
+  letter-spacing: -.035em;
+}
+
+.artifact {
+  display: block;
+  margin-top: 4px;
+  color: var(--gf-reference);
+  font: 500 18px/1.2 var(--gf-font-mono);
+  letter-spacing: -.035em;
+}
+
+.command-family {
+  color: var(--gf-reference);
+  font: 500 .86em var(--gf-font-mono);
+}
+
+.project { left: 90px; top: 369px; }
+.scaffold { left: 300px; top: 64px; }
+.docs { left: 383px; top: 165px; }
+.runtime { left: 350px; top: 347px; }
+</style>
+</head>
+<body>
+<main class="banner">
+  <div class="identification">
+    <div class="brand">
+      <img src="https://goforj.dev/favicon-seam-dark.svg" alt="">
+      <span>GoForj</span>
+    </div>
+    <h1>Atlas</h1>
+    <p class="summary">Build maintainable GoForj Apps<br>with AI coding agents.</p>
+    <p class="growth">Atlas guides them through GoForj<br>conventions, libraries, and best practices.</p>
+  </div>
+  <figure class="map" role="img" aria-label="From a GoForj project, Atlas guides agents through the GoForj make command family, including controllers, jobs, schedules, events, and subscribers. It also searches version-aware framework docs and inspects running Apps through read-only diagnostics.">
+    <canvas width="1388" height="908" aria-hidden="true"></canvas>
+    <span class="place project" aria-hidden="true">
+      GoForj project
+      <code class="artifact">.goforj.yml</code>
+    </span>
+    <span class="place scaffold" aria-hidden="true">
+      Scaffold and wire with <code class="command-family">make:*</code>
+      <span class="detail">Controllers, jobs, events &amp; more</span>
+    </span>
+    <span class="place docs" aria-hidden="true">
+      Search framework docs
+      <code class="artifact">search-docs</code>
+      <span class="detail">Version-aware section reads</span>
+    </span>
+    <span class="place runtime" aria-hidden="true">
+      Inspect running Apps
+      <code class="artifact">runtime-snapshot</code>
+      <span class="detail">Read-only logs &amp; runtime state</span>
+    </span>
+  </figure>
+</main>
+<script>
+// Keep the illustration tied to the site palette when the tokens change.
+const map = document.querySelector(".map")
+const canvas = map.querySelector("canvas")
+const context = canvas.getContext("2d")
+const theme = getComputedStyle(map)
+const token = name => theme.getPropertyValue(name).trim()
+context.scale(2, 2)
+
+// Broad, irregular contours frame the routes without competing with their labels.
+context.strokeStyle = token("--gf-line-strong")
+context.lineWidth = 1
+for (const [centerX, centerY, stretch, rotation, count, opacity] of [
+  [495, 49, 0.66, -0.4, 11, 0.42],
+  [553, 438, 0.54, -0.45, 10, 0.58],
+  [118, 112, 0.78, 0.45, 6, 0.58],
+  [184, 275, 0.62, -0.57, 5, 0.36],
+]) {
+  for (let index = 0; index < count; index++) {
+    const distance = 25 + index * 19
+    context.globalAlpha = opacity - index * 0.032
+    context.beginPath()
+    for (let step = 0; step <= 144; step++) {
+      const angle = step / 144 * Math.PI * 2
+      const variation = 1 + 0.13 * Math.sin(3 * angle + rotation) + 0.06 * Math.cos(5 * angle - rotation)
+      const x = distance * Math.cos(angle) * variation
+      const y = distance * Math.sin(angle) * variation * stretch
+      const px = centerX + x * Math.cos(rotation) - y * Math.sin(rotation)
+      const py = centerY + x * Math.sin(rotation) + y * Math.cos(rotation)
+      if (step === 0) context.moveTo(px, py)
+      else context.lineTo(px, py)
+    }
+    context.closePath()
+    context.stroke()
+  }
+}
+
+context.globalAlpha = 1
+context.lineCap = "round"
+context.lineJoin = "round"
+const routes = new Path2D(
+  "M101 345H170Q186 345 198 333L275 256Q284 247 297 247H356" +
+  "M356 247V181Q356 165 368 154Q376 147 391 147H547" +
+  "M356 247Q372 247 383 258Q390 265 405 265H589" +
+  "M356 247L429 321Q442 334 461 334H547"
+)
+
+context.strokeStyle = token("--gf-ground-deep")
+context.lineWidth = 7
+context.stroke(routes)
+context.strokeStyle = token("--gf-accent")
+context.lineWidth = 2
+context.stroke(routes)
+
+for (const [x, y, radius, filled] of [
+  [101, 345, 7, true],
+  [547, 147, 6, false],
+  [589, 265, 6, false],
+  [547, 334, 6, false],
+]) {
+  context.beginPath()
+  context.arc(x, y, radius, 0, Math.PI * 2)
+  context.fillStyle = token(filled ? "--gf-accent" : "--gf-ground-deep")
+  context.fill()
+  context.stroke()
+}
+
+// The shared waypoint stays visually distinct where the three routes branch.
+context.beginPath()
+context.arc(356, 247, 11, 0, Math.PI * 2)
+context.fillStyle = token("--gf-ground-deep")
+context.fill()
+context.stroke()
+
+context.beginPath()
+context.arc(356, 247, 4, 0, Math.PI * 2)
+context.fillStyle = token("--gf-accent")
+context.fill()
+</script>
+</body>
+</html>

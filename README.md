@@ -1,15 +1,18 @@
 # GoForj Atlas
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="Atlas Banner">
+  <img src="https://raw.githubusercontent.com/goforj/atlas/main/docs/assets/banner.png" alt="Atlas guides AI coding agents through GoForj scaffolding and App wiring, version-aware docs search, and read-only runtime inspection.">
 </p>
 
-Agent-native project navigation and MCP tooling for GoForj.
+Atlas guides AI coding agents through GoForj conventions, libraries, and best
+practices. It shows agents how to put business behavior in domain packages
+under `internal/<domain>` and register and wire changes in the App that owns
+them.
 
-Atlas helps local coding agents understand GoForj projects without guessing
-framework conventions. It installs concise project guidance, synchronizes
-skills or agent-native instruction files, configures one project-level MCP
-server, and exposes safe read-only project inspection tools.
+Atlas installs reusable skills or agent-native instructions and configures one
+project-level MCP server. Agents can look up version-aware docs, inspect the
+project's App and resource boundaries, and use read-only diagnostics to check
+runtime behavior.
 
 Users should normally reach Atlas through the GoForj CLI:
 
@@ -62,9 +65,14 @@ write-capable MCP tools in the MVP.
 When source scaffolding is needed, agents should use normal GoForj commands:
 
 ```bash
-forj make:controller users
+forj billing make:controller billing:invoices
 forj marketplace make:job sync-catalog
 ```
+
+For a Project with a `billing` App and Web API enabled, the controller command
+creates `internal/billing/invoices/controller.go`, registers its routes in
+`app/billing/routes.go`, and adds its constructor to the App's Wire set in
+`app/billing/wire/inject_http_controllers_app.go`.
 
 ## Live Agent Evaluation
 
