@@ -83,6 +83,19 @@ h1 {
   content: "";
 }
 
+.map::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(to right, var(--gf-line-strong) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--gf-line-strong) 1px, transparent 1px);
+  background-size: 38px 38px;
+  mask-image: radial-gradient(ellipse at 48% 53%, black 6%, transparent 69%);
+  opacity: .24;
+  content: "";
+}
+
 .map canvas {
   position: absolute;
   inset: 0;
@@ -175,6 +188,7 @@ for (const [centerX, centerY, stretch, rotation, count, opacity] of [
   [495, 49, 0.66, -0.4, 11, 0.42],
   [553, 438, 0.54, -0.45, 10, 0.58],
   [118, 112, 0.78, 0.45, 6, 0.58],
+  [184, 275, 0.62, -0.57, 5, 0.36],
 ]) {
   for (let index = 0; index < count; index++) {
     const distance = 25 + index * 19
