@@ -115,6 +115,16 @@ h1 {
   letter-spacing: -.035em;
 }
 
+.more {
+  color: var(--gf-ink-2);
+  font: 500 18px var(--gf-font-body);
+}
+
+.command-family {
+  color: var(--gf-reference);
+  font: 500 .86em var(--gf-font-mono);
+}
+
 .project { left: 90px; top: 369px; }
 .scaffold { left: 234px; top: 24px; }
 .docs { left: 383px; top: 165px; }
@@ -132,15 +142,15 @@ h1 {
     <p class="summary">Build GoForj Apps<br>that stay maintainable.</p>
     <p class="growth">Atlas guides coding agents through GoForj<br>conventions, libraries, and best practices.</p>
   </div>
-  <figure class="map" role="img" aria-label="From a GoForj project, Atlas guides agents to scaffold and wire controllers, jobs, schedules, events, and subscribers, search version-aware framework docs, and inspect running Apps through read-only diagnostics.">
+  <figure class="map" role="img" aria-label="From a GoForj project, Atlas guides agents through the GoForj make command family, including controllers, jobs, schedules, events, and subscribers. It also searches version-aware framework docs and inspects running Apps through read-only diagnostics.">
     <canvas width="1388" height="908" aria-hidden="true"></canvas>
     <span class="place project" aria-hidden="true">
       GoForj project
       <code class="artifact">.goforj.yml</code>
     </span>
     <span class="place scaffold" aria-hidden="true">
-      Scaffold and wire
-      <code class="artifact">make:controller · make:job · make:schedule<br>make:event · make:subscriber</code>
+      Scaffold and wire with <code class="command-family">make:*</code>
+      <code class="artifact">make:controller · make:job · make:schedule<br>make:event · make:subscriber <span class="more">and more</span></code>
       <span class="detail">Domain packages &amp; App wiring</span>
     </span>
     <span class="place docs" aria-hidden="true">
