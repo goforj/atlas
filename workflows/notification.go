@@ -18,19 +18,19 @@ func projectHasNotificationComponent(p project.Project) bool {
 
 // isNotificationTask selects sender composition when the request calls for a notification resource or a non-email channel.
 func isNotificationTask(lower string) bool {
-	if containsAny(lower, "notification resource", "multi-channel notification", "multichannel notification", "notifications.manager", "github.com/goforj/notification") {
+	if containsAny(lower, "notification resource", "notification component", "notification library", "notification_", "notifications.manager", "github.com/goforj/notification") {
 		return true
 	}
 	if !mentionsAlertDelivery(lower) {
 		return false
 	}
-	if !hasTaskWord(lower, "email", "mailer", "mail") {
+	if containsAny(lower, "multi-channel", "multichannel", "multi channel") || !hasTaskWord(lower, "email", "mailer", "mail") {
 		return true
 	}
 	if containsAny(lower, "email-only", "email only", "only email", "only by email") {
 		return false
 	}
-	return hasTaskWord(lower, "webhook", "slack", "sms", "push", "discord", "pagerduty")
+	return hasTaskWord(lower, "webhook", "slack", "sms", "push", "discord", "pagerduty", "teams")
 }
 
 // isEmailNotificationTask keeps email-only delivery on the existing App mailer.

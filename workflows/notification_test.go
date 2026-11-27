@@ -149,6 +149,10 @@ func TestNotificationPlanningKeepsEmailOnExistingMailer(t *testing.T) {
 		"send Slack and email notifications",
 		"add notifications through email and push",
 		"configure notifications for email and mobile push",
+		"add multi-channel email and Teams notifications",
+		"enable the notification component for email notifications",
+		"configure NOTIFICATION_DRIVER for email notifications",
+		"use the Notification library for email incident alerts",
 		"use notifications.Manager for incident email alerts",
 	} {
 		if !slices.Contains(ClassifyAll(task), "goforj-notification-delivery") {
